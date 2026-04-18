@@ -36,6 +36,7 @@ import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
 const logger = createScopedLogger('Chat');
+const GOOGLE_PROVIDER_NAME = 'Google';
 
 export function Chat() {
   renderLogger.trace('Chat');
@@ -110,11 +111,13 @@ export const ChatImpl = memo(
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
     const [model, setModel] = useState(() => {
       const savedModel = Cookies.get('selectedModel');
-      return savedModel || DEFAULT_MODEL;
+      return savedModel?.startsWith('gemini') ? savedModel : DEFAULT_MODEL;
     });
     const [provider, setProvider] = useState(() => {
       const savedProvider = Cookies.get('selectedProvider');
-      return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
+      return (
+        PROVIDER_LIST.find((p) => p.name === GOOGLE_PROVIDER_NAME && p.name === savedProvider) || DEFAULT_PROVIDER
+      ) as ProviderInfo;
     });
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
@@ -125,6 +128,16 @@ export const ChatImpl = memo(
     const { user } = useFirebaseAuth();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
+
+    useEffect(() => {
+      if (provider.name !== GOOGLE_PROVIDER_NAME) {
+        setProvider(DEFAULT_PROVIDER as ProviderInfo);
+      }
+
+      if (!model.startsWith('gemini')) {
+        setModel(DEFAULT_MODEL);
+      }
+    }, [model, provider.name]);
 
     useEffect(() => {
       if (typeof window === 'undefined') {

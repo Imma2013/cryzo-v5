@@ -26,6 +26,7 @@ export interface Shortcuts {
 export const URL_CONFIGURABLE_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
 export const LOCAL_PROVIDERS = ['OpenAILike', 'LMStudio', 'Ollama'];
 export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'Google'];
+const DEFAULT_ENABLED_PROVIDERS = new Set(['Google']);
 
 export type ProviderSetting = Record<string, IProviderConfig>;
 
@@ -92,8 +93,7 @@ const getInitialProviderSettings = (): ProviderSetting => {
     initialSettings[provider.name] = {
       ...provider,
       settings: {
-        // Local providers should be disabled by default
-        enabled: !LOCAL_PROVIDERS.includes(provider.name),
+        enabled: DEFAULT_ENABLED_PROVIDERS.has(provider.name),
       },
     };
   });
@@ -107,7 +107,14 @@ const getInitialProviderSettings = (): ProviderSetting => {
         const parsed = JSON.parse(savedSettings);
         Object.entries(parsed).forEach(([key, value]) => {
           if (initialSettings[key]) {
-            initialSettings[key].settings = (value as IProviderConfig).settings;
+            const nextSettings = (value as IProviderConfig).settings;
+            const shouldForceDisableCloudProvider =
+              !LOCAL_PROVIDERS.includes(key) && !DEFAULT_ENABLED_PROVIDERS.has(key);
+
+            initialSettings[key].settings = {
+              ...nextSettings,
+              enabled: shouldForceDisableCloudProvider ? false : nextSettings.enabled,
+            };
           }
         });
       } catch (error) {

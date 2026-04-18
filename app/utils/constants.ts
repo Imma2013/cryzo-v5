@@ -6,7 +6,7 @@ export const WORK_DIR = `/home/${WORK_DIR_NAME}`;
 export const MODIFICATIONS_TAG_NAME = 'bolt_file_modifications';
 export const MODEL_REGEX = /^\[Model: (.*?)\]\n\n/;
 export const PROVIDER_REGEX = /\[Provider: (.*?)\]\n\n/;
-export const DEFAULT_MODEL = 'claude-sonnet-4-6';
+export const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
 export const PROMPT_COOKIE_KEY = 'cachedPrompt';
 export const TOOL_EXECUTION_APPROVAL = {
   APPROVE: 'Yes, approved.',
@@ -17,7 +17,7 @@ export const TOOL_EXECUTION_DENIED = 'Error: User denied access to tool executio
 export const TOOL_EXECUTION_ERROR = 'Error: An error occured while calling tool';
 
 export const PROVIDER_LIST = PROVIDER_METADATA;
-export const DEFAULT_PROVIDER = PROVIDER_METADATA.find((provider) => provider.name === 'Anthropic') || PROVIDER_METADATA[0];
+export const DEFAULT_PROVIDER = PROVIDER_METADATA.find((provider) => provider.name === 'Google') || PROVIDER_METADATA[0];
 export const providerBaseUrlEnvKeys = PROVIDER_BASE_URL_ENV_KEYS;
 
 // starter Templates

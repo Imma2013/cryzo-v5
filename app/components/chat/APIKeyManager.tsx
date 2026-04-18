@@ -52,11 +52,15 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
     const savedKey = isServerManagedProvider ? '' : savedKeys[provider.name] || '';
 
     setTempKey(savedKey);
-    setApiKey(savedKey);
     setIsEditing(false);
-  }, [isServerManagedProvider, provider.name, setApiKey]);
+  }, [isServerManagedProvider, provider.name]);
 
   const checkEnvApiKey = useCallback(async () => {
+    if (!isServerManagedProvider) {
+      setIsEnvKeySet(false);
+      return;
+    }
+
     // Check cache first
     if (providerEnvKeyStatusCache[provider.name] !== undefined) {
       setIsEnvKeySet(providerEnvKeyStatusCache[provider.name]);
@@ -75,7 +79,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
       console.error('Failed to check environment API key:', error);
       setIsEnvKeySet(false);
     }
-  }, [provider.name]);
+  }, [isServerManagedProvider, provider.name]);
 
   useEffect(() => {
     checkEnvApiKey();
