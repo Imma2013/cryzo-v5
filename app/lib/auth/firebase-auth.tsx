@@ -14,6 +14,12 @@ import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from 
 import { isFirebaseConfigured } from '~/lib/firebase/config';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
 import { getCurrentHostname, getGoogleSignInMethod, type GoogleSignInMethod } from './google-auth-flow';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('firebase-auth');
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 5000;
+export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE =
+  'Session check took too long. You can keep using the app or retry sign-in if your account does not appear.';
 
 interface FirebaseAuthContextValue {
   error: string | null;
@@ -61,30 +67,60 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     }
 
     let isMounted = true;
+    let bootstrapSettled = false;
+
+    const settleBootstrap = (reason: string) => {
+      if (!isMounted || bootstrapSettled) {
+        return;
+      }
+
+      bootstrapSettled = true;
+      logger.info(`Firebase auth bootstrap settled: ${reason}`);
+      setIsLoading(false);
+    };
+
+    logger.info('Firebase auth bootstrap started');
 
     const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
       if (!isMounted) {
         return;
       }
 
+      logger.info(`Firebase auth state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
       setUser(nextUser);
-      setIsLoading(false);
+      settleBootstrap('auth-state-changed');
     });
+
+    const bootstrapTimeout = window.setTimeout(() => {
+      if (!isMounted || bootstrapSettled) {
+        return;
+      }
+
+      logger.warn('Firebase auth bootstrap timed out waiting for session state');
+      setError((currentError) => currentError ?? SESSION_BOOTSTRAP_TIMEOUT_MESSAGE);
+      settleBootstrap('timeout');
+    }, SESSION_BOOTSTRAP_TIMEOUT_MS);
 
     (async () => {
       try {
+        logger.info('Ensuring Firebase auth persistence');
         await ensureFirebaseAuthPersistence();
+        logger.info('Processing Firebase redirect result');
         await getRedirectResult(firebaseAuth);
+        logger.info('Firebase redirect result processed');
       } catch (authError) {
         if (isMounted) {
-          setError(getFirebaseAuthErrorMessage(authError));
-          setIsLoading(false);
+          const message = getFirebaseAuthErrorMessage(authError);
+          logger.error('Firebase auth bootstrap failed', authError);
+          setError(message);
+          settleBootstrap('bootstrap-error');
         }
       }
     })();
 
     return () => {
       isMounted = false;
+      window.clearTimeout(bootstrapTimeout);
       unsubscribe();
     };
   }, []);
