@@ -33,6 +33,7 @@ import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
+import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
 const logger = createScopedLogger('Chat');
@@ -331,65 +332,19 @@ export const ChatImpl = memo(
 
         stop();
         setFakeLoading(false);
-
-        let errorInfo = {
-          message: 'An unexpected error occurred',
-          isRetryable: true,
-          statusCode: 500,
-          provider: provider.name,
-          type: 'unknown' as const,
-          retryDelay: 0,
-        };
-
-        if (error.message) {
-          try {
-            const parsed = JSON.parse(error.message);
-
-            if (parsed.error || parsed.message) {
-              errorInfo = { ...errorInfo, ...parsed };
-            } else {
-              errorInfo.message = error.message;
-            }
-          } catch {
-            errorInfo.message = error.message;
-          }
-        }
-
-        let errorType: LlmErrorAlertType['errorType'] = 'unknown';
-        let title = 'Request Failed';
-
-        if (errorInfo.statusCode === 401 || errorInfo.message.toLowerCase().includes('api key')) {
-          errorType = 'authentication';
-          title = 'Authentication Error';
-        } else if (errorInfo.statusCode === 429 || errorInfo.message.toLowerCase().includes('rate limit')) {
-          errorType = 'rate_limit';
-          title = 'Rate Limit Exceeded';
-        } else if (errorInfo.message.toLowerCase().includes('quota')) {
-          errorType = 'quota';
-          title = 'Quota Exceeded';
-        } else if (errorInfo.statusCode >= 500) {
-          errorType = 'network';
-          title = 'Server Error';
-        }
+        const alert = createLlmErrorAlert(error, provider.name);
 
         logStore.logError(`${context} request failed`, error, {
           component: 'Chat',
           action: 'request',
-          error: errorInfo.message,
+          error: alert.description,
           context,
-          retryable: errorInfo.isRetryable,
-          errorType,
-          provider: provider.name,
+          retryable: alert.errorType !== 'setup',
+          errorType: alert.errorType,
+          provider: alert.provider || provider.name,
         });
 
-        // Create API error alert
-        setLlmErrorAlert({
-          type: 'error',
-          title,
-          description: errorInfo.message,
-          provider: provider.name,
-          errorType,
-        });
+        setLlmErrorAlert(alert);
         setData([]);
       },
       [provider.name, stop],
@@ -512,11 +467,20 @@ export const ChatImpl = memo(
         setFakeLoading(true);
 
         if (autoSelectTemplate && !isExternalToolRequest) {
-          const { template, title } = await selectStarterTemplate({
-            message: finalMessageContent,
-            model,
-            provider,
-          });
+          let templateSelection: { template: string; title: string };
+
+          try {
+            templateSelection = await selectStarterTemplate({
+              message: finalMessageContent,
+              model,
+              provider,
+            });
+          } catch (selectionError) {
+            handleError(selectionError, 'llmcall');
+            return;
+          }
+
+          const { template, title } = templateSelection;
 
           if (template !== 'blank') {
             const temResp = await getTemplates(template, title).catch((e) => {

@@ -8,6 +8,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
+import { getProviderSetupPayload, isGoogleProvider } from '~/lib/llm/provider-setup';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -94,6 +95,15 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
+  const setupPayload = getProviderSetupPayload(providerName, serverEnv);
+
+  if (setupPayload) {
+    return new Response(JSON.stringify(setupPayload), {
+      status: setupPayload.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Service Unavailable',
+    });
+  }
 
   if (streamOutput) {
     try {
@@ -122,6 +132,16 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       console.log(error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
+        const googleSetupPayload = getProviderSetupPayload(providerName, serverEnv);
+
+        if (googleSetupPayload) {
+          return new Response(JSON.stringify(googleSetupPayload), {
+            status: googleSetupPayload.statusCode,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Service Unavailable',
+          });
+        }
+
         throw new Response('Invalid or missing API key', {
           status: 401,
           statusText: 'Unauthorized',
@@ -251,6 +271,29 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       };
 
       if (error instanceof Error && error.message?.includes('API key')) {
+        const googleSetupPayload = getProviderSetupPayload(providerName, serverEnv);
+
+        if (googleSetupPayload || isGoogleProvider(providerName)) {
+          const payload =
+            googleSetupPayload ??
+            {
+              error: true,
+              errorType: 'setup' as const,
+              isRetryable: false,
+              message: error.message,
+              provider: providerName,
+              setupKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+              setupSource: 'server_env' as const,
+              statusCode: 503,
+            };
+
+          return new Response(JSON.stringify(payload), {
+            status: payload.statusCode,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Service Unavailable',
+          });
+        }
+
         return new Response(
           JSON.stringify({
             ...errorResponse,

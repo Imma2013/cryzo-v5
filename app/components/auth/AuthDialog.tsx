@@ -3,6 +3,7 @@ import { Dialog, DialogDescription, DialogRoot, DialogTitle } from '~/components
 import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { getFirebaseAuthErrorMessage } from '~/lib/auth/firebase-errors';
 
 interface AuthDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -37,7 +38,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
         await signInWithEmail(email, password);
       }
     } catch (authFailure) {
-      setLocalError(authFailure instanceof Error ? authFailure.message : 'Authentication failed.');
+      setLocalError(getFirebaseAuthErrorMessage(authFailure));
     } finally {
       setPending(false);
     }
@@ -50,7 +51,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     try {
       await signInWithGoogle();
     } catch (authFailure) {
-      setLocalError(authFailure instanceof Error ? authFailure.message : 'Google sign-in failed.');
+      setLocalError(getFirebaseAuthErrorMessage(authFailure));
     } finally {
       setPending(false);
     }

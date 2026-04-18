@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from '~/lib/firebase/client';
 import { isFirebaseConfigured } from '~/lib/firebase/config';
+import { getFirebaseAuthErrorMessage } from './firebase-errors';
 
 interface FirebaseAuthContextValue {
   error: string | null;
@@ -41,14 +42,6 @@ const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
   user: null,
 };
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Authentication failed.';
-}
-
 export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +67,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     ensureFirebaseAuthPersistence().catch((authError) => {
       if (isMounted) {
-        setError(getErrorMessage(authError));
+        setError(getFirebaseAuthErrorMessage(authError));
       }
     });
 
@@ -149,7 +142,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         try {
           await signInWithEmail(email, password);
         } catch (authError) {
-          const message = getErrorMessage(authError);
+          const message = getFirebaseAuthErrorMessage(authError);
           setError(message);
           throw new Error(message);
         }
@@ -158,7 +151,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         try {
           await signInWithGoogle();
         } catch (authError) {
-          const message = getErrorMessage(authError);
+          const message = getFirebaseAuthErrorMessage(authError);
           setError(message);
           throw new Error(message);
         }
@@ -167,7 +160,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         try {
           await signOutUser();
         } catch (authError) {
-          const message = getErrorMessage(authError);
+          const message = getFirebaseAuthErrorMessage(authError);
           setError(message);
           throw new Error(message);
         }
@@ -176,7 +169,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         try {
           await signUpWithEmail(name, email, password);
         } catch (authError) {
-          const message = getErrorMessage(authError);
+          const message = getFirebaseAuthErrorMessage(authError);
           setError(message);
           throw new Error(message);
         }

@@ -12,6 +12,8 @@ export default function LlmErrorAlert({ alert, clearAlert }: Props) {
 
   const getErrorIcon = () => {
     switch (errorType) {
+      case 'setup':
+        return 'i-ph:wrench-duotone';
       case 'authentication':
         return 'i-ph:key-duotone';
       case 'rate_limit':
@@ -25,6 +27,8 @@ export default function LlmErrorAlert({ alert, clearAlert }: Props) {
 
   const getErrorMessage = () => {
     switch (errorType) {
+      case 'setup':
+        return `${provider} needs server setup before requests can run.`;
       case 'authentication':
         return `Authentication failed with ${provider}. Please check your API key.`;
       case 'rate_limit':

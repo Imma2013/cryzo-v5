@@ -1,6 +1,7 @@
 import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
+import { isProviderSetupErrorPayload } from '~/lib/llm/provider-setup';
 import { STARTER_TEMPLATES } from './constants';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
@@ -103,6 +104,11 @@ export const selectStarterTemplate = async (options: { message: string; model: s
       errorPayload = (await response.json()) as { message?: string };
     } catch {
       errorPayload = null;
+    }
+
+    if (isProviderSetupErrorPayload(errorPayload)) {
+      const error = new Error(JSON.stringify(errorPayload));
+      throw error;
     }
 
     console.error('Starter template selection request failed:', response.status, errorPayload?.message || response.statusText);
