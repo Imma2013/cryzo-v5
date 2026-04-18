@@ -22,6 +22,18 @@ export function parseCookies(cookieHeader: string | null) {
   return cookies;
 }
 
+function parseCookieJson<T>(value: string | undefined, fallback: T): T {
+  if (!value) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 const SERVER_MANAGED_API_KEY_ALIASES = new Set(['Google', 'GOOGLE_GENERATIVE_AI_API_KEY', 'google']);
 
 export function stripServerManagedApiKeys(apiKeys: Record<string, string>): Record<string, string> {
@@ -30,11 +42,11 @@ export function stripServerManagedApiKeys(apiKeys: Record<string, string>): Reco
 
 export function getApiKeysFromCookie(cookieHeader: string | null): Record<string, string> {
   const cookies = parseCookies(cookieHeader);
-  const parsedKeys = cookies.apiKeys ? JSON.parse(cookies.apiKeys) : {};
+  const parsedKeys = parseCookieJson<Record<string, string>>(cookies.apiKeys, {});
   return stripServerManagedApiKeys(parsedKeys);
 }
 
 export function getProviderSettingsFromCookie(cookieHeader: string | null): Record<string, any> {
   const cookies = parseCookies(cookieHeader);
-  return cookies.providers ? JSON.parse(cookies.providers) : {};
+  return parseCookieJson<Record<string, any>>(cookies.providers, {});
 }

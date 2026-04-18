@@ -95,7 +95,7 @@ export const loader: LoaderFunction = async ({ context }) => {
 
     // Return default state on error
     return json<ConfiguredProvidersResponse>({
-      providers: LOCAL_PROVIDERS.map((name) => ({
+      providers: SERVER_CONFIGURED_PROVIDERS.map((name) => ({
         name,
         isConfigured: false,
         configMethod: 'none' as const,

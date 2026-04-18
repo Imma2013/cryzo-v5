@@ -197,7 +197,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         ],
         model: providerInfo.getModelInstance({
           model: modelDetails.name,
-          serverEnv: serverEnv as Record<string, string>,
+          serverEnv: serverEnv as unknown as Env,
           apiKeys,
           providerSettings,
         }),

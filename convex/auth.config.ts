@@ -1,6 +1,7 @@
 import type { AuthConfig } from 'convex/server';
 
-const firebaseProjectId = process.env.VITE_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID;
+const processEnv: Record<string, string | undefined> = typeof process === 'undefined' ? {} : process.env;
+const firebaseProjectId = processEnv.VITE_FIREBASE_PROJECT_ID ?? processEnv.FIREBASE_PROJECT_ID;
 
 export default {
   providers: firebaseProjectId

@@ -69,8 +69,8 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
 
           {!isConfigured ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              Firebase Auth is not configured yet. Add the `VITE_FIREBASE_*` keys and `VITE_CONVEX_URL` to your
-              environment, then restart the app.
+              Firebase Auth is not configured yet. Add the `VITE_FIREBASE_*` keys for your Cryzo Firebase app, then
+              restart the app. `VITE_CONVEX_URL` is only needed for Convex-backed user sync after sign-in.
             </div>
           ) : (
             <>

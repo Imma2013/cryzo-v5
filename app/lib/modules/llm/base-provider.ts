@@ -3,6 +3,7 @@ import type { ProviderInfo, ProviderConfig, ModelInfo } from './types';
 import type { IProviderSetting } from '~/types/model';
 import { createOpenAI } from '@ai-sdk/openai';
 import { LLMManager } from './manager';
+import { getProcessEnv } from '~/lib/server-env';
 
 /** Default timeout for model listing API calls (5 seconds) */
 const MODEL_FETCH_TIMEOUT = 5_000;
@@ -46,7 +47,8 @@ export abstract class BaseProvider implements ProviderInfo {
    * running inside Docker. Only applies on the server side.
    */
   protected resolveDockerUrl(baseUrl: string, serverEnv?: Record<string, string>): string {
-    const isDocker = process?.env?.RUNNING_IN_DOCKER === 'true' || serverEnv?.RUNNING_IN_DOCKER === 'true';
+    const processEnv = getProcessEnv();
+    const isDocker = processEnv.RUNNING_IN_DOCKER === 'true' || serverEnv?.RUNNING_IN_DOCKER === 'true';
 
     if (!isDocker) {
       return baseUrl;
@@ -74,6 +76,7 @@ export abstract class BaseProvider implements ProviderInfo {
     let settingsBaseUrl = providerSettings?.baseUrl;
     const manager = LLMManager.getInstance();
     const isServerManagedProvider = SERVER_MANAGED_PROVIDER_NAMES.has(this.name);
+    const processEnv = getProcessEnv();
 
     if (settingsBaseUrl && settingsBaseUrl.length == 0) {
       settingsBaseUrl = undefined;
@@ -83,7 +86,7 @@ export abstract class BaseProvider implements ProviderInfo {
     let baseUrl =
       settingsBaseUrl ||
       serverEnv?.[baseUrlKey] ||
-      process?.env?.[baseUrlKey] ||
+      processEnv[baseUrlKey] ||
       manager.env?.[baseUrlKey] ||
       this.config.baseUrl;
 
@@ -93,8 +96,8 @@ export abstract class BaseProvider implements ProviderInfo {
 
     const apiTokenKey = this.config.apiTokenKey || defaultApiTokenKey;
     const apiKey = isServerManagedProvider
-      ? serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey]
-      : apiKeys?.[this.name] || serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey];
+      ? serverEnv?.[apiTokenKey] || processEnv[apiTokenKey] || manager.env?.[apiTokenKey]
+      : apiKeys?.[this.name] || serverEnv?.[apiTokenKey] || processEnv[apiTokenKey] || manager.env?.[apiTokenKey];
 
     return {
       baseUrl,
