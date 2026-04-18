@@ -121,6 +121,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               />
               {(props.providerList || []).length > 0 &&
                 props.provider &&
+                props.provider.name !== 'Google' &&
                 !LOCAL_PROVIDERS.includes(props.provider.name) && (
                   <APIKeyManager
                     provider={props.provider}

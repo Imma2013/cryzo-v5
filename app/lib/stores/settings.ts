@@ -25,6 +25,7 @@ export interface Shortcuts {
 
 export const URL_CONFIGURABLE_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
 export const LOCAL_PROVIDERS = ['OpenAILike', 'LMStudio', 'Ollama'];
+export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'Google'];
 
 export type ProviderSetting = Record<string, IProviderConfig>;
 
@@ -137,7 +138,7 @@ const autoEnableConfiguredProviders = async () => {
     let hasChanges = false;
 
     configuredProviders.forEach(({ name, isConfigured, configMethod }) => {
-      if (isConfigured && configMethod === 'environment' && LOCAL_PROVIDERS.includes(name)) {
+      if (isConfigured && configMethod === 'environment' && SERVER_CONFIGURED_PROVIDERS.includes(name)) {
         const currentProvider = currentSettings[name];
 
         if (currentProvider) {
@@ -217,7 +218,7 @@ export const updateProviderSettings = (provider: string, settings: ProviderSetti
   localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(allSettings));
 
   // If this is a local provider, update the auto-enabled tracking
-  if (LOCAL_PROVIDERS.includes(provider) && updatedProvider.settings.enabled !== undefined) {
+  if (SERVER_CONFIGURED_PROVIDERS.includes(provider) && updatedProvider.settings.enabled !== undefined) {
     updateAutoEnabledTracking(provider, updatedProvider.settings.enabled);
   }
 };

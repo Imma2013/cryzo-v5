@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { ImportExportService } from '~/lib/services/importExportService';
 import { useIndexedDB } from '~/lib/hooks/useIndexedDB';
 import { generateId } from 'ai';
+import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 
 interface UseDataOperationsProps {
   /**
@@ -727,7 +728,7 @@ export function useDataOperations({
         // Step 4: Import API keys
         showProgress('Applying API keys', 80);
 
-        const newKeys = ImportExportService.importAPIKeys(importedData);
+        const newKeys = stripServerManagedApiKeys(ImportExportService.importAPIKeys(importedData));
         const apiKeysJson = JSON.stringify(newKeys);
         document.cookie = `apiKeys=${apiKeysJson}; path=/; max-age=31536000`;
 
@@ -745,7 +746,7 @@ export function useDataOperations({
 
         toast.success(
           `${keyCount} API keys imported successfully (${newKeyCount} new/updated)\n` +
-            'Note: Keys are stored in browser cookies. For server-side usage, add them to your .env.local file.',
+            'Note: Google/Gemini stays server-side. Imported browser cookies only apply to user-managed providers.',
           { position: 'bottom-right', autoClose: 5000 },
         );
 
@@ -1172,7 +1173,7 @@ export function useDataOperations({
         case 'import-api-keys': {
           // Restore previous API keys
           const previousAPIKeys = lastOperation.data.previous;
-          const newKeys = ImportExportService.importAPIKeys(previousAPIKeys);
+          const newKeys = stripServerManagedApiKeys(ImportExportService.importAPIKeys(previousAPIKeys));
           const apiKeysJson = JSON.stringify(newKeys);
           document.cookie = `apiKeys=${apiKeysJson}; path=/; max-age=31536000`;
 

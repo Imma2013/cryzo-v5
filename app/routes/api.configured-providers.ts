@@ -1,7 +1,7 @@
 import type { LoaderFunction } from '@remix-run/cloudflare';
 import { json } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
-import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+import { SERVER_CONFIGURED_PROVIDERS } from '~/lib/stores/settings';
 import { getServerEnv } from '~/lib/server-env';
 
 interface ConfiguredProvider {
@@ -25,7 +25,7 @@ export const loader: LoaderFunction = async ({ context }) => {
     const configuredProviders: ConfiguredProvider[] = [];
 
     // Check each local provider for environment configuration
-    for (const providerName of LOCAL_PROVIDERS) {
+    for (const providerName of SERVER_CONFIGURED_PROVIDERS) {
       const providerInstance = llmManager.getProvider(providerName);
       let isConfigured = false;
       let configMethod: 'environment' | 'none' = 'none';

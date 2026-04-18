@@ -22,9 +22,16 @@ export function parseCookies(cookieHeader: string | null) {
   return cookies;
 }
 
+const SERVER_MANAGED_API_KEY_ALIASES = new Set(['Google', 'GOOGLE_GENERATIVE_AI_API_KEY', 'google']);
+
+export function stripServerManagedApiKeys(apiKeys: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(apiKeys).filter(([key]) => !SERVER_MANAGED_API_KEY_ALIASES.has(key)));
+}
+
 export function getApiKeysFromCookie(cookieHeader: string | null): Record<string, string> {
   const cookies = parseCookies(cookieHeader);
-  return cookies.apiKeys ? JSON.parse(cookies.apiKeys) : {};
+  const parsedKeys = cookies.apiKeys ? JSON.parse(cookies.apiKeys) : {};
+  return stripServerManagedApiKeys(parsedKeys);
 }
 
 export function getProviderSettingsFromCookie(cookieHeader: string | null): Record<string, any> {

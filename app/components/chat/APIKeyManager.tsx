@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '~/types/model';
 import Cookies from 'js-cookie';
+import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -28,11 +29,18 @@ export function getApiKeysFromCookies() {
     }
   }
 
-  return parsedKeys;
+  const sanitizedKeys = stripServerManagedApiKeys(parsedKeys);
+
+  if (storedApiKeys && Object.keys(sanitizedKeys).length !== Object.keys(parsedKeys).length) {
+    Cookies.set('apiKeys', JSON.stringify(sanitizedKeys));
+  }
+
+  return sanitizedKeys;
 }
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, setApiKey }) => {
+  const isServerManagedProvider = provider.name === 'Google';
   const [isEditing, setIsEditing] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [isEnvKeySet, setIsEnvKeySet] = useState(false);
@@ -41,12 +49,12 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
   useEffect(() => {
     // Load saved API key from cookies for this provider
     const savedKeys = getApiKeysFromCookies();
-    const savedKey = savedKeys[provider.name] || '';
+    const savedKey = isServerManagedProvider ? '' : savedKeys[provider.name] || '';
 
     setTempKey(savedKey);
     setApiKey(savedKey);
     setIsEditing(false);
-  }, [provider.name]);
+  }, [isServerManagedProvider, provider.name, setApiKey]);
 
   const checkEnvApiKey = useCallback(async () => {
     // Check cache first
@@ -74,6 +82,11 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
   }, [checkEnvApiKey]);
 
   const handleSave = () => {
+    if (isServerManagedProvider) {
+      setIsEditing(false);
+      return;
+    }
+
     // Save to parent state
     setApiKey(tempKey);
 
@@ -100,12 +113,16 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
               ) : isEnvKeySet ? (
                 <>
                   <div className="i-ph:check-circle-fill text-green-500 w-4 h-4" />
-                  <span className="text-xs text-green-500">Set via environment variable</span>
+                  <span className="text-xs text-green-500">
+                    {isServerManagedProvider ? 'Managed on server' : 'Set via environment variable'}
+                  </span>
                 </>
               ) : (
                 <>
                   <div className="i-ph:x-circle-fill text-red-500 w-4 h-4" />
-                  <span className="text-xs text-red-500">Not Set (Please set via UI or ENV_VAR)</span>
+                  <span className="text-xs text-red-500">
+                    {isServerManagedProvider ? 'Not set on server' : 'Not Set (Please set via UI or ENV_VAR)'}
+                  </span>
                 </>
               )}
             </div>
@@ -142,7 +159,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
           </div>
         ) : (
           <>
-            {
+            {!isServerManagedProvider && (
               <IconButton
                 onClick={() => setIsEditing(true)}
                 title="Edit API Key"
@@ -150,14 +167,16 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
               >
                 <div className="i-ph:pencil-simple w-4 h-4" />
               </IconButton>
-            }
+            )}
             {provider?.getApiKeyLink && !apiKey && (
               <IconButton
                 onClick={() => window.open(provider?.getApiKeyLink)}
-                title="Get API Key"
+                title={isServerManagedProvider ? 'Get Google API Key' : 'Get API Key'}
                 className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 flex items-center gap-2"
               >
-                <span className="text-xs whitespace-nowrap">{provider?.labelForGetApiKey || 'Get API Key'}</span>
+                <span className="text-xs whitespace-nowrap">
+                  {isServerManagedProvider ? 'View key docs' : provider?.labelForGetApiKey || 'Get API Key'}
+                </span>
                 <div className={`${provider?.icon || 'i-ph:key'} w-4 h-4`} />
               </IconButton>
             )}

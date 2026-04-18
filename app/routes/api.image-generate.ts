@@ -1,5 +1,4 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
-import { getApiKeysFromCookie } from '~/lib/api/cookies';
 import { generateGoogleImage } from '~/lib/.server/images/google-image-generation';
 import { getServerEnv } from '~/lib/server-env';
 
@@ -21,13 +20,11 @@ export async function action({ context, request }: ActionFunctionArgs) {
     return badRequest('Method not allowed', 405);
   }
 
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const apiKey = apiKeys.Google || serverEnv.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const apiKey = serverEnv.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
   if (!apiKey) {
-    return badRequest('Missing Google API key. Set the Google provider key first.', 401);
+    return badRequest('Missing Google API key on the server. Set GOOGLE_GENERATIVE_AI_API_KEY first.', 401);
   }
 
   const body = (await request.json()) as GenerateImageRequest;

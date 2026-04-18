@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Dialog, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { Button } from '~/components/ui/Button';
@@ -38,7 +38,7 @@ type GenerateImageResponse = {
 };
 
 export function NanoBananaDialog({
-  apiKeys,
+  apiKeys: _apiKeys,
   defaultPrompt,
   imageDataList,
   onGenerated,
@@ -49,6 +49,7 @@ export function NanoBananaDialog({
   const [selectedModel, setSelectedModel] = useState<(typeof IMAGE_MODELS)[number]['id']>('gemini-2.5-flash-image');
   const [aspectRatio, setAspectRatio] = useState<(typeof ASPECT_RATIOS)[number]>('1:1');
   const [pending, setPending] = useState(false);
+  const [hasGoogleServerKey, setHasGoogleServerKey] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -56,7 +57,33 @@ export function NanoBananaDialog({
     }
   }, [defaultPrompt, open]);
 
-  const hasGoogleKey = useMemo(() => Boolean(apiKeys.Google), [apiKeys.Google]);
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGoogleStatus = async () => {
+      try {
+        const response = await fetch('/api/check-env-key?provider=Google');
+        const data = (await response.json()) as { isSet: boolean };
+
+        if (!cancelled) {
+          setHasGoogleServerKey(Boolean(data.isSet));
+        }
+      } catch {
+        if (!cancelled) {
+          setHasGoogleServerKey(false);
+        }
+      }
+    };
+
+    if (open) {
+      loadGoogleStatus();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const hasReferenceImages = imageDataList.length > 0;
 
   const handleGenerate = async () => {
@@ -65,8 +92,8 @@ export function NanoBananaDialog({
       return;
     }
 
-    if (!hasGoogleKey) {
-      toast.error('Set your Google API key first.');
+    if (!hasGoogleServerKey) {
+      toast.error('Google image generation is not configured on the server.');
       return;
     }
 
@@ -115,9 +142,10 @@ export function NanoBananaDialog({
             </DialogDescription>
           </div>
 
-          {!hasGoogleKey && (
+          {!hasGoogleServerKey && (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              Add a Google API key in Cloud Providers first. Nano Banana uses the existing Google provider key.
+              Add `GOOGLE_GENERATIVE_AI_API_KEY` to the server environment. Nano Banana uses the server-side Google
+              key only.
             </div>
           )}
 
@@ -184,7 +212,7 @@ export function NanoBananaDialog({
             </Button>
             <Button
               className="bg-white text-black hover:bg-neutral-200"
-              disabled={pending || !hasGoogleKey}
+              disabled={pending || !hasGoogleServerKey}
               onClick={handleGenerate}
               type="button"
               variant="outline"

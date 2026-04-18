@@ -24,6 +24,10 @@ export const loader: LoaderFunction = async ({ context, request }) => {
       continue;
     }
 
+    if (provider.name === 'Google') {
+      continue;
+    }
+
     const envVarName = provider.config.apiTokenKey;
 
     // Skip if we already have this provider's key from cookies

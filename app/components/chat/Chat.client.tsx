@@ -32,6 +32,8 @@ import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource }
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
+import { stripServerManagedApiKeys } from '~/lib/api/cookies';
+import { getApiKeysFromCookies } from './APIKeyManager';
 
 const logger = createScopedLogger('Chat');
 
@@ -661,11 +663,7 @@ export const ChatImpl = memo(
     );
 
     useEffect(() => {
-      const storedApiKeys = Cookies.get('apiKeys');
-
-      if (storedApiKeys) {
-        setApiKeys(JSON.parse(storedApiKeys));
-      }
+      setApiKeys(stripServerManagedApiKeys(getApiKeysFromCookies()));
     }, []);
 
     const handleModelChange = (newModel: string) => {

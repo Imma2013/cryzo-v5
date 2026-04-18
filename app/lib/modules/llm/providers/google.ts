@@ -57,12 +57,12 @@ export default class GoogleProvider extends BaseProvider {
   ];
 
   async getDynamicModels(
-    apiKeys?: Record<string, string>,
+    _apiKeys?: Record<string, string>,
     settings?: IProviderSetting,
     serverEnv?: Record<string, string>,
   ): Promise<ModelInfo[]> {
     const { apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys,
+      apiKeys: undefined,
       providerSettings: settings,
       serverEnv: serverEnv as any,
       defaultBaseUrlKey: '',
@@ -147,10 +147,10 @@ export default class GoogleProvider extends BaseProvider {
     apiKeys?: Record<string, string>;
     providerSettings?: Record<string, IProviderSetting>;
   }): LanguageModelV1 {
-    const { model, serverEnv, apiKeys, providerSettings } = options;
+    const { model, serverEnv, providerSettings } = options;
 
     const { apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys,
+      apiKeys: undefined,
       providerSettings: providerSettings?.[this.name],
       serverEnv: serverEnv as any,
       defaultBaseUrlKey: '',

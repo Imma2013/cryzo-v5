@@ -6,6 +6,7 @@ import { LLMManager } from './manager';
 
 /** Default timeout for model listing API calls (5 seconds) */
 const MODEL_FETCH_TIMEOUT = 5_000;
+const SERVER_MANAGED_PROVIDER_NAMES = new Set(['Google']);
 
 export abstract class BaseProvider implements ProviderInfo {
   abstract name: string;
@@ -72,6 +73,7 @@ export abstract class BaseProvider implements ProviderInfo {
     const { apiKeys, providerSettings, serverEnv, defaultBaseUrlKey, defaultApiTokenKey } = options;
     let settingsBaseUrl = providerSettings?.baseUrl;
     const manager = LLMManager.getInstance();
+    const isServerManagedProvider = SERVER_MANAGED_PROVIDER_NAMES.has(this.name);
 
     if (settingsBaseUrl && settingsBaseUrl.length == 0) {
       settingsBaseUrl = undefined;
@@ -90,8 +92,9 @@ export abstract class BaseProvider implements ProviderInfo {
     }
 
     const apiTokenKey = this.config.apiTokenKey || defaultApiTokenKey;
-    const apiKey =
-      apiKeys?.[this.name] || serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey];
+    const apiKey = isServerManagedProvider
+      ? serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey]
+      : apiKeys?.[this.name] || serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey];
 
     return {
       baseUrl,
@@ -134,7 +137,7 @@ export abstract class BaseProvider implements ProviderInfo {
     }
 
     return JSON.stringify({
-      apiKeys: options.apiKeys?.[this.name],
+      apiKeys: SERVER_MANAGED_PROVIDER_NAMES.has(this.name) ? undefined : options.apiKeys?.[this.name],
       providerSettings: options.providerSettings?.[this.name],
       serverEnv: relevantEnv,
     });
