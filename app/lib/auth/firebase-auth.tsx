@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
   type User,
@@ -11,10 +13,12 @@ import {
 import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from '~/lib/firebase/client';
 import { isFirebaseConfigured } from '~/lib/firebase/config';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
+import { getCurrentHostname, getGoogleSignInMethod, type GoogleSignInMethod } from './google-auth-flow';
 
 interface FirebaseAuthContextValue {
   error: string | null;
   getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
+  googleSignInMethod: GoogleSignInMethod;
   isConfigured: boolean;
   isLoading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -33,6 +37,7 @@ const unconfiguredAuthAction = async () => {
 const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
   error: null,
   getAccessToken: async () => null,
+  googleSignInMethod: 'popup',
   isConfigured: isFirebaseConfigured,
   isLoading: false,
   signInWithEmail: unconfiguredAuthAction,
@@ -46,6 +51,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const googleSignInMethod = getGoogleSignInMethod(getCurrentHostname());
 
   useEffect(() => {
     if (!firebaseAuth || !isFirebaseConfigured) {
@@ -65,11 +71,17 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
 
-    ensureFirebaseAuthPersistence().catch((authError) => {
-      if (isMounted) {
-        setError(getFirebaseAuthErrorMessage(authError));
+    (async () => {
+      try {
+        await ensureFirebaseAuthPersistence();
+        await getRedirectResult(firebaseAuth);
+      } catch (authError) {
+        if (isMounted) {
+          setError(getFirebaseAuthErrorMessage(authError));
+          setIsLoading(false);
+        }
       }
-    });
+    })();
 
     return () => {
       isMounted = false;
@@ -84,8 +96,14 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     setError(null);
     await ensureFirebaseAuthPersistence();
+
+    if (googleSignInMethod === 'redirect') {
+      await signInWithRedirect(firebaseAuth, googleAuthProvider);
+      return;
+    }
+
     await signInWithPopup(firebaseAuth, googleAuthProvider);
-  }, []);
+  }, [googleSignInMethod]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth) {
@@ -136,6 +154,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     () => ({
       error,
       getAccessToken,
+      googleSignInMethod,
       isConfigured: isFirebaseConfigured,
       isLoading,
       signInWithEmail: async (email, password) => {
@@ -176,7 +195,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       },
       user,
     }),
-    [error, getAccessToken, isLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
+    [error, getAccessToken, googleSignInMethod, isLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
   );
 
   return <FirebaseAuthContext.Provider value={value}>{children}</FirebaseAuthContext.Provider>;

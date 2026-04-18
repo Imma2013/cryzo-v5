@@ -4,6 +4,7 @@ import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
 import { getFirebaseAuthErrorMessage } from '~/lib/auth/firebase-errors';
+import { getGoogleSignInPendingLabel } from '~/lib/auth/google-auth-flow';
 
 interface AuthDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -11,12 +12,13 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
-  const { error, isConfigured, signInWithEmail, signInWithGoogle, signUpWithEmail, user } = useFirebaseAuth();
+  const { error, googleSignInMethod, isConfigured, signInWithEmail, signInWithGoogle, signUpWithEmail, user } =
+    useFirebaseAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pending, setPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'email' | 'google' | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,9 +28,10 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
   }, [onOpenChange, open, user]);
 
   const authError = localError ?? error;
+  const isPending = pendingAction !== null;
 
   const handleEmailAuth = async () => {
-    setPending(true);
+    setPendingAction('email');
     setLocalError(null);
 
     try {
@@ -40,12 +43,12 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     } catch (authFailure) {
       setLocalError(getFirebaseAuthErrorMessage(authFailure));
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   };
 
   const handleGoogleAuth = async () => {
-    setPending(true);
+    setPendingAction('google');
     setLocalError(null);
 
     try {
@@ -53,7 +56,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     } catch (authFailure) {
       setLocalError(getFirebaseAuthErrorMessage(authFailure));
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   };
 
@@ -130,22 +133,22 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
               <div className="space-y-3">
                 <Button
                   className="h-11 w-full bg-white text-black hover:bg-neutral-200"
-                  disabled={pending || !email || !password || (mode === 'signup' && !name.trim())}
+                  disabled={isPending || !email || !password || (mode === 'signup' && !name.trim())}
                   onClick={handleEmailAuth}
                   type="button"
                   variant="outline"
                 >
-                  {pending ? 'Working...' : mode === 'signup' ? 'Create account' : 'Sign in'}
+                  {pendingAction === 'email' ? 'Working...' : mode === 'signup' ? 'Create account' : 'Sign in'}
                 </Button>
 
                 <Button
                   className="h-11 w-full"
-                  disabled={pending}
+                  disabled={isPending}
                   onClick={handleGoogleAuth}
                   type="button"
                   variant="secondary"
                 >
-                  Continue with Google
+                  {pendingAction === 'google' ? getGoogleSignInPendingLabel(googleSignInMethod) : 'Continue with Google'}
                 </Button>
               </div>
             </>

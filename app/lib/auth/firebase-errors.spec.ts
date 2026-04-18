@@ -12,4 +12,8 @@ describe('getFirebaseAuthErrorMessage', () => {
   it('falls back to the original error message for other auth failures', () => {
     expect(getFirebaseAuthErrorMessage(new Error('Popup closed by user'))).toBe('Popup closed by user');
   });
+
+  it('formats popup-closed-by-user errors with actionable copy', () => {
+    expect(getFirebaseAuthErrorMessage({ code: 'auth/popup-closed-by-user' })).toContain('interrupted');
+  });
 });

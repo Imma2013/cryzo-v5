@@ -1,10 +1,4 @@
-function getCurrentHostname() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.location.hostname;
-}
+import { getCurrentHostname } from './google-auth-flow';
 
 export function getFirebaseAuthErrorMessage(error: unknown) {
   const authCode =
@@ -17,6 +11,10 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
     const domainLabel = hostname ? `\`${hostname}\`` : 'this domain';
 
     return `Firebase Auth is blocking ${domainLabel}. Add it in Firebase Console -> Authentication -> Settings -> Authorized domains, then retry sign-in.`;
+  }
+
+  if (authCode === 'auth/popup-closed-by-user') {
+    return 'Google sign-in was interrupted before completion. Retry sign-in and finish the Google flow in the opened window.';
   }
 
   if (error instanceof Error) {
