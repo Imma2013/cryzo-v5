@@ -2,6 +2,7 @@ import type { LoaderFunction } from '@remix-run/cloudflare';
 import { json } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+import { getServerEnv } from '~/lib/server-env';
 
 interface ConfiguredProvider {
   name: string;
@@ -19,7 +20,8 @@ interface ConfiguredProvidersResponse {
  */
 export const loader: LoaderFunction = async ({ context }) => {
   try {
-    const llmManager = LLMManager.getInstance(context?.cloudflare?.env as any);
+    const serverEnv = getServerEnv(context as any);
+    const llmManager = LLMManager.getInstance(serverEnv as Record<string, string>);
     const configuredProviders: ConfiguredProvider[] = [];
 
     // Check each local provider for environment configuration
@@ -37,11 +39,7 @@ export const loader: LoaderFunction = async ({ context }) => {
          */
         if (config.baseUrlKey) {
           const baseUrlEnvVar = config.baseUrlKey;
-          const cloudflareEnv = (context?.cloudflare?.env as Record<string, any>)?.[baseUrlEnvVar];
-          const processEnv = process.env[baseUrlEnvVar];
-          const managerEnv = llmManager.env[baseUrlEnvVar];
-
-          const envBaseUrl = cloudflareEnv || processEnv || managerEnv;
+          const envBaseUrl = serverEnv[baseUrlEnvVar] || llmManager.env[baseUrlEnvVar];
 
           /*
            * Only consider configured if environment variable is explicitly set
@@ -64,10 +62,7 @@ export const loader: LoaderFunction = async ({ context }) => {
         // For providers that might need API keys as well (check this separately, not as fallback)
         if (config.apiTokenKey && !isConfigured) {
           const apiTokenEnvVar = config.apiTokenKey;
-          const envApiToken =
-            (context?.cloudflare?.env as Record<string, any>)?.[apiTokenEnvVar] ||
-            process.env[apiTokenEnvVar] ||
-            llmManager.env[apiTokenEnvVar];
+          const envApiToken = serverEnv[apiTokenEnvVar] || llmManager.env[apiTokenEnvVar];
 
           // Only consider configured if API key is set and not a placeholder
           const isValidApiToken =

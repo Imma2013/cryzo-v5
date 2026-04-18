@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { getApiKeysFromCookie } from '~/lib/api/cookies';
 import { withSecurity } from '~/lib/security';
+import { getServerEnv } from '~/lib/server-env';
 
 type GeminiPart = {
   text?: string;
@@ -56,12 +57,12 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
-  const serverEnv = context.cloudflare?.env as (Record<string, string> & Env) | undefined;
+  const serverEnv = getServerEnv(context as any) as Record<string, string>;
   const googleApiKey =
     apiKeys.Google ||
     apiKeys.GOOGLE_GENERATIVE_AI_API_KEY ||
     apiKeys.google ||
-    serverEnv?.GOOGLE_GENERATIVE_AI_API_KEY ||
+    serverEnv.GOOGLE_GENERATIVE_AI_API_KEY ||
     process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
   if (!googleApiKey) {

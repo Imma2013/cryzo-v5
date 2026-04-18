@@ -1,126 +1,88 @@
 import { describe, expect, it } from 'vitest';
-import { getDesignReferenceLibrary, routeDesignReferences, selectDesignReferenceDocs } from './design-system';
+import { routeDesignReferences } from './design-system';
 
-describe('design system reference selection', () => {
-  it('covers the whole design library', () => {
-    const result = getDesignReferenceLibrary();
+describe('design system routing', () => {
+  const expectPrimary = (prompt: string, slug: string) => {
+    expect(routeDesignReferences(prompt).primary?.slug).toBe(slug);
+  };
 
-    expect(result.length).toBeGreaterThan(60);
-    expect(result.some((reference) => reference.slug === 'cryzo-4')).toBe(true);
-    expect(result.some((reference) => reference.slug === 'apple')).toBe(true);
-    expect(result.some((reference) => reference.slug === 'stripe')).toBe(true);
+  it('routes phones to apple', () => {
+    expectPrimary('build me a phone website', 'apple');
   });
 
-  it('routes standard automotive prompts to cryzo-4 first', () => {
-    const result = selectDesignReferenceDocs('make me a car website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-4');
+  it('routes pets to cryzo-10', () => {
+    expectPrimary('build me a dog lovers website', 'cryzo-10');
   });
 
-  it('routes luxury automotive prompts to cryzo-9 first', () => {
-    const result = selectDesignReferenceDocs('make me a luxury car website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-9');
+  it('routes generic dog prompts to cryzo-10', () => {
+    expectPrimary('make me a dog website', 'cryzo-10');
   });
 
-  it('routes racecar prompts to cryzo-9 first', () => {
-    const result = selectDesignReferenceDocs('make me a racecar website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-9');
+  it('routes regular cars to cryzo-4', () => {
+    expectPrimary('build me a regular car website', 'cryzo-4');
   });
 
-  it('routes phone and device prompts to apple', () => {
-    const result = selectDesignReferenceDocs('build a premium phone website for a new smartphone launch', 3);
-
-    expect(result[0]?.slug).toBe('apple');
+  it('routes generic car prompts to cryzo-4', () => {
+    expectPrimary('make a car website', 'cryzo-4');
   });
 
-  it('routes phone ecommerce prompts to apple instead of automotive luxury references', () => {
-    const result = selectDesignReferenceDocs('make me a website for selling phones', 2);
-    const slugs = result.map((reference) => reference.slug);
-
-    expect(result[0]?.slug).toBe('apple');
-    expect(slugs).not.toContain('tesla');
+  it('routes luxury cars to cryzo-9', () => {
+    expectPrimary('build me a luxury car website', 'cryzo-9');
   });
 
-  it('routes docs prompts to docs-oriented references instead of generic hosting defaults', () => {
-    const result = selectDesignReferenceDocs('create a documentation site for our API and developer guides', 2);
-    const slugs = result.map((reference) => reference.slug);
-
-    expect(slugs).toContain('mintlify');
-    expect(result[0]?.slug).not.toBe('vercel');
+  it('routes books to cryzo-8', () => {
+    expectPrimary('create a book publisher website', 'cryzo-8');
   });
 
-  it('routes payments prompts to stripe', () => {
-    const result = selectDesignReferenceDocs('design a modern payments and billing dashboard for merchants', 2);
-
-    expect(result[0]?.slug).toBe('stripe');
+  it('routes furniture to cryzo-3', () => {
+    expectPrimary('make a furniture website for designer sofas and chairs', 'cryzo-3');
   });
 
-  it('routes pet prompts to cryzo-10 first', () => {
-    const result = selectDesignReferenceDocs('make me a pet wellness website for a dog brand', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-10');
+  it('routes festivals to cryzo-1', () => {
+    expectPrimary('make a music festival website with lineup and tickets', 'cryzo-1');
   });
 
-  it('routes dog website prompts to cryzo-10 first', () => {
-    const result = selectDesignReferenceDocs('make me a dog website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-10');
+  it('routes payments to stripe', () => {
+    expectPrimary('create a payments platform for merchants', 'stripe');
   });
 
-  it('routes plural dogs prompts to cryzo-10 first', () => {
-    const result = selectDesignReferenceDocs('make me a website for dogs', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-10');
+  it('routes deployment platforms to vercel', () => {
+    expectPrimary('design a frontend deployment platform for developers', 'vercel');
   });
 
-  it('keeps apple out of primary position for dog prompts', () => {
-    const result = routeDesignReferences('make me a website for dogs', 3);
-
-    expect(result.primary?.slug).toBe('cryzo-10');
-    expect(result.ranked[0]?.slug).toBe('cryzo-10');
-    expect(result.ranked[0]?.slug).not.toBe('apple');
+  it('routes workspaces to notion', () => {
+    expectPrimary('create a knowledge workspace for teams', 'notion');
   });
 
-  it('routes travel concierge prompts to cryzo-6 first', () => {
-    const result = selectDesignReferenceDocs('create a luxury travel concierge homepage with curated journeys', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-6');
+  it('routes design tools to figma', () => {
+    expectPrimary('make a collaborative interface design tool', 'figma');
   });
 
-  it('routes dining prompts to cryzo-7 first', () => {
-    const result = selectDesignReferenceDocs('design a fine dining nightlife restaurant website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-7');
+  it('routes travel marketplaces to airbnb', () => {
+    expectPrimary('build a travel marketplace for stays and vacation rentals', 'airbnb');
   });
 
-  it('returns internal ranked diagnostics for the top references', () => {
-    const result = routeDesignReferences('make me a car website', 3);
-
-    expect(result.primary?.slug).toBe('cryzo-4');
-    expect(result.ranked[0]?.slug).toBe('cryzo-4');
-    expect(result.ranked[0]?.reasons.some((reason) => reason.startsWith('house:'))).toBe(true);
-    expect(result.matchedSignals.length).toBeGreaterThan(0);
+  it('routes observability to sentry', () => {
+    expectPrimary('create an error tracking and observability platform', 'sentry');
   });
 
-  it('keeps generic car prompts in cryzo instead of drifting to external car brands', () => {
-    const result = selectDesignReferenceDocs('make me a car website', 3);
-
-    expect(result[0]?.slug).toBe('cryzo-4');
-    expect(result[0]?.slug).not.toBe('bmw');
-    expect(result[0]?.slug).not.toBe('tesla');
+  it('routes terminal apps to warp', () => {
+    expectPrimary('design a modern terminal app for developers', 'warp');
   });
 
-  it('routes explicit external brand style requests directly', () => {
-    const result = selectDesignReferenceDocs('use BMW design language for a premium car website', 2);
-
-    expect(result[0]?.slug).toBe('bmw');
+  it('routes docs sites to mintlify', () => {
+    expectPrimary('build an api docs site for developers', 'mintlify');
   });
 
-  it('treats explicit company names as deterministic routing signals when style intent is explicit', () => {
-    const result = selectDesignReferenceDocs('use Apple design language for a premium phone store', 2);
+  it('routes databases to supabase when the prompt describes app backend infra', () => {
+    expectPrimary('build a postgres backend platform for app developers', 'supabase');
+  });
 
-    expect(result[0]?.slug).toBe('apple');
+  it('keeps pet prompts away from ferrari', () => {
+    expect(routeDesignReferences('build a pet website for dog lovers').primary?.slug).not.toBe('ferrari');
+  });
+
+  it('hard-locks to a single primary design reference', () => {
+    expect(routeDesignReferences('make me a dog website').supporting).toEqual([]);
   });
 });

@@ -71,6 +71,7 @@ export function buildCanonicalDesignPreamble(options: {
       Treat this library as the highest-priority default visual reference for build requests.
       Select the closest matching reference from the library and synthesize from it before falling back to generic bolt.diy aesthetics.
       Always evaluate the full reference library before choosing a design direction.
+      A valid build result must have a concrete primary reference from this library. Do not generate a generic design brief or generic landing page direction without first locking a primary reference.
       Do not repeatedly default to Ferrari, Vercel, or any other familiar premium reference unless the prompt clearly matches them better than the rest of the library.
       If a Cryzo reference is a strong or near-strong fit, prefer the best-fit Cryzo reference as the primary system.
       Do NOT default to generic AI-generated landing pages, stock SaaS dashboards, purple-on-dark palettes, or interchangeable hero sections unless the selected design reference explicitly supports them.
@@ -84,6 +85,7 @@ export function buildCanonicalDesignPreamble(options: {
       Use the first selected reference as primary. Use additional references only for compatible supporting ideas.
       Primary reference controls composition, hero direction, typography attitude, palette behavior, CTA styling, and motion language.
       Supporting references may refine spacing, polish, grid logic, or restraint, but must never overpower the primary.
+      If a primary reference is selected, enforce it in the final output instead of summarizing it as an optional suggestion.
       Do not describe the output as Apple-inspired, Stripe-inspired, Ferrari-inspired, or similar unless that exact reference is the selected primary or the user explicitly requested it.
       If the primary reference conflicts with generic premium instincts from the base prompt, follow the primary reference and ignore the generic premium instinct.
     </design_reference_library>

@@ -7,6 +7,7 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
+import { getServerEnv } from '~/lib/server-env';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -17,7 +18,7 @@ async function getModelList(options: {
   providerSettings?: Record<string, IProviderSetting>;
   serverEnv?: Record<string, string>;
 }) {
-  const llmManager = LLMManager.getInstance(import.meta.env);
+  const llmManager = LLMManager.getInstance(options.serverEnv);
   return llmManager.updateModelList(options);
 }
 
@@ -64,6 +65,7 @@ function validateTokenLimits(modelDetails: ModelInfo, requestedTokens: number): 
 }
 
 async function llmCallAction({ context, request }: ActionFunctionArgs) {
+  const serverEnv = getServerEnv(context as any);
   const { system, message, model, provider, streamOutput } = await request.json<{
     system: string;
     message: string;
@@ -105,7 +107,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             content: `${message}`,
           },
         ],
-        env: context.cloudflare?.env as any,
+        env: serverEnv as any,
         apiKeys,
         providerSettings,
       });
@@ -150,7 +152,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   } else {
     try {
-      const models = await getModelList({ apiKeys, providerSettings, serverEnv: context.cloudflare?.env as any });
+      const models = await getModelList({ apiKeys, providerSettings, serverEnv: serverEnv as Record<string, string> });
       const modelDetails = models.find((m: ModelInfo) => m.name === model);
 
       if (!modelDetails) {
@@ -169,7 +171,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         });
       }
 
-      const providerInfo = LLMManager.getInstance(context.cloudflare?.env as any).getProvider(provider.name);
+      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(provider.name);
 
       if (!providerInfo) {
         throw new Error('Provider not found');
@@ -195,7 +197,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         ],
         model: providerInfo.getModelInstance({
           model: modelDetails.name,
-          serverEnv: context.cloudflare?.env as any,
+          serverEnv: serverEnv as Record<string, string>,
           apiKeys,
           providerSettings,
         }),

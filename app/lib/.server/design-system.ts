@@ -10,6 +10,7 @@ type DesignCategory =
   | 'ai'
   | 'automation'
   | 'automotive'
+  | 'books'
   | 'collaboration'
   | 'consumer'
   | 'content'
@@ -22,7 +23,9 @@ type DesignCategory =
   | 'docs'
   | 'email'
   | 'enterprise'
+  | 'events'
   | 'fintech'
+  | 'furniture'
   | 'hardware'
   | 'hospitality'
   | 'infra'
@@ -70,7 +73,10 @@ interface EnrichedDesignReferenceDoc extends DesignReferenceDoc {
 type HouseDesignLane =
   | 'automotive-standard'
   | 'automotive-performance'
+  | 'festival-world'
+  | 'furniture-showcase'
   | 'immersive-spatial'
+  | 'books-editorial'
   | 'travel-concierge'
   | 'dining-nightlife'
   | 'atmospheric-editorial'
@@ -92,6 +98,7 @@ const CATEGORY_KEYWORDS: Record<DesignCategory, string[]> = {
     'ev',
     'electric vehicle',
   ],
+  books: ['book', 'books', 'novel', 'novels', 'author', 'authors', 'publishing', 'publisher', 'library', 'bookstore'],
   collaboration: ['collaboration', 'whiteboard', 'canvas', 'team workspace', 'share', 'shared'],
   consumer: ['consumer', 'lifestyle', 'brand', 'shopping', 'retail', 'app for everyone'],
   content: ['content', 'cms', 'publishing', 'editorial', 'blog', 'knowledge base'],
@@ -116,7 +123,9 @@ const CATEGORY_KEYWORDS: Record<DesignCategory, string[]> = {
   docs: ['docs', 'documentation', 'doc site', 'reference', 'guide', 'manual'],
   email: ['email', 'inbox', 'mail', 'newsletter'],
   enterprise: ['enterprise', 'b2b', 'corporate', 'business software', 'platform'],
+  events: ['festival', 'event', 'events', 'lineup', 'tickets', 'concert', 'conference', 'weekend'],
   fintech: ['fintech', 'bank', 'banking', 'finance', 'financial', 'money', 'payments'],
+  furniture: ['furniture', 'chair', 'chairs', 'sofa', 'sofas', 'table', 'tables', 'interior', 'home decor'],
   hardware: ['hardware', 'device', 'devices', 'phone', 'phones', 'smartphone', 'laptop', 'computer', 'tablet'],
   hospitality: ['hospitality', 'hotel', 'stay', 'host'],
   infra: ['infra', 'infrastructure', 'cloud', 'hosting', 'deploy', 'deployment', 'platform'],
@@ -135,6 +144,7 @@ const CATEGORY_KEYWORDS: Record<DesignCategory, string[]> = {
 const INDUSTRY_SIGNALS: Record<string, string[]> = {
   automotive: ['car', 'cars', 'auto', 'automotive', 'vehicle', 'vehicles', 'dealership', 'inventory'],
   'consumer-hardware': ['phone', 'phones', 'smartphone', 'device', 'devices', 'laptop', 'tablet', 'hardware'],
+  books: ['book', 'books', 'novel', 'novels', 'author', 'publisher', 'publishing', 'library'],
   payments: ['payments', 'checkout', 'billing', 'merchant', 'invoice', 'subscription'],
   fintech: ['fintech', 'bank', 'banking', 'finance', 'financial', 'money'],
   crypto: ['crypto', 'exchange', 'wallet', 'token', 'blockchain', 'web3'],
@@ -151,7 +161,9 @@ const INDUSTRY_SIGNALS: Record<string, string[]> = {
   monitoring: ['monitoring', 'observability', 'errors', 'incident', 'performance'],
   travel: ['travel', 'trip', 'vacation', 'booking', 'rental'],
   mobility: ['rides', 'transport', 'mobility', 'delivery'],
+  furniture: ['furniture', 'interior', 'home decor', 'chairs', 'tables', 'sofa', 'sofas'],
   content: ['cms', 'content', 'publishing', 'editorial'],
+  events: ['festival', 'concert', 'lineup', 'tickets', 'event', 'conference'],
   analytics: ['analytics', 'metrics', 'insights', 'events'],
   space: ['space', 'rocket', 'mission', 'aerospace', 'satellite'],
   'brand-world': ['brand world', 'story world', 'immersive brand', 'editorial world'],
@@ -163,6 +175,9 @@ const PRODUCT_TYPE_SIGNALS: Record<string, string[]> = {
   'supercar-editorial': ['supercar', 'hypercar', 'motorsport', 'race inspired', 'exotic car'],
   'device-launch': ['phone website', 'smartphone launch', 'device launch', 'product keynote'],
   'device-commerce': ['phone store', 'sell phones', 'device store'],
+  'festival-website': ['festival website', 'music festival', 'festival landing page', 'concert website', 'event lineup page'],
+  'furniture-showcase': ['furniture website', 'furniture brand', 'interior design store', 'home decor website', 'designer furniture'],
+  'book-editorial': ['book website', 'books website', 'author website', 'publishing house', 'library website', 'book publisher'],
   'payments-platform': ['payments platform', 'checkout platform', 'billing dashboard', 'merchant payments'],
   'banking-app': ['bank app', 'banking app', 'finance app', 'money app'],
   'crypto-exchange': ['crypto exchange', 'wallet app', 'trading app'],
@@ -240,6 +255,25 @@ const HOUSE_LANE_SIGNALS: Record<HouseDesignLane, string[]> = {
     'machine',
     'speed',
   ],
+  'festival-world': [
+    'festival website',
+    'festival brand',
+    'music festival',
+    'concert website',
+    'event website',
+    'festival landing page',
+    'lineup page',
+    'tickets page',
+  ],
+  'furniture-showcase': [
+    'furniture website',
+    'furniture brand',
+    'home decor website',
+    'interior furniture',
+    'designer furniture',
+    'sofa brand',
+    'chair brand',
+  ],
   'immersive-spatial': [
     'immersive world',
     'spatial experience',
@@ -248,6 +282,15 @@ const HOUSE_LANE_SIGNALS: Record<HouseDesignLane, string[]> = {
     'futuristic world',
     'artifact',
     'world building',
+  ],
+  'books-editorial': [
+    'book website',
+    'books website',
+    'author website',
+    'publishing house',
+    'book publisher',
+    'library website',
+    'literary brand',
   ],
   'travel-concierge': [
     'travel concierge',
@@ -292,7 +335,10 @@ const HOUSE_LANE_SIGNALS: Record<HouseDesignLane, string[]> = {
 const HOUSE_LANE_OWNERS: Record<HouseDesignLane, string[]> = {
   'automotive-standard': ['cryzo-4'],
   'automotive-performance': ['cryzo-9'],
+  'festival-world': ['cryzo-1'],
+  'furniture-showcase': ['cryzo-3'],
   'immersive-spatial': ['cryzo-2'],
+  'books-editorial': ['cryzo-8'],
   'travel-concierge': ['cryzo-6'],
   'dining-nightlife': ['cryzo-7'],
   'atmospheric-editorial': ['cryzo-8'],
@@ -301,8 +347,6 @@ const HOUSE_LANE_OWNERS: Record<HouseDesignLane, string[]> = {
 
 const LOW_SIGNAL_FALLBACK_SLUGS = ['apple', 'notion', 'stripe', 'linear.app', 'airbnb', 'vercel'];
 const MINIMUM_REFERENCE_SCORE = 110;
-const MINIMUM_SUPPORT_SCORE = 120;
-const MAX_SUPPORT_SCORE_GAP = 42;
 const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   airbnb: {
     categories: ['consumer', 'hospitality', 'travel'],
@@ -313,7 +357,10 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   airtable: {
     categories: ['data', 'enterprise', 'productivity'],
-    keywords: ['spreadsheet', 'database-like', 'grid'],
+    keywords: ['spreadsheet', 'database-like', 'grid', 'structured workflow', 'internal ops'],
+    industries: ['productivity', 'enterprise', 'data'],
+    styleKeywords: ['minimal', 'technical'],
+    compatibleSupports: ['notion', 'miro', 'linear.app'],
   },
   apple: {
     categories: ['consumer', 'hardware', 'luxury', 'mobile'],
@@ -337,23 +384,41 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   cal: {
     aliases: ['cal.com'],
     categories: ['productivity'],
-    keywords: ['calendar', 'booking', 'scheduling'],
+    keywords: ['calendar', 'booking', 'scheduling', 'appointment scheduling', 'booking links'],
+    industries: ['productivity'],
+    styleKeywords: ['minimal', 'friendly'],
+    compatibleSupports: ['notion', 'superhuman', 'apple'],
   },
   claude: {
     categories: ['ai'],
-    keywords: ['assistant', 'model company', 'research'],
+    keywords: ['assistant', 'model company', 'research', 'ai assistant', 'research ai'],
+    industries: ['ai', 'research'],
+    productTypes: ['ai-lab'],
+    styleKeywords: ['minimal', 'trustworthy'],
+    compatibleSupports: ['notion', 'cursor', 'x.ai'],
   },
   clay: {
     categories: ['automation', 'enterprise'],
-    keywords: ['go to market', 'sales tooling'],
+    keywords: ['go to market', 'sales tooling', 'sales automation', 'data enrichment'],
+    industries: ['automation', 'enterprise'],
+    styleKeywords: ['technical', 'premium'],
+    compatibleSupports: ['airtable', 'zapier', 'notion'],
   },
   clickhouse: {
     categories: ['data', 'database', 'developer', 'enterprise'],
-    keywords: ['analytics database', 'warehouse'],
+    keywords: ['analytics database', 'warehouse', 'data warehouse', 'high performance analytics'],
+    industries: ['database', 'analytics', 'developer-infra'],
+    productTypes: ['database-platform'],
+    styleKeywords: ['technical', 'trustworthy'],
+    compatibleSupports: ['mongodb', 'supabase', 'sentry'],
   },
   cohere: {
     categories: ['ai', 'enterprise'],
-    keywords: ['language models', 'enterprise ai'],
+    keywords: ['language models', 'enterprise ai', 'enterprise model company', 'b2b ai platform'],
+    industries: ['ai', 'enterprise'],
+    productTypes: ['ai-lab'],
+    styleKeywords: ['technical', 'trustworthy'],
+    compatibleSupports: ['claude', 'mistral.ai', 'x.ai'],
   },
   coinbase: {
     categories: ['consumer', 'crypto', 'fintech'],
@@ -365,12 +430,23 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   composio: {
     categories: ['ai', 'automation', 'developer'],
-    keywords: ['tool calling', 'integrations'],
+    keywords: ['tool calling', 'integrations', 'agent integrations', 'tool orchestration'],
+    industries: ['ai', 'automation', 'developer-tools'],
+    productTypes: ['automation-platform'],
+    styleKeywords: ['technical'],
+    compatibleSupports: ['zapier', 'voltagent', 'cursor'],
   },
   'cryzo-1': {
     aliases: ['cryzo 1'],
-    categories: ['creative', 'luxury'],
-    keywords: ['brand world', 'editorial', 'house style'],
+    categories: ['creative', 'events', 'luxury'],
+    keywords: ['festival website', 'festival brand', 'event world', 'concert landing page', 'lineup poster', 'editorial event'],
+    industries: ['events', 'brand-world'],
+    productTypes: ['festival-website'],
+    styleKeywords: ['editorial', 'cinematic', 'premium'],
+    supports3D: true,
+    supportsEditorial: true,
+    compatibleSupports: ['spotify', 'pinterest', 'figma'],
+    family: 'cryzo',
   },
   'cryzo-2': {
     aliases: ['cryzo 2'],
@@ -387,13 +463,14 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   'cryzo-3': {
     aliases: ['cryzo 3'],
-    categories: ['creative', 'luxury'],
-    keywords: ['house style', 'soft showroom', 'premium future brand'],
-    industries: ['brand-world'],
-    styleKeywords: ['premium', 'cinematic'],
+    categories: ['creative', 'furniture', 'luxury'],
+    keywords: ['furniture website', 'designer furniture', 'interior objects', 'home decor brand', 'soft showroom'],
+    industries: ['furniture', 'brand-world', 'commerce'],
+    productTypes: ['furniture-showcase'],
+    styleKeywords: ['premium', 'cinematic', 'editorial'],
     supports3D: true,
     supportsEditorial: true,
-    compatibleSupports: ['apple', 'tesla', 'figma'],
+    compatibleSupports: ['pinterest', 'apple', 'figma'],
     family: 'cryzo',
   },
   'cryzo-4': {
@@ -446,9 +523,10 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   'cryzo-8': {
     aliases: ['cryzo 8'],
-    categories: ['creative', 'luxury'],
-    keywords: ['atmospheric', 'ambient luxury', 'calm editorial', 'story world'],
-    industries: ['brand-world'],
+    categories: ['books', 'content', 'creative', 'luxury'],
+    keywords: ['book website', 'publishing house', 'author website', 'literary brand', 'calm editorial', 'story world'],
+    industries: ['books', 'content', 'brand-world'],
+    productTypes: ['book-editorial'],
     styleKeywords: ['editorial', 'cinematic', 'premium'],
     supports3D: true,
     supportsEditorial: true,
@@ -494,15 +572,25 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   cursor: {
     categories: ['ai', 'developer'],
-    keywords: ['coding assistant', 'editor'],
+    keywords: ['coding assistant', 'editor', 'ai code editor', 'developer assistant'],
+    industries: ['developer-tools', 'ai'],
+    productTypes: ['ai-coding-tool'],
+    styleKeywords: ['technical', 'minimal'],
+    supportsMinimalShowcase: true,
+    compatibleSupports: ['raycast', 'warp', 'vercel'],
   },
   elevenlabs: {
     categories: ['ai', 'media'],
-    keywords: ['voice', 'speech', 'audio'],
+    keywords: ['voice', 'speech', 'audio', 'voice ai', 'speech generation', 'text to speech'],
+    industries: ['media', 'ai'],
+    productTypes: ['voice-ai'],
+    styleKeywords: ['premium', 'technical'],
   },
   expo: {
     categories: ['developer', 'mobile'],
-    keywords: ['react native', 'app tooling'],
+    keywords: ['react native', 'app tooling', 'cross-platform app', 'mobile app tooling'],
+    industries: ['developer-tools'],
+    styleKeywords: ['technical', 'friendly'],
   },
   ferrari: {
     categories: ['automotive', 'luxury'],
@@ -532,11 +620,16 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   hashicorp: {
     categories: ['developer', 'enterprise', 'infra'],
-    keywords: ['devops', 'platform tooling'],
+    keywords: ['devops', 'platform tooling', 'terraform', 'ops platform', 'enterprise infrastructure'],
+    industries: ['developer-infra'],
+    styleKeywords: ['technical', 'trustworthy'],
+    compatibleSupports: ['vercel', 'sentry', 'mongodb'],
   },
   ibm: {
     categories: ['enterprise'],
-    keywords: ['corporate', 'institutional'],
+    keywords: ['corporate', 'institutional', 'enterprise platform', 'serious tech brand'],
+    industries: ['enterprise'],
+    styleKeywords: ['trustworthy', 'technical'],
   },
   intercom: {
     categories: ['enterprise', 'support'],
@@ -555,7 +648,11 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   lamborghini: {
     categories: ['automotive', 'luxury'],
-    keywords: ['supercar', 'concept vehicle'],
+    keywords: ['supercar', 'concept vehicle', 'aggressive luxury automotive', 'exotic performance'],
+    industries: ['automotive', 'luxury'],
+    productTypes: ['supercar-editorial'],
+    styleKeywords: ['editorial', 'luxury', 'futuristic'],
+    compatibleSupports: ['ferrari', 'cryzo-9', 'tesla'],
   },
   'linear.app': {
     aliases: ['linear', 'linear app'],
@@ -570,11 +667,16 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   lovable: {
     categories: ['ai', 'creative', 'website-builder'],
-    keywords: ['app builder', 'vibe coding'],
+    keywords: ['app builder', 'vibe coding', 'ai app builder', 'website generation'],
+    industries: ['ai', 'website-builder'],
+    productTypes: ['website-builder'],
+    styleKeywords: ['playful', 'premium'],
   },
   minimax: {
     categories: ['ai', 'media'],
-    keywords: ['video generation', 'multimodal'],
+    keywords: ['video generation', 'multimodal', 'frontier ai lab', 'synthetic media'],
+    industries: ['ai', 'media'],
+    styleKeywords: ['futuristic', 'premium'],
   },
   mintlify: {
     categories: ['developer', 'docs'],
@@ -587,16 +689,25 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   miro: {
     categories: ['collaboration', 'productivity'],
-    keywords: ['whiteboard', 'team canvas'],
+    keywords: ['whiteboard', 'team canvas', 'collaboration board', 'brainstorming workspace'],
+    industries: ['collaboration', 'productivity'],
+    styleKeywords: ['friendly', 'playful'],
   },
   'mistral.ai': {
     aliases: ['mistral', 'mistral ai'],
     categories: ['ai'],
-    keywords: ['model lab', 'research company'],
+    keywords: ['model lab', 'research company', 'frontier model company', 'open ai lab'],
+    industries: ['ai', 'research'],
+    productTypes: ['ai-lab'],
+    styleKeywords: ['technical', 'futuristic'],
+    compatibleSupports: ['cohere', 'x.ai', 'claude'],
   },
   mongodb: {
     categories: ['database', 'developer', 'enterprise'],
-    keywords: ['document database', 'backend'],
+    keywords: ['document database', 'backend', 'developer database', 'database platform'],
+    industries: ['developer-infra', 'database'],
+    productTypes: ['database-platform'],
+    styleKeywords: ['technical'],
   },
   notion: {
     categories: ['content', 'docs', 'productivity'],
@@ -617,20 +728,30 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   ollama: {
     categories: ['ai', 'developer'],
-    keywords: ['local models', 'open source'],
+    keywords: ['local models', 'open source', 'local ai', 'on-device models'],
+    industries: ['ai', 'developer-tools'],
+    styleKeywords: ['technical', 'minimal'],
   },
   'opencode.ai': {
     aliases: ['opencode', 'opencode ai'],
     categories: ['ai', 'developer'],
-    keywords: ['coding', 'agent tooling'],
+    keywords: ['coding', 'agent tooling', 'developer ai tool', 'code generation'],
+    industries: ['ai', 'developer-tools'],
+    productTypes: ['ai-coding-tool'],
+    styleKeywords: ['technical', 'premium'],
   },
   pinterest: {
     categories: ['consumer', 'creative'],
-    keywords: ['inspiration', 'discovery', 'boards'],
+    keywords: ['inspiration', 'discovery', 'boards', 'visual discovery', 'curation'],
+    industries: ['consumer', 'design'],
+    styleKeywords: ['playful', 'editorial'],
   },
   posthog: {
     categories: ['data', 'developer'],
-    keywords: ['product analytics', 'feature flags'],
+    keywords: ['product analytics', 'feature flags', 'event tracking', 'product insights'],
+    industries: ['analytics', 'developer-tools'],
+    styleKeywords: ['technical'],
+    compatibleSupports: ['sentry', 'vercel', 'stripe'],
   },
   raycast: {
     categories: ['developer', 'productivity'],
@@ -642,11 +763,16 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   renault: {
     categories: ['automotive', 'consumer'],
-    keywords: ['car brand', 'vehicle lineup'],
+    keywords: ['car brand', 'vehicle lineup', 'mainstream automotive', 'practical vehicle site'],
+    industries: ['automotive', 'commerce'],
+    productTypes: ['car-commerce'],
+    styleKeywords: ['premium', 'trustworthy'],
   },
   replicate: {
     categories: ['ai', 'developer'],
-    keywords: ['model marketplace', 'inference api'],
+    keywords: ['model marketplace', 'inference api', 'model inference platform', 'ai api'],
+    industries: ['ai', 'developer-tools'],
+    styleKeywords: ['technical'],
   },
   resend: {
     categories: ['developer', 'email'],
@@ -667,11 +793,16 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   runwayml: {
     aliases: ['runway', 'runway ml'],
     categories: ['ai', 'creative', 'media'],
-    keywords: ['video generation', 'film'],
+    keywords: ['video generation', 'film', 'creative ai', 'media production ai'],
+    industries: ['media', 'ai'],
+    productTypes: ['video-ai'],
+    styleKeywords: ['cinematic', 'premium'],
   },
   sanity: {
     categories: ['content', 'developer', 'docs', 'enterprise'],
-    keywords: ['cms', 'structured content'],
+    keywords: ['cms', 'structured content', 'content platform', 'composable publishing'],
+    industries: ['content', 'docs', 'developer-tools'],
+    styleKeywords: ['technical', 'minimal'],
   },
   sentry: {
     categories: ['developer', 'monitoring'],
@@ -683,11 +814,15 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   spacex: {
     categories: ['space'],
-    keywords: ['rocket', 'aerospace', 'mission'],
+    keywords: ['rocket', 'aerospace', 'mission', 'space tech', 'launch company'],
+    industries: ['space'],
+    styleKeywords: ['cinematic', 'technical'],
   },
   spotify: {
     categories: ['consumer', 'media'],
-    keywords: ['music streaming', 'audio platform'],
+    keywords: ['music streaming', 'audio platform', 'streaming app', 'music platform'],
+    industries: ['media', 'consumer'],
+    styleKeywords: ['playful', 'premium'],
   },
   stripe: {
     categories: ['developer', 'fintech', 'payments'],
@@ -701,11 +836,17 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   supabase: {
     categories: ['database', 'developer', 'infra'],
-    keywords: ['backend as a service', 'postgres'],
+    keywords: ['backend as a service', 'postgres', 'developer backend', 'app backend infra'],
+    industries: ['database', 'developer-infra'],
+    productTypes: ['database-platform'],
+    styleKeywords: ['technical', 'minimal'],
+    compatibleSupports: ['vercel', 'stripe', 'mintlify'],
   },
   superhuman: {
     categories: ['email', 'luxury', 'productivity'],
-    keywords: ['premium inbox', 'email client'],
+    keywords: ['premium inbox', 'email client', 'elite workflow software', 'fast email'],
+    industries: ['productivity', 'email'],
+    styleKeywords: ['premium', 'minimal'],
   },
   tesla: {
     categories: ['automotive', 'consumer', 'hardware', 'luxury'],
@@ -721,11 +862,16 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   'together.ai': {
     aliases: ['together', 'together ai'],
     categories: ['ai', 'developer'],
-    keywords: ['inference platform', 'model serving'],
+    keywords: ['inference platform', 'model serving', 'open model infra', 'ai inference'],
+    industries: ['ai', 'developer-tools'],
+    styleKeywords: ['technical'],
   },
   uber: {
     categories: ['consumer', 'travel'],
-    keywords: ['mobility', 'transportation', 'rides'],
+    keywords: ['mobility', 'transportation', 'rides', 'delivery', 'urban movement'],
+    industries: ['mobility', 'consumer'],
+    productTypes: ['mobility-app'],
+    styleKeywords: ['technical', 'premium'],
   },
   vercel: {
     categories: ['developer', 'infra', 'website-builder'],
@@ -739,7 +885,9 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   voltagent: {
     categories: ['ai', 'developer'],
-    keywords: ['agent framework', 'agent tooling'],
+    keywords: ['agent framework', 'agent tooling', 'ai developer infrastructure', 'agent platform'],
+    industries: ['ai', 'developer-tools'],
+    styleKeywords: ['technical'],
   },
   warp: {
     categories: ['developer', 'productivity'],
@@ -752,7 +900,10 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   },
   webflow: {
     categories: ['creative', 'design', 'website-builder'],
-    keywords: ['site builder', 'no-code'],
+    keywords: ['site builder', 'no-code', 'visual web publishing', 'website builder'],
+    industries: ['website-builder', 'design'],
+    productTypes: ['website-builder'],
+    styleKeywords: ['premium', 'creative'],
   },
   wise: {
     categories: ['consumer', 'fintech'],
@@ -765,11 +916,17 @@ const REFERENCE_METADATA: Record<string, DesignReferenceMetadata> = {
   'x.ai': {
     aliases: ['xai', 'x ai', 'x.ai'],
     categories: ['ai'],
-    keywords: ['research lab', 'model company'],
+    keywords: ['research lab', 'model company', 'frontier ai lab', 'research-heavy ai brand'],
+    industries: ['ai', 'research'],
+    productTypes: ['ai-lab'],
+    styleKeywords: ['technical', 'futuristic'],
   },
   zapier: {
     categories: ['automation', 'productivity'],
-    keywords: ['workflow automation', 'integrations'],
+    keywords: ['workflow automation', 'integrations', 'no-code automation', 'automation platform'],
+    industries: ['automation', 'productivity'],
+    productTypes: ['automation-platform'],
+    styleKeywords: ['friendly', 'technical'],
   },
 };
 
@@ -1048,6 +1205,18 @@ function scoreReference(reference: EnrichedDesignReferenceDoc, normalizedPrompt:
     score -= 24;
   }
 
+  if (industrySignals.has('books') && !reference.metadata.industries.includes('books')) {
+    score -= 28;
+  }
+
+  if (industrySignals.has('furniture') && !reference.metadata.industries.includes('furniture')) {
+    score -= 28;
+  }
+
+  if (industrySignals.has('events') && !reference.metadata.industries.includes('events')) {
+    score -= 28;
+  }
+
   if (industrySignals.has('monitoring') && !reference.metadata.industries.includes('monitoring')) {
     score -= 24;
   }
@@ -1068,6 +1237,40 @@ function inferHouseLaneMatches(normalizedPrompt: string) {
     if (matches > 0) {
       laneMatches.set(lane, matches);
     }
+  }
+
+  if (
+    !laneMatches.has('festival-world') &&
+    (includesPhrase(normalizedPrompt, 'festival') ||
+      includesPhrase(normalizedPrompt, 'concert') ||
+      includesPhrase(normalizedPrompt, 'lineup') ||
+      includesPhrase(normalizedPrompt, 'tickets') ||
+      includesPhrase(normalizedPrompt, 'event website'))
+  ) {
+    laneMatches.set('festival-world', 1);
+  }
+
+  if (
+    !laneMatches.has('furniture-showcase') &&
+    (includesPhrase(normalizedPrompt, 'furniture') ||
+      includesPhrase(normalizedPrompt, 'chair') ||
+      includesPhrase(normalizedPrompt, 'sofa') ||
+      includesPhrase(normalizedPrompt, 'table') ||
+      includesPhrase(normalizedPrompt, 'home decor'))
+  ) {
+    laneMatches.set('furniture-showcase', 1);
+  }
+
+  if (
+    !laneMatches.has('books-editorial') &&
+    (includesPhrase(normalizedPrompt, 'book') ||
+      includesPhrase(normalizedPrompt, 'books') ||
+      includesPhrase(normalizedPrompt, 'author') ||
+      includesPhrase(normalizedPrompt, 'publisher') ||
+      includesPhrase(normalizedPrompt, 'publishing') ||
+      includesPhrase(normalizedPrompt, 'library'))
+  ) {
+    laneMatches.set('books-editorial', 1);
   }
 
   if (
@@ -1158,6 +1361,21 @@ function applyHouseLaneBias(
       entry.reasons.push('house:external-performance-support-only');
     }
 
+    if (lane === 'festival-world' && entry.reference.slug !== 'cryzo-1') {
+      entry.score -= 18;
+      entry.reasons.push('house:festival-lane-miss');
+    }
+
+    if (lane === 'furniture-showcase' && entry.reference.slug !== 'cryzo-3') {
+      entry.score -= 18;
+      entry.reasons.push('house:furniture-lane-miss');
+    }
+
+    if (lane === 'books-editorial' && entry.reference.slug !== 'cryzo-8') {
+      entry.score -= 18;
+      entry.reasons.push('house:books-lane-miss');
+    }
+
     if (lane === 'pets' && entry.reference.slug !== 'cryzo-10') {
       entry.score -= 18;
       entry.reasons.push('house:pet-lane-miss');
@@ -1197,22 +1415,7 @@ export function selectDesignReferenceDocs(messageText: string, limit = 2) {
 
   if (explicitMatches.length > 0) {
     const primary = explicitMatches[0];
-    const compatibleSupports = new Set(primary.metadata.compatibleSupports);
-
-    if (limit < 2 || compatibleSupports.size === 0) {
-      return [primary].slice(0, limit);
-    }
-
-    const support = designReferenceLibrary
-      .filter((reference) => reference.slug !== primary.slug && compatibleSupports.has(reference.slug))
-      .map((reference) => ({
-        reference,
-        ...scoreReference(reference, normalizedPrompt, promptTokens),
-      }))
-      .sort((left, right) => right.score - left.score || left.reference.slug.localeCompare(right.reference.slug))
-      .find((entry) => entry.score >= MINIMUM_SUPPORT_SCORE);
-
-    return support ? [primary, support.reference].slice(0, limit) : [primary].slice(0, limit);
+    return [primary].slice(0, Math.max(1, limit));
   }
 
   const laneMatches = inferHouseLaneMatches(normalizedPrompt);
@@ -1231,27 +1434,7 @@ export function selectDesignReferenceDocs(messageText: string, limit = 2) {
   const primary = scoredReferences.find((entry) => entry.score >= MINIMUM_REFERENCE_SCORE);
 
   if (primary) {
-    const compatibleSupports = new Set(primary.reference.metadata.compatibleSupports);
-    const support =
-      limit >= 2 && compatibleSupports.size > 0
-        ? scoredReferences.find((entry) => {
-            if (entry.reference.slug === primary.reference.slug) {
-              return false;
-            }
-
-            if (!compatibleSupports.has(entry.reference.slug)) {
-              return false;
-            }
-
-            if (entry.score < MINIMUM_SUPPORT_SCORE) {
-              return false;
-            }
-
-            return primary.score - entry.score <= MAX_SUPPORT_SCORE_GAP;
-          })
-        : undefined;
-
-    return support ? [primary.reference, support.reference].slice(0, limit) : [primary.reference];
+    return [primary.reference].slice(0, Math.max(1, limit));
   }
 
   return LOW_SIGNAL_FALLBACK_SLUGS.map((slug) =>

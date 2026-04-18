@@ -54,10 +54,11 @@ Response:
 
 Instructions:
 1. For trivial tasks and simple scripts, always recommend the blank template
-2. For more complex projects, recommend templates from the provided list
+2. For more complex projects, recommend templates from the provided list only as framework scaffolding
 3. Follow the exact XML format
 4. Consider both technical requirements and tags
 5. If no perfect match exists, recommend the closest option
+6. Do not use brand, industry, or visual-style cues to choose the starter template; the design-routing layer handles visual direction separately
 
 Important: Provide only the selection tags in your response, no additional text.
 MOST IMPORTANT: YOU DONT HAVE TIME TO THINK JUST START RESPONDING BASED ON HUNCH 
@@ -259,6 +260,9 @@ If you need to make changes to functionality, create new files instead of modify
 template import is done, and you can now use the imported files,
 edit only the files that need to be changed, and you can create new files as needed.
 NO NOT EDIT/WRITE ANY FILES THAT ALREADY EXIST IN THE PROJECT AND DOES NOT NEED TO BE MODIFIED
+The imported starter template is framework scaffolding only.
+Do not inherit the starter template's default visual style, component aesthetics, palette, copy tone, or layout direction unless the user explicitly asked for that starter's design language.
+The active design reference selected from the canonical DESIGN.md library is the visual source of truth and must override any generic starter-template aesthetics.
 ---
 Now that the Template is imported please continue with my original request
 

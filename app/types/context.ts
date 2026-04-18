@@ -7,6 +7,18 @@ export type ContextAnnotation =
       type: 'chatSummary';
       summary: string;
       chatId: string;
+    }
+  | {
+      type: 'designRouting';
+      primarySlug?: string;
+      supportingSlugs: string[];
+      matchedCategories: string[];
+      matchedSignals: string[];
+      ranked: Array<{
+        slug: string;
+        score: number;
+        reasons: string[];
+      }>;
     };
 
 export type ProgressAnnotation = {

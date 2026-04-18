@@ -13,12 +13,18 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
+import { routeDesignReferences } from '~/lib/.server/design-system';
+import { getServerEnv } from '~/lib/server-env';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
 }
 
 const logger = createScopedLogger('api.chat');
+
+function isHiddenMessage(message: { role: string; annotations?: unknown[] }) {
+  return message.role === 'user' && Array.isArray(message.annotations) && message.annotations.includes('hidden');
+}
 
 function parseCookies(cookieHeader: string): Record<string, string> {
   const cookies: Record<string, string> = {};
@@ -40,6 +46,7 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
   const requestOrigin = new URL(request.url).origin;
+  const serverEnv = getServerEnv(context as any);
   const streamRecovery = new StreamRecoveryManager({
     timeout: 45000,
     maxRetries: 2,
@@ -106,6 +113,40 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = messages;
+        const fullUserPrompt = processedMessages
+          .filter((message) => message.role === 'user' && !isHiddenMessage(message))
+          .map((message) => message.content)
+          .join('\n')
+          .trim();
+
+        if (chatMode === 'build' && fullUserPrompt) {
+          const designRouting = routeDesignReferences(fullUserPrompt, 5);
+
+          dataStream.writeData({
+            type: 'progress',
+            label: 'design-routing',
+            status: 'in-progress',
+            order: progressCounter++,
+            message: 'Selecting design reference',
+          } satisfies ProgressAnnotation);
+
+          dataStream.writeMessageAnnotation({
+            type: 'designRouting',
+            primarySlug: designRouting.primary?.slug,
+            supportingSlugs: designRouting.supporting.map((reference) => reference.slug),
+            matchedCategories: designRouting.matchedCategories,
+            matchedSignals: designRouting.matchedSignals,
+            ranked: designRouting.ranked,
+          } as ContextAnnotation);
+
+          dataStream.writeData({
+            type: 'progress',
+            label: 'design-routing',
+            status: 'complete',
+            order: progressCounter++,
+            message: `Selected design: ${designRouting.primary?.slug ?? 'none'}`,
+          } satisfies ProgressAnnotation);
+        }
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -126,7 +167,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           summary = await createSummary({
             messages: [...processedMessages],
-            env: context.cloudflare?.env,
+            env: serverEnv as any,
             apiKeys,
             providerSettings,
             promptId,
@@ -169,7 +210,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           console.log(`Messages count: ${processedMessages.length}`);
           filteredFiles = await selectContext({
             messages: [...processedMessages],
-            env: context.cloudflare?.env,
+            env: serverEnv as any,
             apiKeys,
             files,
             providerSettings,
@@ -267,7 +308,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
             const result = await streamText({
               messages: [...processedMessages],
-              env: context.cloudflare?.env,
+              env: serverEnv as any,
               options,
               apiKeys,
               files,
@@ -309,7 +350,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         const result = await streamText({
           messages: [...processedMessages],
-          env: context.cloudflare?.env,
+          env: serverEnv as any,
           options,
           apiKeys,
           files,
@@ -324,6 +365,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           summary,
           messageSliceId,
         });
+
+        logger.info(
+          `Build diagnostics: primary=${fullUserPrompt ? routeDesignReferences(fullUserPrompt, 1).primary?.slug ?? 'none' : 'none'} hiddenBootstrap=${processedMessages.filter((message) => isHiddenMessage(message as any)).length}`,
+        );
 
         (async () => {
           for await (const part of result.fullStream) {

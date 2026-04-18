@@ -36,6 +36,17 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
+function getAuthorPrompt(messages: Omit<Message, 'id'>[]) {
+  return messages
+    .filter(
+      (message) =>
+        message.role === 'user' && !(Array.isArray(message.annotations) && message.annotations.includes('hidden')),
+    )
+    .map((message) => message.content)
+    .join('\n')
+    .trim();
+}
+
 function collectGoogleToolSchemaDiagnostics(tools: StreamingOptions['tools']) {
   return Object.entries(tools || {}).map(([toolName, tool]) => {
     const jsonSchema = (tool as any)?.parameters?.jsonSchema;
@@ -469,11 +480,7 @@ export async function streamText(props: {
   }
 
   const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
-  const latestUserPrompt = processedMessages
-    .filter((message) => message.role === 'user')
-    .map((message) => message.content)
-    .join('\n')
-    .trim();
+  const latestUserPrompt = getAuthorPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
 
   // Use model-specific limits directly - no artificial cap needed
@@ -496,15 +503,9 @@ export async function streamText(props: {
       },
     }) ?? getSystemPrompt();
 
-  if (assistantMode === 'build') {
+  if (assistantMode === 'build' || assistantMode === 'build-with-tools') {
     const designReferenceLibrary = getDesignReferenceLibrary();
-    const designRouting = routeDesignReferences(
-      processedMessages
-        .filter((message) => message.role === 'user')
-        .map((message) => message.content)
-        .join('\n'),
-      3,
-    );
+    const designRouting = routeDesignReferences(latestUserPrompt, 5);
     const canonicalDesignPreamble = buildCanonicalDesignPreamble({
       libraryPath: designReferenceLibrary.length > 0 ? CANONICAL_DESIGN_LIBRARY_PATH : undefined,
       availableReferences: designReferenceLibrary.map((reference) => reference.slug),
@@ -520,10 +521,16 @@ export async function streamText(props: {
 
     if (canonicalDesignPreamble) {
       systemPrompt = `${canonicalDesignPreamble}\n\n${systemPrompt}`;
+    } else if (designReferenceLibrary.length > 0) {
+      logger.warn('Design reference library is available but no canonical design preamble was generated');
     }
+
+    logger.info(
+      `Design prompt diagnostics: mode=${assistantMode} primary=${designRouting.primary?.slug ?? 'none'} hiddenFilteredPromptLength=${latestUserPrompt.length} preambleInjected=${canonicalDesignPreamble ? 'yes' : 'no'}`,
+    );
   }
 
-  if (assistantMode === 'build' && contextFiles && contextOptimization) {
+  if ((assistantMode === 'build' || assistantMode === 'build-with-tools') && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
 
     systemPrompt = `${systemPrompt}

@@ -91,6 +91,10 @@ export const AssistantMessage = memo(
       codeContext = filteredAnnotations.find((annotation) => annotation.type === 'codeContext')?.files;
     }
 
+    const designRouting = filteredAnnotations.find(
+      (annotation) => annotation.type === 'designRouting',
+    ) as Extract<ContextAnnotation, { type: 'designRouting' }> | undefined;
+
     const usage: {
       completionTokens: number;
       promptTokens: number;
@@ -99,45 +103,110 @@ export const AssistantMessage = memo(
     const toolInvocations = parts?.filter((part) => part.type === 'tool-invocation') || [];
 
     return (
-      <div className="overflow-hidden w-full">
+        <div className="overflow-hidden w-full">
         <>
           <div className=" flex gap-2 items-center text-sm text-bolt-elements-textSecondary mb-2">
-            {(codeContext || chatSummary) && (
+            {(codeContext || chatSummary || designRouting) && (
               <Popover side="right" align="start" trigger={<div className="i-ph:info" />}>
-                {chatSummary && (
-                  <div className="max-w-chat">
+                <div className="max-w-chat flex flex-col gap-3">
+                  {designRouting && (
+                    <div className="flex flex-col gap-2 p4 border border-bolt-elements-borderColor rounded-md">
+                      <h2>Design Routing</h2>
+                      <div className="text-xs flex flex-col gap-2">
+                        <div>
+                          Primary:{' '}
+                          <code className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md">
+                            {designRouting.primarySlug ?? 'none'}
+                          </code>
+                        </div>
+                        {designRouting.supportingSlugs.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            <span>Supporting:</span>
+                            {designRouting.supportingSlugs.map((slug) => (
+                              <code
+                                key={slug}
+                                className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md"
+                              >
+                                {slug}
+                              </code>
+                            ))}
+                          </div>
+                        )}
+                        {designRouting.matchedCategories.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            <span>Categories:</span>
+                            {designRouting.matchedCategories.map((category) => (
+                              <code
+                                key={category}
+                                className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md"
+                              >
+                                {category}
+                              </code>
+                            ))}
+                          </div>
+                        )}
+                        {designRouting.matchedSignals.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            <span>Signals:</span>
+                            {designRouting.matchedSignals.map((signal) => (
+                              <code
+                                key={signal}
+                                className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md"
+                              >
+                                {signal}
+                              </code>
+                            ))}
+                          </div>
+                        )}
+                        {designRouting.ranked.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            <span>Top Matches:</span>
+                            {designRouting.ranked.slice(0, 5).map((entry) => (
+                              <div key={entry.slug} className="flex items-center gap-2">
+                                <code className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md">
+                                  {entry.slug}
+                                </code>
+                                <span>score {entry.score}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {chatSummary && (
                     <div className="summary max-h-96 flex flex-col">
                       <h2 className="border border-bolt-elements-borderColor rounded-md p4">Summary</h2>
                       <div style={{ zoom: 0.7 }} className="overflow-y-auto m4">
                         <Markdown>{chatSummary}</Markdown>
                       </div>
                     </div>
-                    {codeContext && (
-                      <div className="code-context flex flex-col p4 border border-bolt-elements-borderColor rounded-md">
-                        <h2>Context</h2>
-                        <div className="flex gap-4 mt-4 bolt" style={{ zoom: 0.6 }}>
-                          {codeContext.map((x) => {
-                            const normalized = normalizedFilePath(x);
-                            return (
-                              <Fragment key={normalized}>
-                                <code
-                                  className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md text-bolt-elements-item-contentAccent hover:underline cursor-pointer"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openArtifactInWorkbench(normalized);
-                                  }}
-                                >
-                                  {normalized}
-                                </code>
-                              </Fragment>
-                            );
-                          })}
-                        </div>
+                  )}
+                  {codeContext && (
+                    <div className="code-context flex flex-col p4 border border-bolt-elements-borderColor rounded-md">
+                      <h2>Context</h2>
+                      <div className="flex gap-4 mt-4 bolt" style={{ zoom: 0.6 }}>
+                        {codeContext.map((x) => {
+                          const normalized = normalizedFilePath(x);
+                          return (
+                            <Fragment key={normalized}>
+                              <code
+                                className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md text-bolt-elements-item-contentAccent hover:underline cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  openArtifactInWorkbench(normalized);
+                                }}
+                              >
+                                {normalized}
+                              </code>
+                            </Fragment>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
                 <div className="context"></div>
               </Popover>
             )}
