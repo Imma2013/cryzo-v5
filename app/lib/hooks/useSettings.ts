@@ -9,6 +9,10 @@ import {
   enableContextOptimizationStore,
   tabConfigurationStore,
   resetTabConfiguration as resetTabConfig,
+  hydrateProviderSettingsFromLocalStorage,
+  initializeProviders,
+  getStoredProviderSettingsSnapshot,
+  resetProviderSettingsToDefaults,
   replaceProviderSettings,
   getProviderSettingsSnapshot,
   updateProviderSettings as updateProviderSettingsStore,
@@ -48,6 +52,7 @@ export interface UseSettingsReturn {
   // Provider settings
   providers: Record<string, IProviderConfig>;
   activeProviders: ProviderInfo[];
+  llmPreferencesReady: boolean;
   updateProviderSettings: (provider: string, config: IProviderSetting) => void;
 
   // Debug and development settings
@@ -86,8 +91,10 @@ export function useSettings(): UseSettingsReturn {
   const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
-  const { user } = useFirebaseAuth();
+  const { isLoading: isAuthLoading, user } = useFirebaseAuth();
   const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
+  const isSignedInSyncMode = Boolean(user) && isSyncAvailable;
+  const llmPreferencesReady = !isSignedInSyncMode ? !isAuthLoading : !isAuthLoading && currentUserRecord !== undefined;
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {
@@ -101,15 +108,38 @@ export function useSettings(): UseSettingsReturn {
   });
 
   useEffect(() => {
+    lastHydratedProviderSettingsSignature = null;
+    lastPersistedProviderSettingsSignature = null;
+  }, [isSignedInSyncMode, user?.uid]);
+
+  useEffect(() => {
+    if (isSignedInSyncMode && !llmPreferencesReady) {
+      setActiveProviders([]);
+      return;
+    }
+
     const active = Object.entries(providers)
       .filter(([_key, provider]) => provider.settings.enabled)
       .map(([_k, p]) => p);
 
     setActiveProviders(active);
-  }, [providers]);
+  }, [isSignedInSyncMode, llmPreferencesReady, providers]);
 
   useEffect(() => {
-    if (!user || !isSyncAvailable || currentUserRecord === undefined) {
+    if (isAuthLoading) {
+      return;
+    }
+
+    if (!isSignedInSyncMode) {
+      hydrateProviderSettingsFromLocalStorage({ persistToLocalStorage: false });
+      lastHydratedProviderSettingsSignature = JSON.stringify(getStoredProviderSettingsSnapshot() || {});
+      lastPersistedProviderSettingsSignature = lastHydratedProviderSettingsSignature;
+      void initializeProviders();
+      return;
+    }
+
+    if (currentUserRecord === undefined) {
+      resetProviderSettingsToDefaults();
       return;
     }
 
@@ -117,35 +147,21 @@ export function useSettings(): UseSettingsReturn {
     const syncedSignature = JSON.stringify(syncedProviderSettings || {});
 
     if (syncedProviderSettings && lastHydratedProviderSettingsSignature !== syncedSignature) {
-      replaceProviderSettings(syncedProviderSettings);
+      replaceProviderSettings(syncedProviderSettings, { persistToLocalStorage: false });
       lastHydratedProviderSettingsSignature = syncedSignature;
       lastPersistedProviderSettingsSignature = syncedSignature;
       return;
     }
 
     if (!syncedProviderSettings && lastPersistedProviderSettingsSignature === null) {
-      const localSnapshot = getProviderSettingsSnapshot();
+      const localSnapshot = getStoredProviderSettingsSnapshot() || getProviderSettingsSnapshot();
+      replaceProviderSettings(localSnapshot, { persistToLocalStorage: false });
       const localSignature = JSON.stringify(localSnapshot);
       lastPersistedProviderSettingsSignature = localSignature;
+      lastHydratedProviderSettingsSignature = localSignature;
       void saveLlmPreferences({ providerSettings: localSnapshot });
     }
-  }, [currentUserRecord, isSyncAvailable, saveLlmPreferences, user]);
-
-  useEffect(() => {
-    if (!user || !isSyncAvailable || currentUserRecord === undefined) {
-      return;
-    }
-
-    const providerSnapshot = getProviderSettingsSnapshot();
-    const nextSignature = JSON.stringify(providerSnapshot);
-
-    if (nextSignature === lastPersistedProviderSettingsSignature) {
-      return;
-    }
-
-    lastPersistedProviderSettingsSignature = nextSignature;
-    void saveLlmPreferences({ providerSettings: providerSnapshot });
-  }, [currentUserRecord, isSyncAvailable, providers, saveLlmPreferences, user]);
+  }, [currentUserRecord, isAuthLoading, isSignedInSyncMode, saveLlmPreferences]);
 
   const saveSettings = useCallback((newSettings: Partial<Settings>) => {
     setSettings((prev) => {
@@ -157,8 +173,15 @@ export function useSettings(): UseSettingsReturn {
   }, []);
 
   const updateProviderSettings = useCallback((provider: string, config: ProviderSettingWithIndex) => {
-    updateProviderSettingsStore(provider, config);
-  }, []);
+    updateProviderSettingsStore(provider, config, { persistToLocalStorage: !isSignedInSyncMode });
+
+    if (isSignedInSyncMode) {
+      const providerSnapshot = getProviderSettingsSnapshot();
+      const nextSignature = JSON.stringify(providerSnapshot);
+      lastPersistedProviderSettingsSignature = nextSignature;
+      void saveLlmPreferences({ providerSettings: providerSnapshot });
+    }
+  }, [isSignedInSyncMode, saveLlmPreferences]);
 
   const enableDebugMode = useCallback((enabled: boolean) => {
     isDebugMode.set(enabled);
@@ -232,6 +255,7 @@ export function useSettings(): UseSettingsReturn {
     ...settings,
     providers,
     activeProviders,
+    llmPreferencesReady,
     updateProviderSettings,
     debug,
     enableDebugMode,

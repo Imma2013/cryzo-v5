@@ -64,7 +64,8 @@ interface ChatBoxProps {
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
-  const collapsedModelLabel = 'Engine';
+  const selectedModelLabel = props.modelList.find((entry) => entry.name === props.model)?.label;
+  const collapsedModelLabel = selectedModelLabel || props.model || props.provider?.name || 'Engine';
 
   return (
     <div

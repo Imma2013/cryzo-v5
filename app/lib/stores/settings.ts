@@ -94,11 +94,9 @@ function persistProviderSettings(settings: ProviderSetting) {
   localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(settings));
 }
 
-// Initialize provider settings from both localStorage and server-detected configuration
-const getInitialProviderSettings = (): ProviderSetting => {
+function createDefaultProviderSettings(): ProviderSetting {
   const initialSettings: ProviderSetting = {};
 
-  // Start with default settings
   PROVIDER_LIST.forEach((provider) => {
     initialSettings[provider.name] = {
       ...provider,
@@ -108,36 +106,76 @@ const getInitialProviderSettings = (): ProviderSetting => {
     };
   });
 
-  // Only try to load from localStorage in the browser
+  return initialSettings;
+}
+
+export function getStoredProviderSettingsSnapshot(): Record<string, IProviderConfig['settings']> | undefined {
+  if (!isBrowser) {
+    return undefined;
+  }
+
+  const savedSettings = localStorage.getItem(PROVIDER_SETTINGS_KEY);
+
+  if (!savedSettings) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(savedSettings) as Record<string, IProviderConfig>;
+    const defaults = createDefaultProviderSettings();
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([providerName]) => providerName in defaults)
+        .map(([providerName, value]) => [providerName, (value as IProviderConfig).settings]),
+    );
+  } catch (error) {
+    console.error('Error parsing saved provider settings:', error);
+    return undefined;
+  }
+}
+
+export function getProviderSettingsFromLocalStorage(): ProviderSetting {
+  const initialSettings = createDefaultProviderSettings();
+
   if (isBrowser) {
-    const savedSettings = localStorage.getItem(PROVIDER_SETTINGS_KEY);
+    const storedSnapshot = getStoredProviderSettingsSnapshot();
 
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        Object.entries(parsed).forEach(([key, value]) => {
-          if (initialSettings[key]) {
-            const nextSettings = (value as IProviderConfig).settings;
-            const shouldForceDisableCloudProvider =
-              !LOCAL_PROVIDERS.includes(key) && !DEFAULT_ENABLED_PROVIDERS.has(key);
+    if (storedSnapshot) {
+      Object.entries(storedSnapshot).forEach(([key, nextSettings]) => {
+        if (initialSettings[key]) {
+          const shouldForceDisableCloudProvider = !LOCAL_PROVIDERS.includes(key) && !DEFAULT_ENABLED_PROVIDERS.has(key);
 
-            initialSettings[key].settings = {
-              ...nextSettings,
-              enabled: shouldForceDisableCloudProvider ? false : nextSettings.enabled,
-            };
-          }
-        });
-      } catch (error) {
-        console.error('Error parsing saved provider settings:', error);
-      }
+          initialSettings[key].settings = {
+            ...initialSettings[key].settings,
+            ...nextSettings,
+            enabled: shouldForceDisableCloudProvider ? false : nextSettings.enabled,
+          };
+        }
+      });
     }
   }
 
   return initialSettings;
-};
+}
+
+export function resetProviderSettingsToDefaults() {
+  providersStore.set(createDefaultProviderSettings());
+}
+
+export function hydrateProviderSettingsFromLocalStorage(options?: { persistToLocalStorage?: boolean }) {
+  const nextSettings = getProviderSettingsFromLocalStorage();
+  providersStore.set(nextSettings);
+
+  if (options?.persistToLocalStorage !== false) {
+    persistProviderSettings(nextSettings);
+  }
+
+  return nextSettings;
+}
 
 // Auto-enable providers that are configured on the server
-const autoEnableConfiguredProviders = async () => {
+const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?: boolean }) => {
   if (!isBrowser) {
     return;
   }
@@ -199,13 +237,12 @@ const autoEnableConfiguredProviders = async () => {
     });
 
     if (hasChanges) {
-      // Update the store
       providersStore.set(currentSettings);
 
-      // Save to localStorage
-      persistProviderSettings(currentSettings);
+      if (options?.persistToLocalStorage !== false) {
+        persistProviderSettings(currentSettings);
+      }
 
-      // Update the auto-enabled providers list
       const allAutoEnabled = [...new Set([...previouslyAutoEnabled, ...newlyAutoEnabled])];
       localStorage.setItem(AUTO_ENABLED_KEY, JSON.stringify(allAutoEnabled));
 
@@ -216,21 +253,17 @@ const autoEnableConfiguredProviders = async () => {
   }
 };
 
-export const providersStore = map<ProviderSetting>(getInitialProviderSettings());
+export const providersStore = map<ProviderSetting>(createDefaultProviderSettings());
 
 // Export the auto-enable function for use in components
 export const initializeProviders = autoEnableConfiguredProviders;
 
-// Initialize providers when the module loads (in browser only)
-if (isBrowser) {
-  // Use a small delay to ensure DOM and other resources are ready
-  setTimeout(() => {
-    autoEnableConfiguredProviders();
-  }, 100);
-}
-
 // Create a function to update provider settings that handles both store and persistence
-export const updateProviderSettings = (provider: string, settings: ProviderSetting) => {
+export const updateProviderSettings = (
+  provider: string,
+  settings: IProviderConfig['settings'],
+  options?: { persistToLocalStorage?: boolean },
+) => {
   const currentSettings = providersStore.get();
 
   // Create new provider config with updated settings
@@ -245,9 +278,10 @@ export const updateProviderSettings = (provider: string, settings: ProviderSetti
   // Update the store with new settings
   providersStore.setKey(provider, updatedProvider);
 
-  // Save to localStorage
-  const allSettings = providersStore.get();
-  persistProviderSettings(allSettings);
+  if (options?.persistToLocalStorage !== false) {
+    const allSettings = providersStore.get();
+    persistProviderSettings(allSettings);
+  }
 
   // If this is a local provider, update the auto-enabled tracking
   if (SERVER_CONFIGURED_PROVIDERS.includes(provider) && updatedProvider.settings.enabled !== undefined) {
@@ -255,10 +289,13 @@ export const updateProviderSettings = (provider: string, settings: ProviderSetti
   }
 };
 
-export const replaceProviderSettings = (snapshot: Record<string, any>) => {
+export const replaceProviderSettings = (snapshot: Record<string, any>, options?: { persistToLocalStorage?: boolean }) => {
   const nextSettings = applyProviderSettingsSnapshot(providersStore.get(), snapshot);
   providersStore.set(nextSettings);
-  persistProviderSettings(nextSettings);
+
+  if (options?.persistToLocalStorage !== false) {
+    persistProviderSettings(nextSettings);
+  }
 };
 
 export const getProviderSettingsSnapshot = () => createProviderSettingsSnapshot(providersStore.get());

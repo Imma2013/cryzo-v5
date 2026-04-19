@@ -109,10 +109,11 @@ export const ChatImpl = memo(
       (project) => project.id === supabaseConn.selectedProjectId,
     );
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
-    const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
+    const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled, llmPreferencesReady } =
+      useSettings();
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
     const [model, setModel] = useState(() => Cookies.get('selectedModel') || DEFAULT_MODEL);
-    const [provider, setProvider] = useState(() => {
+    const [provider, setProvider] = useState<ProviderInfo | undefined>(() => {
       const savedProvider = Cookies.get('selectedProvider');
       return (PROVIDER_LIST.find((p) => p.name === savedProvider) || PROVIDER_LIST[0] || DEFAULT_PROVIDER) as ProviderInfo;
     });
@@ -128,13 +129,18 @@ export const ChatImpl = memo(
     const composioUserId = user?.uid || localGuestId;
     const syncedPreferences = currentUserRecord?.llmPreferences;
     const shouldSyncSelection = Boolean(user) && isSyncAvailable;
+    const activeProvider = provider ?? activeProviders[0] ?? DEFAULT_PROVIDER;
 
     useEffect(() => {
+      if (!llmPreferencesReady) {
+        return;
+      }
+
       const fallbackProvider = resolveActiveProviderSelection({
         activeProviders,
         currentProviderName: provider?.name,
         preferredProviderName: shouldSyncSelection ? syncedPreferences?.selectedProvider : undefined,
-        savedProviderName: Cookies.get('selectedProvider'),
+        savedProviderName: shouldSyncSelection ? undefined : Cookies.get('selectedProvider'),
       });
 
       if (!fallbackProvider || fallbackProvider.name === provider?.name) {
@@ -142,28 +148,37 @@ export const ChatImpl = memo(
       }
 
       setProvider(fallbackProvider);
-      Cookies.set('selectedProvider', fallbackProvider.name, { expires: 30 });
-    }, [activeProviders, provider, shouldSyncSelection, syncedPreferences?.selectedProvider]);
+      if (!shouldSyncSelection) {
+        Cookies.set('selectedProvider', fallbackProvider.name, { expires: 30 });
+      }
+    }, [activeProviders, llmPreferencesReady, provider, shouldSyncSelection, syncedPreferences?.selectedProvider]);
 
     useEffect(() => {
-      if (!shouldSyncSelection || currentUserRecord === undefined) {
+      if (!shouldSyncSelection || currentUserRecord === undefined || !llmPreferencesReady) {
         return;
       }
 
       if (!syncedPreferences?.selectedProvider && provider?.name) {
         void saveLlmPreferences({ selectedProvider: provider.name });
       }
-    }, [currentUserRecord, provider?.name, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedProvider]);
+    }, [
+      currentUserRecord,
+      llmPreferencesReady,
+      provider?.name,
+      saveLlmPreferences,
+      shouldSyncSelection,
+      syncedPreferences?.selectedProvider,
+    ]);
 
     useEffect(() => {
-      if (!shouldSyncSelection || currentUserRecord === undefined) {
+      if (!shouldSyncSelection || currentUserRecord === undefined || !llmPreferencesReady) {
         return;
       }
 
       if (!syncedPreferences?.selectedModel && model) {
         void saveLlmPreferences({ selectedModel: model });
       }
-    }, [currentUserRecord, model, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedModel]);
+    }, [currentUserRecord, llmPreferencesReady, model, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedModel]);
 
     useEffect(() => {
       if (typeof window === 'undefined') {
@@ -237,7 +252,7 @@ export const ChatImpl = memo(
             component: 'Chat',
             action: 'response',
             model,
-            provider: provider.name,
+            provider: activeProvider.name,
             usage,
             messageLength: message.content.length,
           });
@@ -258,10 +273,10 @@ export const ChatImpl = memo(
         runAnimation();
         append({
           role: 'user',
-          content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${prompt}`,
+          content: `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${prompt}`,
         });
       }
-    }, [model, provider, searchParams]);
+    }, [activeProvider.name, model, searchParams]);
 
     const { enhancingPrompt, promptEnhanced, enhancePrompt, resetEnhancer } = usePromptEnhancer();
     const { parsedMessages, parseMessages } = useMessageParser();
@@ -347,7 +362,7 @@ export const ChatImpl = memo(
         component: 'Chat',
         action: 'abort',
         model,
-        provider: provider.name,
+        provider: activeProvider.name,
       });
     };
 
@@ -357,7 +372,7 @@ export const ChatImpl = memo(
 
         stop();
         setFakeLoading(false);
-        const alert = createLlmErrorAlert(error, provider.name);
+        const alert = createLlmErrorAlert(error, activeProvider.name);
 
         logStore.logError(`${context} request failed`, error, {
           component: 'Chat',
@@ -366,13 +381,13 @@ export const ChatImpl = memo(
           context,
           retryable: alert.errorType !== 'setup',
           errorType: alert.errorType,
-          provider: alert.provider || provider.name,
+          provider: alert.provider || activeProvider.name,
         });
 
         setLlmErrorAlert(alert);
         setData([]);
       },
-      [provider.name, stop],
+      [activeProvider.name, stop],
     );
 
     const clearApiErrorAlert = useCallback(() => {
@@ -498,7 +513,7 @@ export const ChatImpl = memo(
             templateSelection = await selectStarterTemplate({
               message: finalMessageContent,
               model,
-              provider,
+              provider: activeProvider,
             });
           } catch (selectionError) {
             handleError(selectionError, 'llmcall');
@@ -520,7 +535,7 @@ export const ChatImpl = memo(
 
             if (temResp) {
               const { assistantMessage, userMessage } = temResp;
-              const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+              const userMessageText = `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${finalMessageContent}`;
 
               setMessages([
                 {
@@ -537,7 +552,7 @@ export const ChatImpl = memo(
                 {
                   id: `3-${new Date().getTime()}`,
                   role: 'user',
-                  content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userMessage}`,
+                  content: `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${userMessage}`,
                   annotations: ['hidden'],
                 },
               ]);
@@ -565,7 +580,7 @@ export const ChatImpl = memo(
         }
 
         // If autoSelectTemplate is disabled or template selection failed, proceed with normal message
-        const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const userMessageText = `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${finalMessageContent}`;
         const attachments = uploadedFiles.length > 0 ? await filesToAttachments(uploadedFiles) : undefined;
 
         setMessages([
@@ -602,7 +617,7 @@ export const ChatImpl = memo(
 
       if (modifiedFiles !== undefined) {
         const userUpdateArtifact = filesToArtifacts(modifiedFiles, `${Date.now()}`);
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userUpdateArtifact}${finalMessageContent}`;
+        const messageText = `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${userUpdateArtifact}${finalMessageContent}`;
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
@@ -618,7 +633,7 @@ export const ChatImpl = memo(
 
         workbenchStore.resetAllFileModifications();
       } else {
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const messageText = `[Model: ${model}]\n\n[Provider: ${activeProvider.name}]\n\n${finalMessageContent}`;
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
@@ -670,19 +685,20 @@ export const ChatImpl = memo(
 
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
-      Cookies.set('selectedModel', newModel, { expires: 30 });
-
       if (shouldSyncSelection) {
         void saveLlmPreferences({ selectedModel: newModel });
+      } else {
+        Cookies.set('selectedModel', newModel, { expires: 30 });
       }
     };
 
     const handleProviderChange = (newProvider: ProviderInfo) => {
       setProvider(newProvider);
-      Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
 
       if (shouldSyncSelection) {
         void saveLlmPreferences({ selectedProvider: newProvider.name });
+      } else {
+        Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
       }
     };
 
@@ -716,8 +732,9 @@ export const ChatImpl = memo(
         sendMessage={sendMessage}
         model={model}
         preferredModel={shouldSyncSelection ? syncedPreferences?.selectedModel : undefined}
+        llmPreferencesReady={llmPreferencesReady}
         setModel={handleModelChange}
-        provider={provider}
+        provider={activeProvider}
         setProvider={handleProviderChange}
         providerList={activeProviders}
         handleInputChange={(e) => {
@@ -746,7 +763,7 @@ export const ChatImpl = memo(
               scrollTextArea();
             },
             model,
-            provider,
+            activeProvider,
             apiKeys,
           );
         }}

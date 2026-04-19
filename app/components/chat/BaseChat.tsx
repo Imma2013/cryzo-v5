@@ -61,6 +61,7 @@ interface BaseChatProps {
   input?: string;
   model?: string;
   preferredModel?: string;
+  llmPreferencesReady?: boolean;
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
   setProvider?: (provider: ProviderInfo) => void;
@@ -105,6 +106,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       onStreamingChange,
       model,
       preferredModel,
+      llmPreferencesReady = true,
       setModel,
       provider,
       setProvider,
@@ -150,7 +152,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(stripServerManagedApiKeys(getApiKeysFromCookies()));
     const [modelList, setModelList] = useState<ModelInfo[]>([]);
-    const [isModelSettingsCollapsed, setIsModelSettingsCollapsed] = useState(true);
+    const [isModelSettingsCollapsed, setIsModelSettingsCollapsed] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
     const [transcript, setTranscript] = useState('');
@@ -162,6 +164,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const { user } = useFirebaseAuth();
     const composioUserId = user?.uid || localGuestId;
+    const selectedModelLabel = modelList.find((entry) => entry.name === model)?.label;
+    const collapsedModelLabel = selectedModelLabel || model || provider?.name || 'Engine';
 
     useEffect(() => {
       if (expoUrl) {
@@ -260,40 +264,52 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, []);
 
     useEffect(() => {
-      if (typeof window !== 'undefined') {
-        let parsedApiKeys: Record<string, string> | undefined = {};
-
-        try {
-          parsedApiKeys = stripServerManagedApiKeys(getApiKeysFromCookies());
-          setApiKeys(parsedApiKeys);
-        } catch (error) {
-          console.error('Error loading API keys from cookies:', error);
-          Cookies.remove('apiKeys');
-        }
-
-        setIsModelLoading('all');
-        fetch('/api/models')
-          .then((response) => response.json())
-          .then((data) => {
-            const typedData = data as { modelList: ModelInfo[] };
-            setModelList(typedData.modelList);
-          })
-          .catch((error) => {
-            console.error('Error fetching model list:', error);
-          })
-          .finally(() => {
-            setIsModelLoading(undefined);
-          });
+      if (typeof window === 'undefined') {
+        return;
       }
-    }, [providerList, provider]);
+
+      let parsedApiKeys: Record<string, string> | undefined = {};
+
+      try {
+        parsedApiKeys = stripServerManagedApiKeys(getApiKeysFromCookies());
+        setApiKeys(parsedApiKeys);
+      } catch (error) {
+        console.error('Error loading API keys from cookies:', error);
+        Cookies.remove('apiKeys');
+      }
+
+      if (!llmPreferencesReady) {
+        setModelList([]);
+        setIsModelLoading('all');
+        return;
+      }
+
+      setIsModelLoading('all');
+      fetch('/api/models')
+        .then((response) => response.json())
+        .then((data) => {
+          const typedData = data as { modelList: ModelInfo[] };
+          setModelList(typedData.modelList);
+        })
+        .catch((error) => {
+          console.error('Error fetching model list:', error);
+        })
+        .finally(() => {
+          setIsModelLoading(undefined);
+        });
+    }, [llmPreferencesReady, providerList, provider]);
 
     useEffect(() => {
+      if (!llmPreferencesReady) {
+        return;
+      }
+
       const nextModel = resolveProviderModelSelection({
         modelList,
         providerName: provider?.name,
         currentModel: model,
         preferredModel,
-        savedModel: Cookies.get('selectedModel'),
+        savedModel: preferredModel ? undefined : Cookies.get('selectedModel'),
       });
 
       if (!nextModel || nextModel === model) {
@@ -301,7 +317,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
 
       setModel?.(nextModel);
-    }, [modelList, model, preferredModel, provider?.name, setModel]);
+    }, [llmPreferencesReady, modelList, model, preferredModel, provider?.name, setModel]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
       const newApiKeys = stripServerManagedApiKeys({ ...apiKeys, [providerName]: apiKey });
