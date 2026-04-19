@@ -64,7 +64,7 @@ interface ChatBoxProps {
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
-  const collapsedModelLabel = props.provider?.name === 'Google' ? 'Cryzo Engine' : 'Engine';
+  const collapsedModelLabel = 'Engine';
 
   return (
     <div

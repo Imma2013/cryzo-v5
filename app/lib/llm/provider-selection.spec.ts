@@ -26,6 +26,17 @@ describe('resolveActiveProviderSelection', () => {
     expect(result?.name).toBe('OpenRouter');
   });
 
+  it('prefers the synced provider when one is provided', () => {
+    const result = resolveActiveProviderSelection({
+      activeProviders: providers,
+      currentProviderName: 'OpenRouter',
+      preferredProviderName: 'Google',
+      savedProviderName: 'OpenAI',
+    });
+
+    expect(result?.name).toBe('Google');
+  });
+
   it('falls back to the saved provider when the current provider is unavailable', () => {
     const result = resolveActiveProviderSelection({
       activeProviders: providers.slice(0, 2),
@@ -57,6 +68,18 @@ describe('resolveProviderModelSelection', () => {
     });
 
     expect(result).toBe('gpt-4.1');
+  });
+
+  it('prefers the synced model when one is provided', () => {
+    const result = resolveProviderModelSelection({
+      modelList,
+      providerName: 'OpenAI',
+      currentModel: 'gpt-4.1',
+      preferredModel: 'gpt-5',
+      savedModel: 'gpt-4.1',
+    });
+
+    expect(result).toBe('gpt-5');
   });
 
   it('falls back to the saved model when the current model belongs to another provider', () => {

@@ -9,6 +9,8 @@ import {
   enableContextOptimizationStore,
   tabConfigurationStore,
   resetTabConfiguration as resetTabConfig,
+  replaceProviderSettings,
+  getProviderSettingsSnapshot,
   updateProviderSettings as updateProviderSettingsStore,
   updateLatestBranch,
   updateAutoSelectTemplate,
@@ -22,6 +24,8 @@ import type { IProviderSetting, ProviderInfo, IProviderConfig } from '~/types/mo
 import type { TabWindowConfig } from '~/components/@settings/core/types';
 import { logStore } from '~/lib/stores/logs';
 import { getLocalStorage, setLocalStorage } from '~/lib/persistence';
+import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { useConvexUserPreferences } from '~/lib/convex/client';
 
 export interface Settings {
   theme: 'light' | 'dark' | 'system';
@@ -69,6 +73,9 @@ interface ProviderSettingWithIndex extends IProviderSetting {
   [key: string]: any;
 }
 
+let lastHydratedProviderSettingsSignature: string | null = null;
+let lastPersistedProviderSettingsSignature: string | null = null;
+
 export function useSettings(): UseSettingsReturn {
   const providers = useStore(providersStore);
   const debug = useStore(isDebugMode);
@@ -79,6 +86,8 @@ export function useSettings(): UseSettingsReturn {
   const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
+  const { user } = useFirebaseAuth();
+  const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {
@@ -98,6 +107,45 @@ export function useSettings(): UseSettingsReturn {
 
     setActiveProviders(active);
   }, [providers]);
+
+  useEffect(() => {
+    if (!user || !isSyncAvailable || currentUserRecord === undefined) {
+      return;
+    }
+
+    const syncedProviderSettings = currentUserRecord?.llmPreferences?.providerSettings;
+    const syncedSignature = JSON.stringify(syncedProviderSettings || {});
+
+    if (syncedProviderSettings && lastHydratedProviderSettingsSignature !== syncedSignature) {
+      replaceProviderSettings(syncedProviderSettings);
+      lastHydratedProviderSettingsSignature = syncedSignature;
+      lastPersistedProviderSettingsSignature = syncedSignature;
+      return;
+    }
+
+    if (!syncedProviderSettings && lastPersistedProviderSettingsSignature === null) {
+      const localSnapshot = getProviderSettingsSnapshot();
+      const localSignature = JSON.stringify(localSnapshot);
+      lastPersistedProviderSettingsSignature = localSignature;
+      void saveLlmPreferences({ providerSettings: localSnapshot });
+    }
+  }, [currentUserRecord, isSyncAvailable, saveLlmPreferences, user]);
+
+  useEffect(() => {
+    if (!user || !isSyncAvailable || currentUserRecord === undefined) {
+      return;
+    }
+
+    const providerSnapshot = getProviderSettingsSnapshot();
+    const nextSignature = JSON.stringify(providerSnapshot);
+
+    if (nextSignature === lastPersistedProviderSettingsSignature) {
+      return;
+    }
+
+    lastPersistedProviderSettingsSignature = nextSignature;
+    void saveLlmPreferences({ providerSettings: providerSnapshot });
+  }, [currentUserRecord, isSyncAvailable, providers, saveLlmPreferences, user]);
 
   const saveSettings = useCallback((newSettings: Partial<Settings>) => {
     setSettings((prev) => {

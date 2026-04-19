@@ -34,6 +34,7 @@ import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
+import { useConvexUserPreferences } from '~/lib/convex/client';
 import { resolveActiveProviderSelection } from '~/lib/llm/provider-selection';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
@@ -122,13 +123,17 @@ export const ChatImpl = memo(
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
     const { user } = useFirebaseAuth();
+    const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
+    const syncedPreferences = currentUserRecord?.llmPreferences;
+    const shouldSyncSelection = Boolean(user) && isSyncAvailable;
 
     useEffect(() => {
       const fallbackProvider = resolveActiveProviderSelection({
         activeProviders,
         currentProviderName: provider?.name,
+        preferredProviderName: shouldSyncSelection ? syncedPreferences?.selectedProvider : undefined,
         savedProviderName: Cookies.get('selectedProvider'),
       });
 
@@ -138,7 +143,27 @@ export const ChatImpl = memo(
 
       setProvider(fallbackProvider);
       Cookies.set('selectedProvider', fallbackProvider.name, { expires: 30 });
-    }, [activeProviders, provider]);
+    }, [activeProviders, provider, shouldSyncSelection, syncedPreferences?.selectedProvider]);
+
+    useEffect(() => {
+      if (!shouldSyncSelection || currentUserRecord === undefined) {
+        return;
+      }
+
+      if (!syncedPreferences?.selectedProvider && provider?.name) {
+        void saveLlmPreferences({ selectedProvider: provider.name });
+      }
+    }, [currentUserRecord, provider?.name, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedProvider]);
+
+    useEffect(() => {
+      if (!shouldSyncSelection || currentUserRecord === undefined) {
+        return;
+      }
+
+      if (!syncedPreferences?.selectedModel && model) {
+        void saveLlmPreferences({ selectedModel: model });
+      }
+    }, [currentUserRecord, model, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedModel]);
 
     useEffect(() => {
       if (typeof window === 'undefined') {
@@ -646,11 +671,19 @@ export const ChatImpl = memo(
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
       Cookies.set('selectedModel', newModel, { expires: 30 });
+
+      if (shouldSyncSelection) {
+        void saveLlmPreferences({ selectedModel: newModel });
+      }
     };
 
     const handleProviderChange = (newProvider: ProviderInfo) => {
       setProvider(newProvider);
       Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
+
+      if (shouldSyncSelection) {
+        void saveLlmPreferences({ selectedProvider: newProvider.name });
+      }
     };
 
     const handleWebSearchResult = useCallback(
@@ -682,6 +715,7 @@ export const ChatImpl = memo(
         promptEnhanced={promptEnhanced}
         sendMessage={sendMessage}
         model={model}
+        preferredModel={shouldSyncSelection ? syncedPreferences?.selectedModel : undefined}
         setModel={handleModelChange}
         provider={provider}
         setProvider={handleProviderChange}

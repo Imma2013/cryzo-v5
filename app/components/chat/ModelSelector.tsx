@@ -131,7 +131,7 @@ export const ModelSelector = ({
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const [showFreeModelsOnly, setShowFreeModelsOnly] = useState(false);
   const selectedModelLabel = modelList.find((m) => m.name === model)?.label || 'Select model';
-  const modelDisplayLabel = provider?.name === 'Google' ? 'Cryzo Engine' : selectedModelLabel;
+  const modelDisplayLabel = selectedModelLabel;
 
   type ConnectionStatus = 'unknown' | 'connected' | 'disconnected';
 

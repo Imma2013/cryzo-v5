@@ -5,6 +5,7 @@ import type { TabVisibilityConfig, TabWindowConfig, UserTabConfig } from '~/comp
 import { DEFAULT_TAB_CONFIG } from '~/components/@settings/core/constants';
 import { toggleTheme } from './theme';
 import { create } from 'zustand';
+import { applyProviderSettingsSnapshot, createProviderSettingsSnapshot } from '~/lib/llm/provider-preferences';
 
 export interface Shortcut {
   key: string;
@@ -84,6 +85,14 @@ const fetchConfiguredProviders = async (): Promise<ConfiguredProvider[]> => {
     return [];
   }
 };
+
+function persistProviderSettings(settings: ProviderSetting) {
+  if (!isBrowser) {
+    return;
+  }
+
+  localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(settings));
+}
 
 // Initialize provider settings from both localStorage and server-detected configuration
 const getInitialProviderSettings = (): ProviderSetting => {
@@ -194,7 +203,7 @@ const autoEnableConfiguredProviders = async () => {
       providersStore.set(currentSettings);
 
       // Save to localStorage
-      localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(currentSettings));
+      persistProviderSettings(currentSettings);
 
       // Update the auto-enabled providers list
       const allAutoEnabled = [...new Set([...previouslyAutoEnabled, ...newlyAutoEnabled])];
@@ -238,13 +247,21 @@ export const updateProviderSettings = (provider: string, settings: ProviderSetti
 
   // Save to localStorage
   const allSettings = providersStore.get();
-  localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(allSettings));
+  persistProviderSettings(allSettings);
 
   // If this is a local provider, update the auto-enabled tracking
   if (SERVER_CONFIGURED_PROVIDERS.includes(provider) && updatedProvider.settings.enabled !== undefined) {
     updateAutoEnabledTracking(provider, updatedProvider.settings.enabled);
   }
 };
+
+export const replaceProviderSettings = (snapshot: Record<string, any>) => {
+  const nextSettings = applyProviderSettingsSnapshot(providersStore.get(), snapshot);
+  providersStore.set(nextSettings);
+  persistProviderSettings(nextSettings);
+};
+
+export const getProviderSettingsSnapshot = () => createProviderSettingsSnapshot(providersStore.get());
 
 // Update auto-enabled tracking when user manually changes provider settings
 const updateAutoEnabledTracking = (providerName: string, isEnabled: boolean) => {

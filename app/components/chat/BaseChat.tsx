@@ -60,6 +60,7 @@ interface BaseChatProps {
   promptEnhanced?: boolean;
   input?: string;
   model?: string;
+  preferredModel?: string;
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
   setProvider?: (provider: ProviderInfo) => void;
@@ -103,6 +104,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       isStreaming = false,
       onStreamingChange,
       model,
+      preferredModel,
       setModel,
       provider,
       setProvider,
@@ -290,6 +292,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         modelList,
         providerName: provider?.name,
         currentModel: model,
+        preferredModel,
         savedModel: Cookies.get('selectedModel'),
       });
 
@@ -298,7 +301,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
 
       setModel?.(nextModel);
-    }, [modelList, model, provider?.name, setModel]);
+    }, [modelList, model, preferredModel, provider?.name, setModel]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
       const newApiKeys = stripServerManagedApiKeys({ ...apiKeys, [providerName]: apiKey });
