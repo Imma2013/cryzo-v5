@@ -19,13 +19,19 @@ export function getProcessEnv(): ServerEnv {
   );
 }
 
-export function getServerEnv(context?: { cloudflare?: { env?: Record<string, string> } } | null): ServerEnv {
+export function getServerEnv(
+  context?: { cloudflare?: { env?: Record<string, string> }; env?: Record<string, string> } | null,
+): ServerEnv {
   const normalizedCloudflareEnv = Object.fromEntries(
     Object.entries(context?.cloudflare?.env ?? {}).map(([key, value]) => [key, normalizeServerEnvValue(value)]),
+  );
+  const normalizedContextEnv = Object.fromEntries(
+    Object.entries(context?.env ?? {}).map(([key, value]) => [key, normalizeServerEnvValue(value)]),
   );
 
   return {
     ...getProcessEnv(),
+    ...normalizedContextEnv,
     ...normalizedCloudflareEnv,
   };
 }
