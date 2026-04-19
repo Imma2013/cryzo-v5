@@ -2,13 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   createUserWithEmailAndPassword,
   getRedirectResult,
+  onIdTokenChanged,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
   signOut,
   updateProfile,
+  type Auth,
   type User,
+  type UserCredential,
 } from 'firebase/auth';
 import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from '~/lib/firebase/client';
 import { isFirebaseConfigured } from '~/lib/firebase/config';
@@ -20,6 +23,42 @@ const logger = createScopedLogger('firebase-auth');
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 5000;
 export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE =
   'Session check took too long. You can keep using the app or retry sign-in if your account does not appear.';
+
+export async function waitForFirebaseAuthReady(auth: Auth) {
+  if (typeof auth.authStateReady === 'function') {
+    await auth.authStateReady();
+    return auth.currentUser;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      () => {
+        unsubscribe();
+        resolve();
+      },
+      reject,
+    );
+  });
+
+  return auth.currentUser;
+}
+
+async function withFirebaseBootstrapTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  let timeoutId: number | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(SESSION_BOOTSTRAP_TIMEOUT_MESSAGE)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
 
 interface FirebaseAuthContextValue {
   error: string | null;
@@ -81,46 +120,66 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     logger.info('Firebase auth bootstrap started');
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
+    const unsubscribe = onIdTokenChanged(firebaseAuth, (nextUser) => {
       if (!isMounted) {
         return;
       }
 
-      logger.info(`Firebase auth state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
+      logger.info(`Firebase ID token state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
       setUser(nextUser);
-      settleBootstrap('auth-state-changed');
     });
 
-    const bootstrapTimeout = window.setTimeout(() => {
-      if (!isMounted || bootstrapSettled) {
-        return;
-      }
-
-      logger.warn('Firebase auth bootstrap timed out waiting for session state');
-      setError((currentError) => currentError ?? SESSION_BOOTSTRAP_TIMEOUT_MESSAGE);
-      settleBootstrap('timeout');
-    }, SESSION_BOOTSTRAP_TIMEOUT_MS);
-
     (async () => {
+      let redirectResult: UserCredential | null = null;
+      let redirectErrorMessage: string | null = null;
+
       try {
-        logger.info('Ensuring Firebase auth persistence');
-        await ensureFirebaseAuthPersistence();
-        logger.info('Processing Firebase redirect result');
-        await getRedirectResult(firebaseAuth);
-        logger.info('Firebase redirect result processed');
+        await withFirebaseBootstrapTimeout(
+          (async () => {
+            logger.info('Ensuring Firebase auth persistence');
+            await ensureFirebaseAuthPersistence();
+            logger.info('Firebase auth persistence ready');
+
+            try {
+              logger.info('Processing Firebase redirect result');
+              redirectResult = await getRedirectResult(firebaseAuth);
+              logger.info(
+                `Firebase redirect result processed: ${redirectResult?.user ? 'user-returned' : 'no-user-returned'}`,
+              );
+            } catch (authError) {
+              redirectErrorMessage = getFirebaseAuthErrorMessage(authError);
+              logger.error('Firebase redirect result failed', authError);
+            }
+
+            logger.info('Waiting for Firebase auth state readiness');
+            const nextUser = await waitForFirebaseAuthReady(firebaseAuth);
+
+            if (!isMounted) {
+              return;
+            }
+
+            logger.info(`Firebase auth ready with ${nextUser ? 'signed-in' : 'signed-out'} user`);
+            setUser(nextUser);
+            setError(nextUser ? null : redirectErrorMessage);
+            settleBootstrap('auth-state-ready');
+          })(),
+          SESSION_BOOTSTRAP_TIMEOUT_MS,
+        );
       } catch (authError) {
-        if (isMounted) {
-          const message = getFirebaseAuthErrorMessage(authError);
-          logger.error('Firebase auth bootstrap failed', authError);
-          setError(message);
-          settleBootstrap('bootstrap-error');
+        if (!isMounted) {
+          return;
         }
+
+        const message = getFirebaseAuthErrorMessage(authError);
+        logger.error('Firebase auth bootstrap failed', authError);
+        setUser(firebaseAuth.currentUser);
+        setError(message);
+        settleBootstrap(message === SESSION_BOOTSTRAP_TIMEOUT_MESSAGE ? 'timeout' : 'bootstrap-error');
       }
     })();
 
     return () => {
       isMounted = false;
-      window.clearTimeout(bootstrapTimeout);
       unsubscribe();
     };
   }, []);
@@ -178,9 +237,11 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const getAccessToken = useCallback(
     async (forceRefresh = false) => {
       if (!user) {
+        logger.info('Firebase access token requested without a signed-in user');
         return null;
       }
 
+      logger.info(`Firebase access token requested for ${user.uid} (forceRefresh=${forceRefresh ? 'yes' : 'no'})`);
       return user.getIdToken(forceRefresh);
     },
     [user],
