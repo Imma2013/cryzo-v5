@@ -33,13 +33,17 @@ export default defineSchema({
     .index('by_tokenIdentifier', ['tokenIdentifier'])
     .index('by_uid', ['uid']),
   chats: defineTable({
+    createdAt: v.optional(v.string()),
     description: v.optional(v.string()),
-    lastUpdatedAt: v.number(),
-    messagesJson: v.string(),
+    lastUpdatedAt: v.optional(v.number()),
+    messages: v.optional(v.array(v.any())),
+    messagesJson: v.optional(v.string()),
     metadata: v.optional(chatMetadataValidator),
-    routeId: v.string(),
+    routeId: v.optional(v.string()),
     snapshotJson: v.optional(v.string()),
-    timestamp: v.string(),
+    timestamp: v.optional(v.string()),
+    title: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
     userId: v.string(),
   })
     .index('by_routeId', ['routeId'])

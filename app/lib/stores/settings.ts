@@ -133,17 +133,18 @@ const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?:
   try {
     const configuredProviders = await fetchConfiguredProviders();
     const currentSettings = providersStore.get();
+    const nextSettings = { ...currentSettings };
     let hasChanges = false;
 
     configuredProviders.forEach(({ name, isConfigured, configMethod }) => {
       if (isConfigured && configMethod === 'environment' && SERVER_CONFIGURED_PROVIDERS.includes(name)) {
-        const currentProvider = currentSettings[name];
+        const currentProvider = nextSettings[name];
 
         if (currentProvider) {
           const shouldAutoEnable = !currentProvider.settings.enabled;
 
           if (shouldAutoEnable) {
-            currentSettings[name] = {
+            nextSettings[name] = {
               ...currentProvider,
               settings: {
                 ...currentProvider.settings,
@@ -156,10 +157,10 @@ const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?:
       }
 
       if (name === GOOGLE_PROVIDER_NAME && !isConfigured) {
-        const currentProvider = currentSettings[name];
+        const currentProvider = nextSettings[name];
 
         if (currentProvider?.settings.enabled) {
-          currentSettings[name] = {
+          nextSettings[name] = {
             ...currentProvider,
             settings: {
               ...currentProvider.settings,
@@ -172,10 +173,10 @@ const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?:
     });
 
     if (hasChanges) {
-      providersStore.set(currentSettings);
+      providersStore.set(nextSettings);
 
       if (options?.persistToLocalStorage !== false) {
-        persistProviderSettings(currentSettings);
+        persistProviderSettings(nextSettings);
       }
     }
   } catch (error) {

@@ -109,7 +109,7 @@ export const ChatImpl = memo(
       (project) => project.id === supabaseConn.selectedProjectId,
     );
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
-    const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled, llmPreferencesReady } =
+    const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled, llmPreferencesReady, providersReady } =
       useSettings();
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
     const [model, setModel] = useState(() => DEFAULT_MODEL);
@@ -742,6 +742,7 @@ export const ChatImpl = memo(
         model={model}
         preferredModel={shouldSyncSelection ? syncedPreferences?.selectedModel : undefined}
         llmPreferencesReady={llmPreferencesReady}
+        providersReady={providersReady}
         setModel={handleModelChange}
         provider={activeProvider}
         setProvider={handleProviderChange}

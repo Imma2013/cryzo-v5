@@ -24,6 +24,7 @@ interface ChatBoxProps {
   setIsModelSettingsCollapsed: (collapsed: boolean) => void;
   provider: any;
   providerList: any[];
+  providersReady?: boolean;
   modelList: any[];
   apiKeys: Record<string, string>;
   isModelLoading: string | undefined;
@@ -117,6 +118,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 provider={props.provider}
                 setProvider={props.setProvider}
                 providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
+                providersReady={props.providersReady ?? true}
                 apiKeys={props.apiKeys}
                 modelLoading={props.isModelLoading}
               />

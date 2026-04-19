@@ -62,6 +62,7 @@ interface BaseChatProps {
   model?: string;
   preferredModel?: string;
   llmPreferencesReady?: boolean;
+  providersReady?: boolean;
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
   setProvider?: (provider: ProviderInfo) => void;
@@ -107,6 +108,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       model,
       preferredModel,
       llmPreferencesReady = true,
+      providersReady = true,
       setModel,
       provider,
       setProvider,
@@ -546,6 +548,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       provider={provider}
                       setProvider={setProvider}
                       providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
+                      providersReady={providersReady}
                       model={model}
                       setModel={setModel}
                       modelList={modelList}

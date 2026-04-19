@@ -89,6 +89,7 @@ interface ModelSelectorProps {
   providerList: ProviderInfo[];
   apiKeys: Record<string, string>;
   modelLoading?: string;
+  providersReady?: boolean;
 }
 
 // Helper function to determine if a model is likely free
@@ -114,6 +115,7 @@ export const ModelSelector = ({
   modelList,
   providerList,
   modelLoading,
+  providersReady = true,
 }: ModelSelectorProps) => {
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [debouncedModelSearchQuery, setDebouncedModelSearchQuery] = useState('');
@@ -431,6 +433,14 @@ export const ModelSelector = ({
       }
     }
   }, [providerList, provider, setProvider, modelList, setModel]);
+
+  if (!providersReady) {
+    return (
+      <div className="mb-2 p-4 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-prompt-background text-bolt-elements-textPrimary">
+        <p className="text-center">Loading available providers...</p>
+      </div>
+    );
+  }
 
   if (providerList.length === 0) {
     return (

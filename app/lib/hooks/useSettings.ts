@@ -51,6 +51,7 @@ export interface UseSettingsReturn {
   providers: Record<string, IProviderConfig>;
   activeProviders: ProviderInfo[];
   llmPreferencesReady: boolean;
+  providersReady: boolean;
   updateProviderSettings: (provider: string, config: IProviderSetting) => void;
 
   // Debug and development settings
@@ -92,6 +93,7 @@ export function useSettings(): UseSettingsReturn {
   const { isLoading: isAuthLoading, user } = useFirebaseAuth();
   const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
   const isSignedInSyncMode = Boolean(user) && isSyncAvailable;
+  const [providersReady, setProvidersReady] = useState(false);
   const llmPreferencesReady = !isSignedInSyncMode ? !isAuthLoading : !isAuthLoading && currentUserRecord !== undefined;
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
@@ -108,10 +110,16 @@ export function useSettings(): UseSettingsReturn {
   useEffect(() => {
     lastHydratedProviderSettingsSignature = null;
     lastPersistedProviderSettingsSignature = null;
+    setProvidersReady(false);
   }, [isSignedInSyncMode, user?.uid]);
 
   useEffect(() => {
     if (isSignedInSyncMode && !llmPreferencesReady) {
+      setActiveProviders([]);
+      return;
+    }
+
+    if (!isSignedInSyncMode && !providersReady) {
       setActiveProviders([]);
       return;
     }
@@ -121,7 +129,7 @@ export function useSettings(): UseSettingsReturn {
       .map(([_k, p]) => p);
 
     setActiveProviders(active);
-  }, [isSignedInSyncMode, llmPreferencesReady, providers]);
+  }, [isSignedInSyncMode, llmPreferencesReady, providers, providersReady]);
 
   useEffect(() => {
     if (isAuthLoading) {
@@ -132,14 +140,18 @@ export function useSettings(): UseSettingsReturn {
       resetProviderSettingsToDefaults();
       lastHydratedProviderSettingsSignature = JSON.stringify(getProviderSettingsSnapshot());
       lastPersistedProviderSettingsSignature = lastHydratedProviderSettingsSignature;
-      void initializeProviders();
+      setProvidersReady(false);
+      void initializeProviders().finally(() => setProvidersReady(true));
       return;
     }
 
     if (currentUserRecord === undefined) {
       resetProviderSettingsToDefaults();
+      setProvidersReady(false);
       return;
     }
+
+    setProvidersReady(true);
 
     const syncedProviderSettings = currentUserRecord?.llmPreferences?.providerSettings;
     const syncedSignature = JSON.stringify(syncedProviderSettings || {});
@@ -245,6 +257,7 @@ export function useSettings(): UseSettingsReturn {
     providers,
     activeProviders,
     llmPreferencesReady,
+    providersReady,
     updateProviderSettings,
     debug,
     enableDebugMode,
