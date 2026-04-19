@@ -4,7 +4,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
-import { isGoogleServerConfigured } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 
 interface ModelsResponse {
   modelList: ModelInfo[];
@@ -67,7 +67,7 @@ export async function loader({
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
-  const includeGoogle = isGoogleServerConfigured(serverEnv as Record<string, string>);
+  const includeGoogle = resolveGoogleServerApiKeyForRuntime(serverEnv as Record<string, string>).hasKey;
 
   const { providers, defaultProvider } = getProviderInfo(llmManager, includeGoogle);
 
