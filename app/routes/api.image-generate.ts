@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { generateGoogleImage } from '~/lib/.server/images/google-image-generation';
 import { getServerEnv } from '~/lib/server-env';
+import { logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
 
 type GenerateImageRequest = Parameters<typeof generateGoogleImage>[0] & {
   prompt?: string;
@@ -21,9 +22,10 @@ export async function action({ context, request }: ActionFunctionArgs) {
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const apiKey = serverEnv.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const googleKeyResolution = resolveGoogleServerApiKey(serverEnv);
+  logGoogleServerKeyResolution('api.image-generate', googleKeyResolution);
 
-  if (!apiKey) {
+  if (!googleKeyResolution.key) {
     return badRequest('Missing Google API key on the server. Set GOOGLE_GENERATIVE_AI_API_KEY first.', 401);
   }
 
@@ -36,7 +38,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
 
   try {
     const result = await generateGoogleImage({
-      apiKey,
+      apiKey: googleKeyResolution.key,
       aspectRatio: body.aspectRatio,
       imageSize: body.imageSize,
       model: body.model,

@@ -1,5 +1,10 @@
+import { createScopedLogger } from '~/utils/logger';
+
 const GOOGLE_PROVIDER_NAME = 'Google';
 const GOOGLE_SERVER_API_KEY = 'GOOGLE_GENERATIVE_AI_API_KEY';
+const logger = createScopedLogger('google-server-key');
+
+type GoogleServerKeySource = 'server_env' | 'process_env' | 'missing';
 
 export interface ProviderSetupErrorPayload {
   error: true;
@@ -8,8 +13,53 @@ export interface ProviderSetupErrorPayload {
   message: string;
   provider: string;
   setupKey: string;
-  setupSource: 'server_env';
+  setupSource: GoogleServerKeySource;
   statusCode: number;
+}
+
+export interface GoogleServerKeyResolution {
+  hasKey: boolean;
+  key?: string;
+  source: GoogleServerKeySource;
+}
+
+export function resolveGoogleServerApiKey(serverEnv?: Record<string, string | undefined>): GoogleServerKeyResolution {
+  const serverKey = serverEnv?.[GOOGLE_SERVER_API_KEY];
+
+  if (serverKey) {
+    return {
+      hasKey: true,
+      key: serverKey,
+      source: 'server_env',
+    };
+  }
+
+  const processKey =
+    typeof process !== 'undefined' && process.env ? process.env[GOOGLE_SERVER_API_KEY]?.trim() || undefined : undefined;
+
+  if (processKey) {
+    return {
+      hasKey: true,
+      key: processKey,
+      source: 'process_env',
+    };
+  }
+
+  return {
+    hasKey: false,
+    source: 'missing',
+  };
+}
+
+export function logGoogleServerKeyResolution(routeName: string, resolution: GoogleServerKeyResolution) {
+  logger.info(
+    JSON.stringify({
+      routeName,
+      deployment: process.env.VERCEL_URL || process.env.VERCEL_GIT_COMMIT_SHA || 'unknown',
+      hasGoogleKey: resolution.hasKey,
+      source: resolution.source,
+    }),
+  );
 }
 
 export function getProviderSetupPayload(
@@ -20,7 +70,9 @@ export function getProviderSetupPayload(
     return null;
   }
 
-  if (serverEnv?.[GOOGLE_SERVER_API_KEY]) {
+  const resolution = resolveGoogleServerApiKey(serverEnv);
+
+  if (resolution.hasKey) {
     return null;
   }
 
@@ -31,7 +83,7 @@ export function getProviderSetupPayload(
     message: `Google is selected, but ${GOOGLE_SERVER_API_KEY} is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.`,
     provider: GOOGLE_PROVIDER_NAME,
     setupKey: GOOGLE_SERVER_API_KEY,
-    setupSource: 'server_env',
+    setupSource: resolution.source,
     statusCode: 503,
   };
 }

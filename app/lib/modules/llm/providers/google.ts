@@ -4,6 +4,7 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
+import { resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
 
 const logger = createScopedLogger('google-provider');
 
@@ -61,13 +62,8 @@ export default class GoogleProvider extends BaseProvider {
     settings?: IProviderSetting,
     serverEnv?: Record<string, string>,
   ): Promise<ModelInfo[]> {
-    const { apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys: undefined,
-      providerSettings: settings,
-      serverEnv: serverEnv as any,
-      defaultBaseUrlKey: '',
-      defaultApiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    });
+    void settings;
+    const { key: apiKey } = resolveGoogleServerApiKey(serverEnv);
 
     if (!apiKey) {
       throw `Missing Api Key configuration for ${this.name} provider`;
@@ -148,14 +144,8 @@ export default class GoogleProvider extends BaseProvider {
     providerSettings?: Record<string, IProviderSetting>;
   }): LanguageModelV1 {
     const { model, serverEnv, providerSettings } = options;
-
-    const { apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys: undefined,
-      providerSettings: providerSettings?.[this.name],
-      serverEnv: serverEnv as any,
-      defaultBaseUrlKey: '',
-      defaultApiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    });
+    void providerSettings;
+    const { key: apiKey } = resolveGoogleServerApiKey(this.convertEnvToRecord(serverEnv));
 
     if (!apiKey) {
       throw new Error(`Missing API key for ${this.name} provider`);

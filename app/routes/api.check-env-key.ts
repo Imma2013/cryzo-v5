@@ -1,6 +1,7 @@
-import type { LoaderFunction } from '@remix-run/cloudflare';
+import { json, type LoaderFunction } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { getServerEnv } from '~/lib/server-env';
+import { GOOGLE_PROVIDER_NAME, logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
 
 export const loader: LoaderFunction = async ({ context, request }) => {
   try {
@@ -8,7 +9,22 @@ export const loader: LoaderFunction = async ({ context, request }) => {
     const provider = url.searchParams.get('provider');
 
     if (!provider) {
-      return Response.json({ isSet: false });
+      return json({ isSet: false, source: 'missing' as const });
+    }
+
+    if (provider === GOOGLE_PROVIDER_NAME) {
+      const serverEnv = getServerEnv(context as any);
+      const resolution = resolveGoogleServerApiKey(serverEnv);
+      logGoogleServerKeyResolution('api.check-env-key', resolution);
+
+      return json(
+        { isSet: resolution.hasKey, source: resolution.source },
+        {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        },
+      );
     }
 
     const serverEnv = getServerEnv(context as any);
@@ -16,14 +32,14 @@ export const loader: LoaderFunction = async ({ context, request }) => {
     const providerInstance = llmManager.getProvider(provider);
 
     if (!providerInstance || !providerInstance.config.apiTokenKey) {
-      return Response.json({ isSet: false });
+      return json({ isSet: false, source: 'missing' as const });
     }
 
     const envVarName = providerInstance.config.apiTokenKey;
     const isSet = Boolean(serverEnv[envVarName] || llmManager.env[envVarName]);
 
-    return Response.json(
-      { isSet },
+    return json(
+      { isSet, source: isSet ? 'server_env' : 'missing' },
       {
         headers: {
           'Cache-Control': 'no-store',
@@ -31,6 +47,6 @@ export const loader: LoaderFunction = async ({ context, request }) => {
       },
     );
   } catch {
-    return Response.json({ isSet: false }, { status: 200 });
+    return json({ isSet: false, source: 'missing' as const }, { status: 200 });
   }
 };

@@ -1,5 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import { getProviderSetupPayload } from './provider-setup';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { getProviderSetupPayload, resolveGoogleServerApiKey } from './provider-setup';
+
+const originalGoogleServerApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+beforeEach(() => {
+  delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+});
+
+afterEach(() => {
+  if (originalGoogleServerApiKey) {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = originalGoogleServerApiKey;
+  } else {
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  }
+});
 
 describe('getProviderSetupPayload', () => {
   it('returns a setup payload when the Google server key is missing', () => {
@@ -23,5 +37,17 @@ describe('getProviderSetupPayload', () => {
     });
 
     expect(payload).toBeNull();
+  });
+
+  it('prefers the server env source when a Google key is present', () => {
+    const resolution = resolveGoogleServerApiKey({
+      GOOGLE_GENERATIVE_AI_API_KEY: 'AIzaValidServerKey789',
+    });
+
+    expect(resolution).toEqual({
+      hasKey: true,
+      key: 'AIzaValidServerKey789',
+      source: 'server_env',
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { withSecurity } from '~/lib/security';
 import { getServerEnv } from '~/lib/server-env';
+import { logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
 
 type GeminiPart = {
   text?: string;
@@ -55,9 +56,10 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const googleApiKey = serverEnv.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const googleKeyResolution = resolveGoogleServerApiKey(serverEnv);
+  logGoogleServerKeyResolution('api.image', googleKeyResolution);
 
-  if (!googleApiKey) {
+  if (!googleKeyResolution.key) {
     return new Response(
       JSON.stringify({
         message: 'Missing Google API key on the server. Configure GOOGLE_GENERATIVE_AI_API_KEY before generating images.',
@@ -119,7 +121,7 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': googleApiKey,
+        'x-goog-api-key': googleKeyResolution.key,
       },
       body: JSON.stringify(payload),
     },

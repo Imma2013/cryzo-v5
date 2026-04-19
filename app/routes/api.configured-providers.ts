@@ -3,6 +3,7 @@ import { json } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { SERVER_CONFIGURED_PROVIDERS } from '~/lib/stores/settings';
 import { getServerEnv } from '~/lib/server-env';
+import { GOOGLE_PROVIDER_NAME, logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
 
 interface ConfiguredProvider {
   name: string;
@@ -29,6 +30,21 @@ export const loader: LoaderFunction = async ({ context }) => {
       const providerInstance = llmManager.getProvider(providerName);
       let isConfigured = false;
       let configMethod: 'environment' | 'none' = 'none';
+
+      if (providerName === GOOGLE_PROVIDER_NAME) {
+        const resolution = resolveGoogleServerApiKey(serverEnv);
+        logGoogleServerKeyResolution('api.configured-providers', resolution);
+        isConfigured = resolution.hasKey;
+        configMethod = resolution.hasKey ? 'environment' : 'none';
+
+        configuredProviders.push({
+          name: providerName,
+          isConfigured,
+          configMethod,
+        });
+
+        continue;
+      }
 
       if (providerInstance) {
         const config = providerInstance.config;

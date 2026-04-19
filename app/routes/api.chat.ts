@@ -16,7 +16,12 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
-import { getProviderSetupPayload, isGoogleProvider } from '~/lib/llm/provider-setup';
+import {
+  getProviderSetupPayload,
+  isGoogleProvider,
+  logGoogleServerKeyResolution,
+  resolveGoogleServerApiKey,
+} from '~/lib/llm/provider-setup';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -84,6 +89,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
+    if (isGoogleProvider(activeProviderName)) {
+      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKey(serverEnv));
+    }
     const setupPayload = getProviderSetupPayload(activeProviderName, serverEnv);
 
     if (setupPayload) {
