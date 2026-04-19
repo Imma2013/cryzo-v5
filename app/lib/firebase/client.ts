@@ -1,10 +1,32 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  getAuth,
+  GoogleAuthProvider,
+  initializeAuth,
+  setPersistence,
+} from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigured } from './config';
 
 const firebaseApp = isFirebaseConfigured ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : null;
 
-export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
+function createFirebaseAuth() {
+  if (!firebaseApp) {
+    return null;
+  }
+
+  try {
+    return initializeAuth(firebaseApp, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    return getAuth(firebaseApp);
+  }
+}
+
+export const firebaseAuth = createFirebaseAuth();
 export const googleAuthProvider = firebaseApp ? new GoogleAuthProvider() : null;
 
 let persistenceReady = false;

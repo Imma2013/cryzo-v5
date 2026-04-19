@@ -17,6 +17,14 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
     return 'Google sign-in was interrupted before completion. Retry sign-in and finish the Google flow in the opened window.';
   }
 
+  if (authCode === 'auth/popup-blocked') {
+    return 'The Google sign-in popup was blocked by the browser. Allow popups for this site and retry sign-in.';
+  }
+
+  if (authCode === 'auth/cancelled-popup-request') {
+    return 'A Google sign-in popup is already in progress. Finish the open popup or close it before retrying.';
+  }
+
   if (error instanceof Error) {
     return error.message;
   }

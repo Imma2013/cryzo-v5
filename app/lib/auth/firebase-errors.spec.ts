@@ -16,4 +16,12 @@ describe('getFirebaseAuthErrorMessage', () => {
   it('formats popup-closed-by-user errors with actionable copy', () => {
     expect(getFirebaseAuthErrorMessage({ code: 'auth/popup-closed-by-user' })).toContain('interrupted');
   });
+
+  it('formats popup-blocked errors with actionable copy', () => {
+    expect(getFirebaseAuthErrorMessage({ code: 'auth/popup-blocked' })).toContain('Allow popups');
+  });
+
+  it('formats cancelled-popup-request errors with actionable copy', () => {
+    expect(getFirebaseAuthErrorMessage({ code: 'auth/cancelled-popup-request' })).toContain('already in progress');
+  });
 });

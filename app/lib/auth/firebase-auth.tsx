@@ -1,17 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createUserWithEmailAndPassword,
-  getRedirectResult,
-  onIdTokenChanged,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   updateProfile,
   type Auth,
   type User,
-  type UserCredential,
 } from 'firebase/auth';
 import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from '~/lib/firebase/client';
 import { isFirebaseConfigured } from '~/lib/firebase/config';
@@ -120,51 +116,32 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     logger.info('Firebase auth bootstrap started');
 
-    const unsubscribe = onIdTokenChanged(firebaseAuth, (nextUser) => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
       if (!isMounted) {
         return;
       }
 
-      logger.info(`Firebase ID token state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
+      logger.info(`Firebase auth state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
       setUser(nextUser);
     });
 
     (async () => {
-      let redirectResult: UserCredential | null = null;
-      let redirectErrorMessage: string | null = null;
-
       try {
-        await withFirebaseBootstrapTimeout(
-          (async () => {
-            logger.info('Ensuring Firebase auth persistence');
-            await ensureFirebaseAuthPersistence();
-            logger.info('Firebase auth persistence ready');
+        logger.info('Ensuring Firebase auth persistence');
+        await ensureFirebaseAuthPersistence();
+        logger.info('Firebase auth persistence ready');
 
-            try {
-              logger.info('Processing Firebase redirect result');
-              redirectResult = await getRedirectResult(firebaseAuth);
-              logger.info(
-                `Firebase redirect result processed: ${redirectResult?.user ? 'user-returned' : 'no-user-returned'}`,
-              );
-            } catch (authError) {
-              redirectErrorMessage = getFirebaseAuthErrorMessage(authError);
-              logger.error('Firebase redirect result failed', authError);
-            }
+        logger.info('Waiting for Firebase auth state readiness');
+        const nextUser = await withFirebaseBootstrapTimeout(waitForFirebaseAuthReady(firebaseAuth), SESSION_BOOTSTRAP_TIMEOUT_MS);
 
-            logger.info('Waiting for Firebase auth state readiness');
-            const nextUser = await waitForFirebaseAuthReady(firebaseAuth);
+        if (!isMounted) {
+          return;
+        }
 
-            if (!isMounted) {
-              return;
-            }
-
-            logger.info(`Firebase auth ready with ${nextUser ? 'signed-in' : 'signed-out'} user`);
-            setUser(nextUser);
-            setError(nextUser ? null : redirectErrorMessage);
-            settleBootstrap('auth-state-ready');
-          })(),
-          SESSION_BOOTSTRAP_TIMEOUT_MS,
-        );
+        logger.info(`Firebase auth ready with ${nextUser ? 'signed-in' : 'signed-out'} user`);
+        setUser(nextUser);
+        setError(null);
+        settleBootstrap('auth-state-ready');
       } catch (authError) {
         if (!isMounted) {
           return;
@@ -191,12 +168,6 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     setError(null);
     await ensureFirebaseAuthPersistence();
-
-    if (googleSignInMethod === 'redirect') {
-      await signInWithRedirect(firebaseAuth, googleAuthProvider);
-      return;
-    }
-
     await signInWithPopup(firebaseAuth, googleAuthProvider);
   }, [googleSignInMethod]);
 
