@@ -482,6 +482,17 @@ export const ChatImpl = memo(
         return;
       }
 
+      if (!user) {
+        setLlmErrorAlert({
+          type: 'error',
+          title: 'Sign-In Required',
+          description: 'Sign in with Firebase before sending chat requests.',
+          provider: 'Cryzo',
+          errorType: 'auth_required',
+        });
+        return;
+      }
+
       if (isLoading) {
         abort();
         return;
@@ -682,6 +693,14 @@ export const ChatImpl = memo(
     useEffect(() => {
       setApiKeys(stripServerManagedApiKeys(getApiKeysFromCookies()));
     }, []);
+
+    useEffect(() => {
+      if (!user) {
+        return;
+      }
+
+      setLlmErrorAlert((currentAlert) => (currentAlert?.errorType === 'auth_required' ? undefined : currentAlert));
+    }, [user]);
 
     const handleModelChange = (newModel: string) => {
       setModel(newModel);

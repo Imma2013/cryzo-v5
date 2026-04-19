@@ -12,6 +12,8 @@ export default function LlmErrorAlert({ alert, clearAlert }: Props) {
 
   const getErrorIcon = () => {
     switch (errorType) {
+      case 'auth_required':
+        return 'i-ph:sign-in-duotone';
       case 'setup':
         return 'i-ph:wrench-duotone';
       case 'authentication':
@@ -27,6 +29,8 @@ export default function LlmErrorAlert({ alert, clearAlert }: Props) {
 
   const getErrorMessage = () => {
     switch (errorType) {
+      case 'auth_required':
+        return 'Sign in with Firebase before sending requests.';
       case 'setup':
         return `${provider} needs server setup before requests can run.`;
       case 'authentication':

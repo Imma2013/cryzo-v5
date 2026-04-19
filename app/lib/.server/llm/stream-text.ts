@@ -20,6 +20,7 @@ import type { GoogleToolCallMetadataAnnotation } from '~/types/context';
 import { summarizeGoogleHistoryForDiagnostics } from './google-tool-runtime';
 import { getComposioTools } from './composio';
 import { getBuildWithToolsSystemPrompt, getExternalToolSystemPrompt, resolveAssistantMode } from './external-tool-mode';
+import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
 
 export type Messages = Message[];
 
@@ -464,10 +465,19 @@ export async function streamText(props: {
     modelDetails = modelsList.find((m) => m.name === effectiveModelName);
 
     if (!modelDetails) {
-      // Check if it's a Google provider and the model name looks like it might be incorrect
-      if (provider.name === 'Google' && effectiveModelName.includes('2.5')) {
+      if (provider.name === 'Google' && !isSupportedGoogleChatModel(effectiveModelName)) {
+        const allowedModels = getGoogleChatModels()
+          .map((model) => model.name)
+          .join(', ');
+
         throw new Error(
-          `Model "${effectiveModelName}" not found. Available Gemini models include: gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-2.5-pro, and gemini-flash-latest. Please select a valid model.`,
+          `Model "${effectiveModelName}" is not an allowed Google model. Allowed Gemini models: ${allowedModels}.`,
+        );
+      }
+
+      if (provider.name === 'Google') {
+        throw new Error(
+          `Model "${effectiveModelName}" is unavailable for Google right now. Allowed Gemini models: gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-2.5-pro, gemini-flash-latest.`,
         );
       }
 

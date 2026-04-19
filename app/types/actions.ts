@@ -80,7 +80,7 @@ export interface LlmErrorAlertType {
   description: string;
   content?: string;
   provider?: string;
-  errorType?: 'authentication' | 'rate_limit' | 'quota' | 'network' | 'setup' | 'unknown';
+  errorType?: 'auth_required' | 'authentication' | 'rate_limit' | 'quota' | 'network' | 'setup' | 'unknown';
 }
 
 export interface FileHistory {

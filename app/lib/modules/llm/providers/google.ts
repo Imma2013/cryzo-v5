@@ -6,6 +6,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { getGoogleChatModels } from '~/lib/llm/google-catalog';
+import { resolveGoogleCatalog } from '~/lib/llm/google-catalog.server';
 
 const logger = createScopedLogger('google-provider');
 
@@ -18,6 +19,17 @@ export default class GoogleProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = getGoogleChatModels();
+
+  async getDynamicModels(_apiKeys?: Record<string, string>, _settings?: IProviderSetting, serverEnv?: Record<string, string>) {
+    const { key: apiKey } = resolveGoogleServerApiKeyForRuntime(this.convertEnvToRecord(serverEnv as any));
+
+    if (!apiKey) {
+      return [];
+    }
+
+    const catalog = await resolveGoogleCatalog(apiKey);
+    return catalog.chatModels;
+  }
 
   getModelInstance(options: {
     model: string;

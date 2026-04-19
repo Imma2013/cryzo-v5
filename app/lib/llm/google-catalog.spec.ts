@@ -3,6 +3,7 @@ import {
   getDefaultGoogleImageModel,
   getGoogleChatModels,
   getGoogleImageModels,
+  isSupportedGoogleChatModel,
   isSupportedGoogleImageModel,
 } from './google-catalog';
 
@@ -25,6 +26,8 @@ describe('google-catalog', () => {
   });
 
   it('validates supported Google image models', () => {
+    expect(isSupportedGoogleChatModel('gemini-3.1-pro-preview')).toBe(true);
+    expect(isSupportedGoogleChatModel('gemini-1.5-pro')).toBe(false);
     expect(isSupportedGoogleImageModel('gemini-2.5-flash-image')).toBe(true);
     expect(isSupportedGoogleImageModel('gemini-3.1-flash-image-preview')).toBe(false);
     expect(isSupportedGoogleImageModel(undefined)).toBe(false);

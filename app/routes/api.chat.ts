@@ -72,6 +72,24 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       };
     }>();
 
+  if (!user?.isAuthenticated || !user?.uid) {
+    return new Response(
+      JSON.stringify({
+        error: true,
+        errorType: 'auth_required',
+        isRetryable: false,
+        message: 'Sign in with Firebase before sending chat requests.',
+        provider: 'Cryzo',
+        statusCode: 401,
+      }),
+      {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        statusText: 'Unauthorized',
+      },
+    );
+  }
+
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader) as Record<string, IProviderSetting>;
@@ -418,6 +436,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           }
 
           return 'Custom error: Invalid or missing API key. Please check your API key configuration.';
+        }
+
+        if (errorMessage.toLowerCase().includes('sign in with firebase')) {
+          return 'Custom error: Sign in with Firebase before sending chat requests.';
         }
 
         if (errorMessage.includes('token') && errorMessage.includes('limit')) {

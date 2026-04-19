@@ -56,6 +56,10 @@ export function getGoogleChatModels(): ModelInfo[] {
   return GOOGLE_CHAT_MODELS.map((model) => ({ ...model }));
 }
 
+export function isSupportedGoogleChatModel(model: string | undefined): model is ModelInfo['name'] {
+  return Boolean(model && GOOGLE_CHAT_MODELS.some((entry) => entry.name === model));
+}
+
 export function getGoogleImageModels(): GoogleImageModelInfo[] {
   return GOOGLE_IMAGE_MODELS.map((model) => ({ ...model }));
 }
