@@ -309,7 +309,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         providerName: provider?.name,
         currentModel: model,
         preferredModel,
-        savedModel: preferredModel ? undefined : Cookies.get('selectedModel'),
+        savedModel: undefined,
       });
 
       if (!nextModel || nextModel === model) {

@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
   type Auth,
@@ -131,6 +132,11 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         await ensureFirebaseAuthPersistence();
         logger.info('Firebase auth persistence ready');
 
+        if (googleSignInMethod === 'redirect') {
+          logger.info('Resolving Firebase redirect result');
+          await getRedirectResult(firebaseAuth);
+        }
+
         logger.info('Waiting for Firebase auth state readiness');
         const nextUser = await withFirebaseBootstrapTimeout(waitForFirebaseAuthReady(firebaseAuth), SESSION_BOOTSTRAP_TIMEOUT_MS);
 
@@ -168,7 +174,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     setError(null);
     await ensureFirebaseAuthPersistence();
-    await signInWithPopup(firebaseAuth, googleAuthProvider);
+    await signInWithRedirect(firebaseAuth, googleAuthProvider);
   }, [googleSignInMethod]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {

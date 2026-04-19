@@ -6,7 +6,7 @@ import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 import { SettingsButton, HelpButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
-import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+import { chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
@@ -69,7 +69,7 @@ interface MenuProps {
 }
 
 export const Menu = ({ activeView = 'chat', onAppsClick }: MenuProps) => {
-  const { duplicateCurrentChat, exportChat } = useChatHistory();
+  const { chatList, deleteChat: deleteStoredChat, duplicateCurrentChat, exportChat } = useChatHistory();
   const menuRef = useRef<HTMLDivElement>(null);
   const [list, setList] = useState<ChatHistoryItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -85,34 +85,15 @@ export const Menu = ({ activeView = 'chat', onAppsClick }: MenuProps) => {
   });
 
   const loadEntries = useCallback(() => {
-    if (db) {
-      getAll(db)
-        .then((list) => list.filter((item) => item.urlId && item.description))
-        .then(setList)
-        .catch((error) => toast.error(error.message));
-    }
-  }, []);
+    setList(chatList.filter((item) => item.urlId && item.description));
+  }, [chatList]);
 
   const deleteChat = useCallback(
     async (id: string): Promise<void> => {
-      if (!db) {
-        throw new Error('Database not available');
-      }
-
-      // Delete chat snapshot from localStorage
-      try {
-        const snapshotKey = `snapshot:${id}`;
-        localStorage.removeItem(snapshotKey);
-        console.log('Removed snapshot for chat:', id);
-      } catch (snapshotError) {
-        console.error(`Error deleting snapshot for chat ${id}:`, snapshotError);
-      }
-
-      // Delete the chat from the database
-      await deleteById(db, id);
+      await deleteStoredChat(id);
       console.log('Successfully deleted chat:', id);
     },
-    [db],
+    [deleteStoredChat],
   );
 
   const deleteItem = useCallback(
@@ -155,8 +136,8 @@ export const Menu = ({ activeView = 'chat', onAppsClick }: MenuProps) => {
 
   const deleteSelectedItems = useCallback(
     async (itemsToDeleteIds: string[]) => {
-      if (!db || itemsToDeleteIds.length === 0) {
-        console.log('Bulk delete skipped: No DB or no items to delete.');
+      if (itemsToDeleteIds.length === 0) {
+        console.log('Bulk delete skipped: No items to delete.');
         return;
       }
 
@@ -204,7 +185,7 @@ export const Menu = ({ activeView = 'chat', onAppsClick }: MenuProps) => {
         window.location.pathname = '/';
       }
     },
-    [deleteChat, loadEntries, db],
+    [deleteChat, loadEntries],
   );
 
   const closeDialog = () => {

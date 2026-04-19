@@ -1,13 +1,9 @@
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import {
-  chatId as chatIdStore,
-  db,
-  description as descriptionStore,
-  getMessages,
-  updateChatDescription,
-} from '~/lib/persistence';
+import { useMutation } from 'convex/react';
+import { api } from '@convex/_generated/api';
+import { chatId as chatIdStore, description as descriptionStore, useChatHistory } from '~/lib/persistence';
 
 interface EditChatDescriptionOptions {
   initialDescription?: string;
@@ -45,6 +41,8 @@ export function useEditChatDescription({
   syncWithGlobalStore,
 }: EditChatDescriptionOptions): EditChatDescriptionHook {
   const chatIdFromStore = useStore(chatIdStore);
+  const { chatList } = useChatHistory();
+  const updateChatDescription = useMutation(api.chats.updateCurrentUserChatDescription);
   const [editing, setEditing] = useState(false);
   const [currentDescription, setCurrentDescription] = useState(initialDescription);
 
@@ -64,18 +62,18 @@ export function useEditChatDescription({
   }, []);
 
   const fetchLatestDescription = useCallback(async () => {
-    if (!db || !chatId) {
+    if (!chatId) {
       return initialDescription;
     }
 
     try {
-      const chat = await getMessages(db, chatId);
+      const chat = chatList.find((entry) => entry.id === chatId || entry.urlId === chatId);
       return chat?.description || initialDescription;
     } catch (error) {
       console.error('Failed to fetch latest description:', error);
       return initialDescription;
     }
-  }, [db, chatId, initialDescription]);
+  }, [chatId, chatList, initialDescription]);
 
   const handleBlur = useCallback(async () => {
     const latestDescription = await fetchLatestDescription();
@@ -118,20 +116,18 @@ export function useEditChatDescription({
       }
 
       try {
-        if (!db) {
-          toast.error('Chat persistence is not available');
-          return;
-        }
-
         if (!chatId) {
           toast.error('Chat Id is not available');
           return;
         }
 
-        await updateChatDescription(db, chatId, currentDescription);
+        await updateChatDescription({
+          description: currentDescription.trim(),
+          routeId: chatId,
+        });
 
         if (syncWithGlobalStore) {
-          descriptionStore.set(currentDescription);
+          descriptionStore.set(currentDescription.trim());
         }
 
         toast.success('Chat description updated successfully');
@@ -141,7 +137,7 @@ export function useEditChatDescription({
 
       toggleEditMode();
     },
-    [currentDescription, db, chatId, initialDescription, customChatId],
+    [chatId, currentDescription, customChatId, initialDescription, syncWithGlobalStore, updateChatDescription],
   );
 
   const handleKeyDown = useCallback(

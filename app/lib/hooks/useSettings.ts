@@ -9,9 +9,7 @@ import {
   enableContextOptimizationStore,
   tabConfigurationStore,
   resetTabConfiguration as resetTabConfig,
-  hydrateProviderSettingsFromLocalStorage,
   initializeProviders,
-  getStoredProviderSettingsSnapshot,
   resetProviderSettingsToDefaults,
   replaceProviderSettings,
   getProviderSettingsSnapshot,
@@ -131,8 +129,8 @@ export function useSettings(): UseSettingsReturn {
     }
 
     if (!isSignedInSyncMode) {
-      hydrateProviderSettingsFromLocalStorage({ persistToLocalStorage: false });
-      lastHydratedProviderSettingsSignature = JSON.stringify(getStoredProviderSettingsSnapshot() || {});
+      resetProviderSettingsToDefaults();
+      lastHydratedProviderSettingsSignature = JSON.stringify(getProviderSettingsSnapshot());
       lastPersistedProviderSettingsSignature = lastHydratedProviderSettingsSignature;
       void initializeProviders();
       return;
@@ -154,12 +152,12 @@ export function useSettings(): UseSettingsReturn {
     }
 
     if (!syncedProviderSettings && lastPersistedProviderSettingsSignature === null) {
-      const localSnapshot = getStoredProviderSettingsSnapshot() || getProviderSettingsSnapshot();
-      replaceProviderSettings(localSnapshot, { persistToLocalStorage: false });
-      const localSignature = JSON.stringify(localSnapshot);
-      lastPersistedProviderSettingsSignature = localSignature;
-      lastHydratedProviderSettingsSignature = localSignature;
-      void saveLlmPreferences({ providerSettings: localSnapshot });
+      const defaultSnapshot = getProviderSettingsSnapshot();
+      replaceProviderSettings(defaultSnapshot, { persistToLocalStorage: false });
+      const defaultSignature = JSON.stringify(defaultSnapshot);
+      lastPersistedProviderSettingsSignature = defaultSignature;
+      lastHydratedProviderSettingsSignature = defaultSignature;
+      void saveLlmPreferences({ providerSettings: defaultSnapshot });
     }
   }, [currentUserRecord, isAuthLoading, isSignedInSyncMode, saveLlmPreferences]);
 
@@ -241,15 +239,6 @@ export function useSettings(): UseSettingsReturn {
     },
     [saveSettings],
   );
-
-  useEffect(() => {
-    const providers = providersStore.get();
-    const providerSetting: Record<string, IProviderSetting> = {}; // preserve the entire settings object for each provider
-    Object.keys(providers).forEach((provider) => {
-      providerSetting[provider] = providers[provider].settings;
-    });
-    Cookies.set('providers', JSON.stringify(providerSetting));
-  }, [providers]);
 
   return {
     ...settings,

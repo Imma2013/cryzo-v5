@@ -58,9 +58,8 @@ export default async function handleRequest(
   });
 
   responseHeaders.set('Content-Type', 'text/html');
-  // Firebase popup auth relies on cross-origin iframe + popup messaging that breaks under strict COEP/COOP.
-  responseHeaders.delete('Cross-Origin-Embedder-Policy');
-  responseHeaders.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  responseHeaders.set('Cross-Origin-Embedder-Policy', 'credentialless');
+  responseHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
 
   return new Response(stream, {
     headers: responseHeaders,

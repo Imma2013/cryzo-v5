@@ -2,7 +2,7 @@ export type GoogleSignInMethod = 'popup' | 'redirect';
 
 export function getGoogleSignInMethod(hostname: string | null | undefined): GoogleSignInMethod {
   void hostname;
-  return 'popup';
+  return 'redirect';
 }
 
 export function getCurrentHostname() {

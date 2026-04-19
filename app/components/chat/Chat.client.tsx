@@ -112,11 +112,8 @@ export const ChatImpl = memo(
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled, llmPreferencesReady } =
       useSettings();
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
-    const [model, setModel] = useState(() => Cookies.get('selectedModel') || DEFAULT_MODEL);
-    const [provider, setProvider] = useState<ProviderInfo | undefined>(() => {
-      const savedProvider = Cookies.get('selectedProvider');
-      return (PROVIDER_LIST.find((p) => p.name === savedProvider) || PROVIDER_LIST[0] || DEFAULT_PROVIDER) as ProviderInfo;
-    });
+    const [model, setModel] = useState(() => DEFAULT_MODEL);
+    const [provider, setProvider] = useState<ProviderInfo | undefined>(() => (PROVIDER_LIST[0] || DEFAULT_PROVIDER) as ProviderInfo);
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -140,7 +137,7 @@ export const ChatImpl = memo(
         activeProviders,
         currentProviderName: provider?.name,
         preferredProviderName: shouldSyncSelection ? syncedPreferences?.selectedProvider : undefined,
-        savedProviderName: shouldSyncSelection ? undefined : Cookies.get('selectedProvider'),
+        savedProviderName: undefined,
       });
 
       if (!fallbackProvider || fallbackProvider.name === provider?.name) {
@@ -148,9 +145,6 @@ export const ChatImpl = memo(
       }
 
       setProvider(fallbackProvider);
-      if (!shouldSyncSelection) {
-        Cookies.set('selectedProvider', fallbackProvider.name, { expires: 30 });
-      }
     }, [activeProviders, llmPreferencesReady, provider, shouldSyncSelection, syncedPreferences?.selectedProvider]);
 
     useEffect(() => {
@@ -706,8 +700,6 @@ export const ChatImpl = memo(
       setModel(newModel);
       if (shouldSyncSelection) {
         void saveLlmPreferences({ selectedModel: newModel });
-      } else {
-        Cookies.set('selectedModel', newModel, { expires: 30 });
       }
     };
 
@@ -716,8 +708,6 @@ export const ChatImpl = memo(
 
       if (shouldSyncSelection) {
         void saveLlmPreferences({ selectedProvider: newProvider.name });
-      } else {
-        Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
       }
     };
 

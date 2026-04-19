@@ -13,6 +13,12 @@ const llmPreferencesValidator = v.object({
   providerSettings: v.optional(v.record(v.string(), providerSettingValidator)),
 });
 
+const chatMetadataValidator = v.object({
+  gitUrl: v.optional(v.string()),
+  gitBranch: v.optional(v.string()),
+  netlifySiteId: v.optional(v.string()),
+});
+
 export default defineSchema({
   users: defineTable({
     email: v.optional(v.string()),
@@ -26,4 +32,17 @@ export default defineSchema({
     .index('by_email', ['email'])
     .index('by_tokenIdentifier', ['tokenIdentifier'])
     .index('by_uid', ['uid']),
+  chats: defineTable({
+    description: v.optional(v.string()),
+    lastUpdatedAt: v.number(),
+    messagesJson: v.string(),
+    metadata: v.optional(chatMetadataValidator),
+    routeId: v.string(),
+    snapshotJson: v.optional(v.string()),
+    timestamp: v.string(),
+    userId: v.string(),
+  })
+    .index('by_routeId', ['routeId'])
+    .index('by_userId', ['userId'])
+    .index('by_userId_lastUpdatedAt', ['userId', 'lastUpdatedAt']),
 });
