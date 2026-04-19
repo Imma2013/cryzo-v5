@@ -1,7 +1,8 @@
 import { json, type LoaderFunction } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { getServerEnv } from '~/lib/server-env';
-import { GOOGLE_PROVIDER_NAME, logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
+import { GOOGLE_PROVIDER_NAME, logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 
 export const loader: LoaderFunction = async ({ context, request }) => {
   try {
@@ -14,7 +15,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
 
     if (provider === GOOGLE_PROVIDER_NAME) {
       const serverEnv = getServerEnv(context as any);
-      const resolution = resolveGoogleServerApiKey(serverEnv);
+      const resolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
       logGoogleServerKeyResolution('api.check-env-key', resolution);
 
       return json(

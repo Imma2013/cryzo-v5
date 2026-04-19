@@ -17,11 +17,13 @@ import { routeDesignReferences } from '~/lib/.server/design-system';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
 import {
-  getProviderSetupPayload,
   isGoogleProvider,
   logGoogleServerKeyResolution,
-  resolveGoogleServerApiKey,
 } from '~/lib/llm/provider-setup';
+import {
+  getGoogleProviderSetupPayloadForRuntime,
+  resolveGoogleServerApiKeyForRuntime,
+} from '~/lib/llm/google-server-runtime';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -90,9 +92,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
     if (isGoogleProvider(activeProviderName)) {
-      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKey(serverEnv));
+      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
     }
-    const setupPayload = getProviderSetupPayload(activeProviderName, serverEnv);
+    const setupPayload = getGoogleProviderSetupPayloadForRuntime(activeProviderName, serverEnv);
 
     if (setupPayload) {
       return new Response(JSON.stringify(setupPayload), {
@@ -491,7 +493,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     };
 
     if (error.message?.includes('API key')) {
-      const payload = getProviderSetupPayload(activeProviderName, serverEnv);
+      const payload = getGoogleProviderSetupPayloadForRuntime(activeProviderName, serverEnv);
 
       if (payload || isGoogleProvider(activeProviderName)) {
         const setupResponse =

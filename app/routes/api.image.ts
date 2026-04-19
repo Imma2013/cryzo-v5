@@ -1,7 +1,8 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { withSecurity } from '~/lib/security';
 import { getServerEnv } from '~/lib/server-env';
-import { logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
+import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 
 type GeminiPart = {
   text?: string;
@@ -56,7 +57,7 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const googleKeyResolution = resolveGoogleServerApiKey(serverEnv);
+  const googleKeyResolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
   logGoogleServerKeyResolution('api.image', googleKeyResolution);
 
   if (!googleKeyResolution.key) {

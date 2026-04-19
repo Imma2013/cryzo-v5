@@ -9,11 +9,13 @@ import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/c
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
 import {
-  getProviderSetupPayload,
   isGoogleProvider,
   logGoogleServerKeyResolution,
-  resolveGoogleServerApiKey,
 } from '~/lib/llm/provider-setup';
+import {
+  getGoogleProviderSetupPayloadForRuntime,
+  resolveGoogleServerApiKeyForRuntime,
+} from '~/lib/llm/google-server-runtime';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -101,9 +103,9 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
   if (isGoogleProvider(providerName)) {
-    logGoogleServerKeyResolution('api.llmcall', resolveGoogleServerApiKey(serverEnv));
+    logGoogleServerKeyResolution('api.llmcall', resolveGoogleServerApiKeyForRuntime(serverEnv));
   }
-  const setupPayload = getProviderSetupPayload(providerName, serverEnv);
+  const setupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
 
   if (setupPayload) {
     return new Response(JSON.stringify(setupPayload), {
@@ -140,7 +142,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       console.log(error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getProviderSetupPayload(providerName, serverEnv);
+        const googleSetupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
 
         if (googleSetupPayload) {
           return new Response(JSON.stringify(googleSetupPayload), {
@@ -279,7 +281,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       };
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getProviderSetupPayload(providerName, serverEnv);
+        const googleSetupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
 
         if (googleSetupPayload || isGoogleProvider(providerName)) {
           const payload =

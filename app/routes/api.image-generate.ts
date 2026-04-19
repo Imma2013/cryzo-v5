@@ -1,7 +1,8 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { generateGoogleImage } from '~/lib/.server/images/google-image-generation';
 import { getServerEnv } from '~/lib/server-env';
-import { logGoogleServerKeyResolution, resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
+import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 
 type GenerateImageRequest = Parameters<typeof generateGoogleImage>[0] & {
   prompt?: string;
@@ -22,7 +23,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const googleKeyResolution = resolveGoogleServerApiKey(serverEnv);
+  const googleKeyResolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
   logGoogleServerKeyResolution('api.image-generate', googleKeyResolution);
 
   if (!googleKeyResolution.key) {

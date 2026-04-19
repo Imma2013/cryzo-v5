@@ -4,7 +4,7 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
-import { resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { getGoogleChatModels } from '~/lib/llm/google-catalog';
 
 const logger = createScopedLogger('google-provider');
@@ -27,7 +27,7 @@ export default class GoogleProvider extends BaseProvider {
   }): LanguageModelV1 {
     const { model, serverEnv, providerSettings } = options;
     void providerSettings;
-    const { key: apiKey } = resolveGoogleServerApiKey(this.convertEnvToRecord(serverEnv));
+    const { key: apiKey } = resolveGoogleServerApiKeyForRuntime(this.convertEnvToRecord(serverEnv));
 
     if (!apiKey) {
       throw new Error(`Missing API key for ${this.name} provider`);
