@@ -16,6 +16,7 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
+import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
 import {
   isGoogleProvider,
   logGoogleServerKeyResolution,
@@ -38,6 +39,51 @@ function isHiddenMessage(message: { role: string; annotations?: unknown[] }) {
 async function chatAction({ context, request }: ActionFunctionArgs) {
   const requestOrigin = new URL(request.url).origin;
   const serverEnv = getServerEnv(context as any);
+  const authHeader = request.headers.get('Authorization');
+  const firebaseIdToken = getBearerTokenFromAuthorizationHeader(authHeader);
+
+  if (!firebaseIdToken) {
+    return new Response(
+      JSON.stringify({
+        error: true,
+        errorType: 'auth_required',
+        isRetryable: false,
+        message: 'Sign in with Firebase before sending chat requests.',
+        provider: 'Cryzo',
+        statusCode: 401,
+      }),
+      {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        statusText: 'Unauthorized',
+      },
+    );
+  }
+
+  let verifiedAuth: Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
+
+  try {
+    verifiedAuth = await verifyFirebaseIdToken(firebaseIdToken, serverEnv);
+  } catch (error) {
+    logger.warn('Firebase token verification failed for /api/chat', error);
+
+    return new Response(
+      JSON.stringify({
+        error: true,
+        errorType: 'auth_required',
+        isRetryable: false,
+        message: 'Sign in with Firebase before sending chat requests.',
+        provider: 'Cryzo',
+        statusCode: 401,
+      }),
+      {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+        statusText: 'Unauthorized',
+      },
+    );
+  }
+
   const streamRecovery = new StreamRecoveryManager({
     timeout: 45000,
     maxRetries: 2,
@@ -46,7 +92,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     },
   });
 
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, user } =
+  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, user: requestUser } =
     await request.json<{
       messages: Messages;
       files: any;
@@ -72,23 +118,15 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       };
     }>();
 
-  if (!user?.isAuthenticated || !user?.uid) {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in with Firebase before sending chat requests.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-        statusText: 'Unauthorized',
-      },
-    );
-  }
+  const user = {
+    ...requestUser,
+    composioUserId: verifiedAuth.uid,
+    email: verifiedAuth.email || requestUser?.email,
+    hasComposioIdentity: true,
+    isAuthenticated: true,
+    isSignedIn: true,
+    uid: verifiedAuth.uid,
+  };
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
@@ -417,9 +455,24 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       onError: (error: any) => {
         // Provide more specific error messages for common issues
         const errorMessage = error.message || 'Unknown error';
+        const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
+
+        if (isGoogleProvider(activeProviderName)) {
+          logger.error('Google stream failure diagnostics', {
+            causeMessage: errorCauseMessage,
+            errorMessage,
+            provider: activeProviderName,
+            statusCode: error?.statusCode,
+            url: error?.url,
+          });
+        }
 
         if (errorMessage.includes('model') && errorMessage.includes('not found')) {
           return 'Custom error: Invalid model selected. Please check that the model name is correct and available.';
+        }
+
+        if (errorMessage.includes('Failed to process successful response') && errorCauseMessage) {
+          return `Custom error: The AI service returned an unexpected response format. ${errorCauseMessage}`;
         }
 
         if (errorMessage.includes('Invalid JSON response')) {

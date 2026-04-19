@@ -120,7 +120,8 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
-    const { user } = useFirebaseAuth();
+    const { getAccessToken, user } = useFirebaseAuth();
+    const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
@@ -191,6 +192,27 @@ export const ChatImpl = memo(
       setLocalGuestId(guestId);
     }, []);
 
+    useEffect(() => {
+      let cancelled = false;
+
+      if (!user) {
+        setFirebaseIdToken(null);
+        return;
+      }
+
+      (async () => {
+        const token = await getAccessToken();
+
+        if (!cancelled) {
+          setFirebaseIdToken(token);
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [getAccessToken, user]);
+
     const {
       messages,
       isLoading,
@@ -207,6 +229,7 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
+      headers: firebaseIdToken ? { Authorization: `Bearer ${firebaseIdToken}` } : undefined,
       body: {
         apiKeys,
         files,

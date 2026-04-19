@@ -633,14 +633,27 @@ export async function streamText(props: {
           ),
         )
       : options || {};
-  const composioToolResolution = await getComposioTools({
-    env: serverEnv as unknown as Record<string, string | undefined>,
-    providerName: provider.name,
-    requestOrigin,
-    user,
-    userPrompt: latestUserPrompt || undefined,
-  });
+  const shouldInjectComposioTools = provider.name !== 'Google';
+  const composioToolResolution = shouldInjectComposioTools
+    ? await getComposioTools({
+        env: serverEnv as unknown as Record<string, string | undefined>,
+        providerName: provider.name,
+        requestOrigin,
+        user,
+        userPrompt: latestUserPrompt || undefined,
+      })
+    : {
+        configured: false,
+        hasIdentity: Boolean(user?.uid || user?.composioUserId),
+        resolvedUserId: user?.uid || user?.composioUserId,
+        status: 'disabled' as const,
+        tools: {},
+      };
   const composioTools = composioToolResolution.tools;
+
+  if (!shouldInjectComposioTools) {
+    logger.info('Composio tools disabled for Google provider in chat stream path');
+  }
   logger.info(
     'Composio resolution',
     JSON.stringify({
