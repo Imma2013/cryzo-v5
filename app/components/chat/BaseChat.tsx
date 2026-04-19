@@ -42,6 +42,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
+import { resolveProviderModelSelection } from '~/lib/llm/provider-selection';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -283,6 +284,21 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           });
       }
     }, [providerList, provider]);
+
+    useEffect(() => {
+      const nextModel = resolveProviderModelSelection({
+        modelList,
+        providerName: provider?.name,
+        currentModel: model,
+        savedModel: Cookies.get('selectedModel'),
+      });
+
+      if (!nextModel || nextModel === model) {
+        return;
+      }
+
+      setModel?.(nextModel);
+    }, [modelList, model, provider?.name, setModel]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
       const newApiKeys = stripServerManagedApiKeys({ ...apiKeys, [providerName]: apiKey });

@@ -34,10 +34,10 @@ import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
+import { resolveActiveProviderSelection } from '~/lib/llm/provider-selection';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
 const logger = createScopedLogger('Chat');
-const GOOGLE_PROVIDER_NAME = 'Google';
 
 export function Chat() {
   renderLogger.trace('Chat');
@@ -110,15 +110,10 @@ export const ChatImpl = memo(
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
-    const [model, setModel] = useState(() => {
-      const savedModel = Cookies.get('selectedModel');
-      return savedModel?.startsWith('gemini') ? savedModel : DEFAULT_MODEL;
-    });
+    const [model, setModel] = useState(() => Cookies.get('selectedModel') || DEFAULT_MODEL);
     const [provider, setProvider] = useState(() => {
       const savedProvider = Cookies.get('selectedProvider');
-      return (
-        PROVIDER_LIST.find((p) => p.name === GOOGLE_PROVIDER_NAME && p.name === savedProvider) || DEFAULT_PROVIDER
-      ) as ProviderInfo;
+      return (PROVIDER_LIST.find((p) => p.name === savedProvider) || PROVIDER_LIST[0] || DEFAULT_PROVIDER) as ProviderInfo;
     });
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
@@ -131,14 +126,19 @@ export const ChatImpl = memo(
     const composioUserId = user?.uid || localGuestId;
 
     useEffect(() => {
-      if (provider.name !== GOOGLE_PROVIDER_NAME) {
-        setProvider(DEFAULT_PROVIDER as ProviderInfo);
+      const fallbackProvider = resolveActiveProviderSelection({
+        activeProviders,
+        currentProviderName: provider?.name,
+        savedProviderName: Cookies.get('selectedProvider'),
+      });
+
+      if (!fallbackProvider || fallbackProvider.name === provider?.name) {
+        return;
       }
 
-      if (!model.startsWith('gemini')) {
-        setModel(DEFAULT_MODEL);
-      }
-    }, [model, provider.name]);
+      setProvider(fallbackProvider);
+      Cookies.set('selectedProvider', fallbackProvider.name, { expires: 30 });
+    }, [activeProviders, provider]);
 
     useEffect(() => {
       if (typeof window === 'undefined') {
