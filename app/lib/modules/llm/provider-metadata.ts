@@ -1,5 +1,6 @@
 import type { ModelInfo } from './types';
 import type { ProviderInfo } from '~/types/model';
+import { getGoogleChatModels } from '~/lib/llm/google-catalog';
 
 type ProviderMetadata = Pick<ProviderInfo, 'name' | 'getApiKeyLink' | 'labelForGetApiKey'> & {
   staticModels: ModelInfo[];
@@ -13,7 +14,7 @@ export const PROVIDER_METADATA: ProviderMetadata[] = [
   { name: 'Cohere', staticModels: [], getApiKeyLink: 'https://dashboard.cohere.com/api-keys', apiTokenKey: 'COHERE_API_KEY' },
   { name: 'Deepseek', staticModels: [], getApiKeyLink: 'https://platform.deepseek.com/apiKeys', apiTokenKey: 'DEEPSEEK_API_KEY' },
   { name: 'Fireworks', staticModels: [], getApiKeyLink: 'https://fireworks.ai/api-keys', apiTokenKey: 'FIREWORKS_API_KEY' },
-  { name: 'Google', staticModels: [], getApiKeyLink: 'https://aistudio.google.com/app/apikey', apiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+  { name: 'Google', staticModels: getGoogleChatModels(), getApiKeyLink: 'https://aistudio.google.com/app/apikey', apiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
   { name: 'Groq', staticModels: [], getApiKeyLink: 'https://console.groq.com/keys', apiTokenKey: 'GROQ_API_KEY' },
   { name: 'HuggingFace', staticModels: [], getApiKeyLink: 'https://huggingface.co/settings/tokens', apiTokenKey: 'HuggingFace_API_KEY' },
   { name: 'Hyperbolic', staticModels: [], getApiKeyLink: 'https://app.hyperbolic.xyz/settings', apiTokenKey: 'HYPERBOLIC_API_KEY' },
@@ -41,4 +42,3 @@ export const PROVIDER_BASE_URL_ENV_KEYS = Object.fromEntries(
     },
   ]),
 );
-

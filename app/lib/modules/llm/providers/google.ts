@@ -5,6 +5,7 @@ import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
 import { resolveGoogleServerApiKey } from '~/lib/llm/provider-setup';
+import { getGoogleChatModels } from '~/lib/llm/google-catalog';
 
 const logger = createScopedLogger('google-provider');
 
@@ -16,126 +17,7 @@ export default class GoogleProvider extends BaseProvider {
     apiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
   };
 
-  staticModels: ModelInfo[] = [
-    /*
-     * Essential fallback models - only the most reliable/stable ones
-     * Synced to dyad's current Google catalog.
-     */
-    {
-      name: 'gemini-3.1-pro-preview',
-      label: 'Gemini 3.1 Pro (Preview)',
-      provider: 'Google',
-      maxTokenAllowed: 1048576,
-      maxCompletionTokens: 65535,
-    },
-
-    // Gemini 3 Flash: coding-focused preview model
-    {
-      name: 'gemini-3-flash-preview',
-      label: 'Gemini 3 Flash (Preview)',
-      provider: 'Google',
-      maxTokenAllowed: 1048576,
-      maxCompletionTokens: 65535,
-    },
-
-    // Gemini 2.5 Pro
-    {
-      name: 'gemini-2.5-pro',
-      label: 'Gemini 2.5 Pro',
-      provider: 'Google',
-      maxTokenAllowed: 1048576,
-      maxCompletionTokens: 65535,
-    },
-
-    // Gemini 2.5 Flash
-    {
-      name: 'gemini-flash-latest',
-      label: 'Gemini 2.5 Flash',
-      provider: 'Google',
-      maxTokenAllowed: 1048576,
-      maxCompletionTokens: 65535,
-    },
-  ];
-
-  async getDynamicModels(
-    _apiKeys?: Record<string, string>,
-    settings?: IProviderSetting,
-    serverEnv?: Record<string, string>,
-  ): Promise<ModelInfo[]> {
-    void settings;
-    const { key: apiKey } = resolveGoogleServerApiKey(serverEnv);
-
-    if (!apiKey) {
-      throw `Missing Api Key configuration for ${this.name} provider`;
-    }
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-      headers: {
-        ['Content-Type']: 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch models from Google API: ${response.status} ${response.statusText}`);
-    }
-
-    const res = (await response.json()) as any;
-
-    if (!res.models || !Array.isArray(res.models)) {
-      throw new Error('Invalid response format from Google API');
-    }
-
-    // Filter out models with very low token limits and experimental/unstable models
-    const data = res.models.filter((model: any) => {
-      const hasGoodTokenLimit = (model.outputTokenLimit || 0) > 8000;
-      const isStable = !model.name.includes('exp') || model.name.includes('flash-exp');
-
-      return hasGoodTokenLimit && isStable;
-    });
-
-    return data.map((m: any) => {
-      const modelName = m.name.replace('models/', '');
-
-      // Get accurate context window from Google API
-      let contextWindow = 32000; // default fallback
-
-      if (m.inputTokenLimit && m.outputTokenLimit) {
-        // Use the input limit as the primary context window (typically larger)
-        contextWindow = m.inputTokenLimit;
-      } else if (modelName.includes('gemini-3.1-pro-preview')) {
-        contextWindow = 1048576; // Gemini 3.1 Pro preview uses 1M-class context in dyad's catalog
-      } else if (modelName.includes('gemini-3-flash-preview')) {
-        contextWindow = 1048576; // Gemini 3 Flash preview uses 1M-class context in dyad's catalog
-      } else if (modelName.includes('gemini-2.5-pro')) {
-        contextWindow = 1048576; // Gemini 2.5 Pro uses 1M-class context in dyad's catalog
-      } else if (modelName.includes('gemini-flash-latest')) {
-        contextWindow = 1048576; // Gemini 2.5 Flash uses 1M-class context in dyad's catalog
-      } else if (modelName.includes('gemini-pro')) {
-        contextWindow = 32000; // Gemini Pro has 32k context
-      } else if (modelName.includes('gemini-flash')) {
-        contextWindow = 32000; // Gemini Flash has 32k context
-      }
-
-      // Cap at reasonable limits to prevent issues
-      const maxAllowed = 2000000; // 2M tokens max
-      const finalContext = Math.min(contextWindow, maxAllowed);
-
-      // Get completion token limit from Google API
-      let completionTokens = 65535; // default fallback synced to dyad's Gemini 2.5/3.x catalog
-
-      if (m.outputTokenLimit && m.outputTokenLimit > 0) {
-        completionTokens = Math.min(m.outputTokenLimit, 128000); // Use API value, cap at reasonable limit
-      }
-
-      return {
-        name: modelName,
-        label: `${m.displayName} (${finalContext >= 1000000 ? Math.floor(finalContext / 1000000) + 'M' : Math.floor(finalContext / 1000) + 'k'} context)`,
-        provider: this.name,
-        maxTokenAllowed: finalContext,
-        maxCompletionTokens: completionTokens,
-      };
-    });
-  }
+  staticModels: ModelInfo[] = getGoogleChatModels();
 
   getModelInstance(options: {
     model: string;

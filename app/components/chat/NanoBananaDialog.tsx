@@ -2,19 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Dialog, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { Button } from '~/components/ui/Button';
-
-const IMAGE_MODELS = [
-  {
-    id: 'gemini-2.5-flash-image',
-    label: 'Nano Banana',
-    description: 'Fastest path for quick image generation and variation.',
-  },
-  {
-    id: 'gemini-3-pro-image-preview',
-    label: 'Nano Banana Pro',
-    description: 'Best for polished assets and harder art direction.',
-  },
-] as const;
+import type { GoogleImageModelInfo } from '~/lib/llm/google-catalog';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '3:2', '2:3'] as const;
 
@@ -37,6 +25,11 @@ type GenerateImageResponse = {
   message?: string;
 };
 
+type GoogleCapabilitiesResponse = {
+  configured: boolean;
+  imageModels: GoogleImageModelInfo[];
+};
+
 export function NanoBananaDialog({
   apiKeys: _apiKeys,
   defaultPrompt,
@@ -46,7 +39,8 @@ export function NanoBananaDialog({
   open,
 }: NanoBananaDialogProps) {
   const [prompt, setPrompt] = useState(defaultPrompt);
-  const [selectedModel, setSelectedModel] = useState<(typeof IMAGE_MODELS)[number]['id']>('gemini-2.5-flash-image');
+  const [imageModels, setImageModels] = useState<GoogleImageModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [aspectRatio, setAspectRatio] = useState<(typeof ASPECT_RATIOS)[number]>('1:1');
   const [pending, setPending] = useState(false);
   const [hasGoogleServerKey, setHasGoogleServerKey] = useState(false);
@@ -62,15 +56,26 @@ export function NanoBananaDialog({
 
     const loadGoogleStatus = async () => {
       try {
-        const response = await fetch('/api/check-env-key?provider=Google');
-        const data = (await response.json()) as { isSet: boolean };
+        const response = await fetch('/api/google-capabilities');
+        const data = (await response.json()) as GoogleCapabilitiesResponse;
 
         if (!cancelled) {
-          setHasGoogleServerKey(Boolean(data.isSet));
+          const nextModels = Array.isArray(data.imageModels) ? data.imageModels : [];
+          setHasGoogleServerKey(Boolean(data.configured));
+          setImageModels(nextModels);
+          setSelectedModel((currentSelectedModel) => {
+            if (nextModels.some((model) => model.id === currentSelectedModel)) {
+              return currentSelectedModel;
+            }
+
+            return nextModels[0]?.id || '';
+          });
         }
       } catch {
         if (!cancelled) {
           setHasGoogleServerKey(false);
+          setImageModels([]);
+          setSelectedModel('');
         }
       }
     };
@@ -110,7 +115,7 @@ export function NanoBananaDialog({
           model: selectedModel,
           references: imageDataList.map((dataUrl) => ({ dataUrl })),
           aspectRatio,
-          imageSize: selectedModel === 'gemini-2.5-flash-image' ? undefined : '2K',
+          imageSize: imageModels.find((model) => model.id === selectedModel)?.defaultImageSize,
         }),
       });
 
@@ -162,7 +167,7 @@ export function NanoBananaDialog({
           <div className="space-y-2">
             <span className="text-sm font-medium text-bolt-elements-textPrimary">Model</span>
             <div className="grid gap-2">
-              {IMAGE_MODELS.map((model) => (
+              {imageModels.map((model) => (
                 <button
                   key={model.id}
                   className={`rounded-xl border px-4 py-3 text-left transition-colors ${
@@ -212,7 +217,7 @@ export function NanoBananaDialog({
             </Button>
             <Button
               className="bg-white text-black hover:bg-neutral-200"
-              disabled={pending || !hasGoogleServerKey}
+              disabled={pending || !hasGoogleServerKey || !selectedModel}
               onClick={handleGenerate}
               type="button"
               variant="outline"

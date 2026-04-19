@@ -4,6 +4,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
+import { isGoogleServerConfigured } from '~/lib/llm/provider-setup';
 
 interface ModelsResponse {
   modelList: ModelInfo[];
@@ -14,9 +15,13 @@ interface ModelsResponse {
 let cachedProviders: ProviderInfo[] | null = null;
 let cachedDefaultProvider: ProviderInfo | null = null;
 
-function getProviderInfo(llmManager: LLMManager) {
-  if (!cachedProviders) {
-    cachedProviders = llmManager.getAllProviders().map((provider) => ({
+function getProviderInfo(llmManager: LLMManager, includeGoogle: boolean) {
+  const eligibleProviders = llmManager
+    .getAllProviders()
+    .filter((provider) => includeGoogle || provider.name !== 'Google');
+
+  if (!cachedProviders || cachedProviders.some((provider) => provider.name === 'Google') !== includeGoogle) {
+    cachedProviders = eligibleProviders.map((provider) => ({
       name: provider.name,
       staticModels: provider.staticModels,
       getApiKeyLink: provider.getApiKeyLink,
@@ -25,8 +30,11 @@ function getProviderInfo(llmManager: LLMManager) {
     }));
   }
 
-  if (!cachedDefaultProvider) {
-    const defaultProvider = llmManager.getDefaultProvider();
+  if (!cachedDefaultProvider || (cachedDefaultProvider.name === 'Google' && !includeGoogle)) {
+    const defaultProvider =
+      eligibleProviders.find((provider) => provider.name === 'Google') ||
+      eligibleProviders[0] ||
+      llmManager.getDefaultProvider();
     cachedDefaultProvider = {
       name: defaultProvider.name,
       staticModels: defaultProvider.staticModels,
@@ -59,8 +67,9 @@ export async function loader({
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
+  const includeGoogle = isGoogleServerConfigured(serverEnv as Record<string, string>);
 
-  const { providers, defaultProvider } = getProviderInfo(llmManager);
+  const { providers, defaultProvider } = getProviderInfo(llmManager, includeGoogle);
 
   let modelList: ModelInfo[] = [];
 
@@ -69,11 +78,15 @@ export async function loader({
     const provider = llmManager.getProvider(params.provider);
 
     if (provider) {
+      if (provider.name === 'Google' && !includeGoogle) {
+        modelList = [];
+      } else {
       modelList = await llmManager.getModelListFromProvider(provider, {
         apiKeys,
         providerSettings,
         serverEnv: serverEnv as Record<string, string>,
       });
+      }
     }
   } else {
     // Update all models
@@ -82,6 +95,10 @@ export async function loader({
       providerSettings,
       serverEnv: serverEnv as Record<string, string>,
     });
+
+    if (!includeGoogle) {
+      modelList = modelList.filter((model) => model.provider !== 'Google');
+    }
   }
 
   return json<ModelsResponse>({

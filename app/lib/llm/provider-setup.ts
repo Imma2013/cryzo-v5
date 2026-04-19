@@ -51,6 +51,10 @@ export function resolveGoogleServerApiKey(serverEnv?: Record<string, string | un
   };
 }
 
+export function isGoogleServerConfigured(serverEnv?: Record<string, string | undefined>) {
+  return resolveGoogleServerApiKey(serverEnv).hasKey;
+}
+
 export function logGoogleServerKeyResolution(routeName: string, resolution: GoogleServerKeyResolution) {
   logger.info(
     JSON.stringify({

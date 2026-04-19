@@ -1,11 +1,6 @@
 import { generateId } from 'ai';
 import { storeGeneratedImage } from './generated-image-store';
-
-const IMAGE_MODELS = new Set([
-  'gemini-2.5-flash-image',
-  'gemini-3.1-flash-image-preview',
-  'gemini-3-pro-image-preview',
-]);
+import { getDefaultGoogleImageModel, isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
 
 type ImageReference = {
   dataUrl: string;
@@ -57,7 +52,7 @@ export async function generateGoogleImage({
     throw new Error('Prompt is required.');
   }
 
-  const selectedModel = model && IMAGE_MODELS.has(model) ? model : 'gemini-2.5-flash-image';
+  const selectedModel = isSupportedGoogleImageModel(model) ? model : getDefaultGoogleImageModel().id;
   const parts: Array<Record<string, unknown>> = [];
 
   for (const reference of references) {
