@@ -21,6 +21,7 @@ import {
   shouldFallbackToRedirectFromPopupError,
   type GoogleSignInMethod,
 } from './google-auth-flow';
+import { shouldIgnoreRedirectResolutionError } from './firebase-bootstrap-errors';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('firebase-auth');
@@ -254,11 +255,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         logger.info('Ensuring Firebase auth persistence');
         await ensureFirebaseAuthPersistenceSafely('bootstrap');
 
-        const shouldResolveRedirectResult = consumeGoogleRedirectPendingFlag() || googleSignInMethod === 'redirect';
+        const shouldResolveRedirectResult = consumeGoogleRedirectPendingFlag();
 
         if (shouldResolveRedirectResult) {
           logger.info('Resolving Firebase redirect result');
-          await getRedirectResult(firebaseAuth);
+
+          try {
+            await getRedirectResult(firebaseAuth);
+          } catch (redirectError) {
+            if (shouldIgnoreBootstrapAuthError(redirectError) || shouldIgnoreRedirectResolutionError(redirectError)) {
+              logger.warn('Firebase redirect result resolution failed; continuing bootstrap without redirect result.', redirectError);
+            } else {
+              throw redirectError;
+            }
+          }
         }
 
         logger.info('Waiting for Firebase auth state readiness');

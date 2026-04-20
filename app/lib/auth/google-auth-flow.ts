@@ -17,10 +17,10 @@ function isVercelPreviewHostname(hostname: string) {
 
 export function getGoogleSignInMethod(hostname: string | null | undefined): GoogleSignInMethod {
   if (!hostname) {
-    return 'redirect';
+    return 'popup';
   }
 
-  return isLocalhostHostname(normalizeHostname(hostname)) ? 'popup' : 'redirect';
+  return 'popup';
 }
 
 export function getFirebaseAuthHostSupport(hostname: string | null | undefined) {

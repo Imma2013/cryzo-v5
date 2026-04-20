@@ -15,9 +15,9 @@ describe('getGoogleSignInMethod', () => {
     expect(getGoogleSignInMethod('[::1]')).toBe('popup');
   });
 
-  it('uses redirect flow on deployed hosts', () => {
-    expect(getGoogleSignInMethod('cryzo-v5.vercel.app')).toBe('redirect');
-    expect(getGoogleSignInMethod('cryzo.me')).toBe('redirect');
+  it('uses popup flow on deployed hosts', () => {
+    expect(getGoogleSignInMethod('cryzo-v5.vercel.app')).toBe('popup');
+    expect(getGoogleSignInMethod('cryzo.me')).toBe('popup');
   });
 });
 
