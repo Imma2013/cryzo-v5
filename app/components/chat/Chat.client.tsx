@@ -201,7 +201,13 @@ export const ChatImpl = memo(
       }
 
       (async () => {
-        const token = await getAccessToken();
+        let token: string | null = null;
+
+        try {
+          token = await getAccessToken();
+        } catch (error) {
+          logger.warn('Failed to read Firebase access token for chat request headers', error);
+        }
 
         if (!cancelled) {
           setFirebaseIdToken(token);
