@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FIREBASE_PRODUCTION_AUTH_HOSTNAME,
+  getFirebaseAuthHostSupport,
   getGoogleSignInMethod,
   getGoogleSignInPendingLabel,
   shouldFallbackToRedirectFromPopupError,
@@ -22,6 +24,19 @@ describe('getGoogleSignInMethod', () => {
 describe('getGoogleSignInPendingLabel', () => {
   it('returns redirect-specific pending copy', () => {
     expect(getGoogleSignInPendingLabel('redirect')).toBe('Redirecting to Google...');
+  });
+});
+
+describe('getFirebaseAuthHostSupport', () => {
+  it('supports localhost and production host', () => {
+    expect(getFirebaseAuthHostSupport('localhost').isSupported).toBe(true);
+    expect(getFirebaseAuthHostSupport(FIREBASE_PRODUCTION_AUTH_HOSTNAME).isSupported).toBe(true);
+  });
+
+  it('disables auth on Vercel preview hostnames', () => {
+    const support = getFirebaseAuthHostSupport('cryzo-v5-git-fix-auth-lloydebone-2777s-projects.vercel.app');
+    expect(support.isSupported).toBe(false);
+    expect(support.message).toContain('preview URLs');
   });
 });
 

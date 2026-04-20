@@ -13,7 +13,7 @@ function getInitials(label: string) {
 }
 
 export function AuthButton() {
-  const { error, isConfigured, isLoading, signOutUser, user } = useFirebaseAuth();
+  const { error, hostSupportMessage, isConfigured, isHostSupported, isLoading, signOutUser, user } = useFirebaseAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const identityLabel = useMemo(() => {
@@ -32,6 +32,17 @@ export function AuthButton() {
     return (
       <span className="rounded-full border border-bolt-elements-borderColor px-3 py-2 text-xs text-bolt-elements-textSecondary">
         Auth offline
+      </span>
+    );
+  }
+
+  if (!isHostSupported) {
+    return (
+      <span
+        className="max-w-[28rem] rounded-full border border-bolt-elements-borderColor px-3 py-2 text-xs text-bolt-elements-textSecondary"
+        title={hostSupportMessage ?? undefined}
+      >
+        {hostSupportMessage ?? 'Sign-in is unavailable on this domain.'}
       </span>
     );
   }

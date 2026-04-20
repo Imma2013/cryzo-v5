@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "remix",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "rewrites": [
+    {
+      "source": "/__/auth/:match*",
+      "destination": "https://cryzo-v5-auth.firebaseapp.com/__/auth/:match*"
+    },
+    {
+      "source": "/__/firebase/init.json",
+      "destination": "https://cryzo-v5-auth.firebaseapp.com/__/firebase/init.json"
+    }
+  ]
 }

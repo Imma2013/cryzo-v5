@@ -12,8 +12,17 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
-  const { error, googleSignInMethod, isConfigured, signInWithEmail, signInWithGoogle, signUpWithEmail, user } =
-    useFirebaseAuth();
+  const {
+    error,
+    googleSignInMethod,
+    hostSupportMessage,
+    isConfigured,
+    isHostSupported,
+    signInWithEmail,
+    signInWithGoogle,
+    signUpWithEmail,
+    user,
+  } = useFirebaseAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -75,6 +84,10 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
               Firebase Auth is not configured yet. Add the `VITE_FIREBASE_*` keys for your Cryzo Firebase app, then
               restart the app. `VITE_CONVEX_URL` is only needed for Convex-backed user sync after sign-in.
+            </div>
+          ) : !isHostSupported ? (
+            <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
+              {hostSupportMessage ?? 'Firebase sign-in is disabled on this domain.'}
             </div>
           ) : (
             <>

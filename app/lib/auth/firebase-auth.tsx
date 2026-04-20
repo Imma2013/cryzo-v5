@@ -16,6 +16,7 @@ import { isFirebaseConfigured } from '~/lib/firebase/config';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
 import {
   getCurrentHostname,
+  getFirebaseAuthHostSupport,
   getGoogleSignInMethod,
   shouldFallbackToRedirectFromPopupError,
   type GoogleSignInMethod,
@@ -27,6 +28,22 @@ const SESSION_BOOTSTRAP_TIMEOUT_MS = 15000;
 const GOOGLE_REDIRECT_PENDING_STORAGE_KEY = 'cryzo.firebase.googleRedirectPending';
 export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE =
   'Session check took too long. You can keep using the app or retry sign-in if your account does not appear.';
+const NON_ACTIONABLE_BOOTSTRAP_AUTH_CODES = new Set([
+  'auth/cancelled-popup-request',
+  'auth/no-auth-event',
+  'auth/popup-closed-by-user',
+]);
+
+function getFirebaseAuthCode(error: unknown) {
+  return error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : null;
+}
+
+function shouldIgnoreBootstrapAuthError(error: unknown) {
+  const code = getFirebaseAuthCode(error);
+  return code ? NON_ACTIONABLE_BOOTSTRAP_AUTH_CODES.has(code) : false;
+}
 
 function setGoogleRedirectPendingFlag() {
   if (typeof window === 'undefined' || !window.sessionStorage) {
@@ -111,7 +128,9 @@ interface FirebaseAuthContextValue {
   getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
   googleSignInMethod: GoogleSignInMethod;
   isConfigured: boolean;
+  isHostSupported: boolean;
   isLoading: boolean;
+  hostSupportMessage: string | null;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -129,7 +148,9 @@ const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
   error: null,
   getAccessToken: async () => null,
   googleSignInMethod: 'popup',
+  hostSupportMessage: null,
   isConfigured: isFirebaseConfigured,
+  isHostSupported: true,
   isLoading: false,
   signInWithEmail: unconfiguredAuthAction,
   signInWithGoogle: unconfiguredAuthAction,
@@ -142,10 +163,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const googleSignInMethod = getGoogleSignInMethod(getCurrentHostname());
+  const hostname = getCurrentHostname();
+  const hostSupport = getFirebaseAuthHostSupport(hostname);
+  const googleSignInMethod = getGoogleSignInMethod(hostname);
 
   useEffect(() => {
     if (!firebaseAuth || !isFirebaseConfigured) {
+      setIsLoading(false);
+
+      return undefined;
+    }
+
+    if (!hostSupport.isSupported) {
+      setUser(null);
+      setError(hostSupport.message);
       setIsLoading(false);
 
       return undefined;
@@ -205,6 +236,14 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        if (shouldIgnoreBootstrapAuthError(authError)) {
+          logger.warn('Firebase auth bootstrap ignored non-actionable redirect error', authError);
+          setUser(firebaseAuth.currentUser);
+          setError(null);
+          settleBootstrap('ignored-non-actionable-error');
+          return;
+        }
+
         const message = getFirebaseAuthErrorMessage(authError);
         logger.error('Firebase auth bootstrap failed', authError);
         setUser(firebaseAuth.currentUser);
@@ -217,9 +256,13 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       unsubscribe();
     };
-  }, [googleSignInMethod]);
+  }, [googleSignInMethod, hostSupport.isSupported, hostSupport.message]);
 
   const signInWithGoogle = useCallback(async () => {
+    if (!hostSupport.isSupported) {
+      throw new Error(hostSupport.message ?? 'Firebase sign-in is disabled on this host.');
+    }
+
     if (!firebaseAuth || !googleAuthProvider) {
       throw new Error('Firebase Auth is not configured.');
     }
@@ -252,9 +295,13 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       setGoogleRedirectPendingFlag();
       await signInWithRedirect(firebaseAuth, googleAuthProvider);
     }
-  }, [googleSignInMethod]);
+  }, [googleSignInMethod, hostSupport.isSupported, hostSupport.message]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
+    if (!hostSupport.isSupported) {
+      throw new Error(hostSupport.message ?? 'Firebase sign-in is disabled on this host.');
+    }
+
     if (!firebaseAuth) {
       throw new Error('Firebase Auth is not configured.');
     }
@@ -262,9 +309,13 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     await ensureFirebaseAuthPersistence();
     await signInWithEmailAndPassword(firebaseAuth, email, password);
-  }, []);
+  }, [hostSupport.isSupported, hostSupport.message]);
 
   const signUpWithEmail = useCallback(async (name: string, email: string, password: string) => {
+    if (!hostSupport.isSupported) {
+      throw new Error(hostSupport.message ?? 'Firebase sign-in is disabled on this host.');
+    }
+
     if (!firebaseAuth) {
       throw new Error('Firebase Auth is not configured.');
     }
@@ -277,7 +328,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     if (name.trim()) {
       await updateProfile(credentials.user, { displayName: name.trim() });
     }
-  }, []);
+  }, [hostSupport.isSupported, hostSupport.message]);
 
   const signOutUser = useCallback(async () => {
     if (!firebaseAuth) {
@@ -306,7 +357,9 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       error,
       getAccessToken,
       googleSignInMethod,
+      hostSupportMessage: hostSupport.message,
       isConfigured: isFirebaseConfigured,
+      isHostSupported: hostSupport.isSupported,
       isLoading,
       signInWithEmail: async (email, password) => {
         try {
@@ -346,7 +399,19 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       },
       user,
     }),
-    [error, getAccessToken, googleSignInMethod, isLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
+    [
+      error,
+      getAccessToken,
+      googleSignInMethod,
+      hostSupport.isSupported,
+      hostSupport.message,
+      isLoading,
+      signInWithEmail,
+      signInWithGoogle,
+      signOutUser,
+      signUpWithEmail,
+      user,
+    ],
   );
 
   return <FirebaseAuthContext.Provider value={value}>{children}</FirebaseAuthContext.Provider>;

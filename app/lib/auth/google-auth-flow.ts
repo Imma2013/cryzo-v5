@@ -1,18 +1,56 @@
 export type GoogleSignInMethod = 'popup' | 'redirect';
 
+const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]']);
+export const FIREBASE_PRODUCTION_AUTH_HOSTNAME = 'cryzo-v5.vercel.app';
+
+function normalizeHostname(hostname: string | null | undefined) {
+  return hostname?.trim().toLowerCase() ?? '';
+}
+
+function isLocalhostHostname(hostname: string) {
+  return LOCALHOST_HOSTNAMES.has(hostname);
+}
+
+function isVercelPreviewHostname(hostname: string) {
+  return hostname.endsWith('.vercel.app') && hostname !== FIREBASE_PRODUCTION_AUTH_HOSTNAME;
+}
+
 export function getGoogleSignInMethod(hostname: string | null | undefined): GoogleSignInMethod {
   if (!hostname) {
     return 'redirect';
   }
 
-  const normalizedHostname = hostname.trim().toLowerCase();
-  const isLocalhost =
-    normalizedHostname === 'localhost' ||
-    normalizedHostname === '127.0.0.1' ||
-    normalizedHostname === '0.0.0.0' ||
-    normalizedHostname === '[::1]';
+  return isLocalhostHostname(normalizeHostname(hostname)) ? 'popup' : 'redirect';
+}
 
-  return isLocalhost ? 'popup' : 'redirect';
+export function getFirebaseAuthHostSupport(hostname: string | null | undefined) {
+  const normalizedHostname = normalizeHostname(hostname);
+
+  if (!normalizedHostname) {
+    return {
+      isSupported: false,
+      message: `Firebase sign-in is only enabled on \`${FIREBASE_PRODUCTION_AUTH_HOSTNAME}\`.`,
+    };
+  }
+
+  if (isLocalhostHostname(normalizedHostname) || normalizedHostname === FIREBASE_PRODUCTION_AUTH_HOSTNAME) {
+    return {
+      isSupported: true,
+      message: null,
+    };
+  }
+
+  if (isVercelPreviewHostname(normalizedHostname)) {
+    return {
+      isSupported: false,
+      message: `Firebase sign-in is disabled on preview URLs. Open \`https://${FIREBASE_PRODUCTION_AUTH_HOSTNAME}\` for authentication.`,
+    };
+  }
+
+  return {
+    isSupported: false,
+    message: `Firebase sign-in is only enabled on \`${FIREBASE_PRODUCTION_AUTH_HOSTNAME}\`.`,
+  };
 }
 
 export function getCurrentHostname() {
