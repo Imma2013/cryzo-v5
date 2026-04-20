@@ -25,6 +25,7 @@ import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('firebase-auth');
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 15000;
+const PERSISTENCE_SETUP_TIMEOUT_MS = 5000;
 const GOOGLE_REDIRECT_PENDING_STORAGE_KEY = 'cryzo.firebase.googleRedirectPending';
 export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE =
   'Session check took too long. You can keep using the app or retry sign-in if your account does not appear.';
@@ -123,6 +124,47 @@ async function withFirebaseBootstrapTimeout<T>(promise: Promise<T>, timeoutMs: n
   }
 }
 
+type PersistenceResult =
+  | { status: 'ready' }
+  | { status: 'timeout' }
+  | { status: 'error'; error: unknown };
+
+async function ensureFirebaseAuthPersistenceSafely(operationLabel: string): Promise<PersistenceResult> {
+  let timeoutId: number | undefined;
+
+  const persistencePromise = (async (): Promise<PersistenceResult> => {
+    try {
+      await ensureFirebaseAuthPersistence();
+      return { status: 'ready' };
+    } catch (error) {
+      return { status: 'error', error };
+    }
+  })();
+  const timeoutPromise = new Promise<PersistenceResult>((resolve) => {
+    timeoutId = window.setTimeout(() => resolve({ status: 'timeout' }), PERSISTENCE_SETUP_TIMEOUT_MS);
+  });
+
+  try {
+    const result = await Promise.race([persistencePromise, timeoutPromise]);
+
+    if (result.status === 'ready') {
+      logger.info(`Firebase auth persistence ready (${operationLabel})`);
+    } else if (result.status === 'timeout') {
+      logger.warn(
+        `Firebase auth persistence setup timed out after ${PERSISTENCE_SETUP_TIMEOUT_MS}ms (${operationLabel}); continuing without blocking.`,
+      );
+    } else {
+      logger.warn(`Firebase auth persistence setup failed (${operationLabel}); continuing without blocking.`, result.error);
+    }
+
+    return result;
+  } finally {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
+
 interface FirebaseAuthContextValue {
   error: string | null;
   getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
@@ -210,8 +252,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         logger.info('Ensuring Firebase auth persistence');
-        await ensureFirebaseAuthPersistence();
-        logger.info('Firebase auth persistence ready');
+        await ensureFirebaseAuthPersistenceSafely('bootstrap');
 
         const shouldResolveRedirectResult = consumeGoogleRedirectPendingFlag() || googleSignInMethod === 'redirect';
 
@@ -268,7 +309,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     }
 
     setError(null);
-    await ensureFirebaseAuthPersistence();
+    await ensureFirebaseAuthPersistenceSafely('google-sign-in');
 
     if (googleSignInMethod === 'redirect') {
       setGoogleRedirectPendingFlag();
@@ -307,7 +348,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     }
 
     setError(null);
-    await ensureFirebaseAuthPersistence();
+    await ensureFirebaseAuthPersistenceSafely('email-sign-in');
     await signInWithEmailAndPassword(firebaseAuth, email, password);
   }, [hostSupport.isSupported, hostSupport.message]);
 
@@ -321,7 +362,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     }
 
     setError(null);
-    await ensureFirebaseAuthPersistence();
+    await ensureFirebaseAuthPersistenceSafely('email-sign-up');
 
     const credentials = await createUserWithEmailAndPassword(firebaseAuth, email, password);
 
