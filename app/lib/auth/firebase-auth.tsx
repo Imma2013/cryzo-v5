@@ -58,6 +58,18 @@ function consumeGoogleRedirectPendingFlag() {
   }
 }
 
+function clearGoogleRedirectPendingFlag() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(GOOGLE_REDIRECT_PENDING_STORAGE_KEY);
+  } catch {
+    // Ignore browser storage restrictions and continue with sign-in.
+  }
+}
+
 export async function waitForFirebaseAuthReady(auth: Auth) {
   if (typeof auth.authStateReady === 'function') {
     await auth.authStateReady();
@@ -170,7 +182,9 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         await ensureFirebaseAuthPersistence();
         logger.info('Firebase auth persistence ready');
 
-        if (consumeGoogleRedirectPendingFlag()) {
+        const shouldResolveRedirectResult = consumeGoogleRedirectPendingFlag() || googleSignInMethod === 'redirect';
+
+        if (shouldResolveRedirectResult) {
           logger.info('Resolving Firebase redirect result');
           await getRedirectResult(firebaseAuth);
         }
@@ -203,7 +217,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [googleSignInMethod]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!firebaseAuth || !googleAuthProvider) {
@@ -212,6 +226,19 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     setError(null);
     await ensureFirebaseAuthPersistence();
+
+    if (googleSignInMethod === 'redirect') {
+      setGoogleRedirectPendingFlag();
+
+      try {
+        await signInWithRedirect(firebaseAuth, googleAuthProvider);
+      } catch (redirectError) {
+        clearGoogleRedirectPendingFlag();
+        throw redirectError;
+      }
+
+      return;
+    }
 
     try {
       await signInWithPopup(firebaseAuth, googleAuthProvider);
@@ -225,7 +252,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       setGoogleRedirectPendingFlag();
       await signInWithRedirect(firebaseAuth, googleAuthProvider);
     }
-  }, []);
+  }, [googleSignInMethod]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth) {

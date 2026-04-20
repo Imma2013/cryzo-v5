@@ -58,8 +58,7 @@ export default async function handleRequest(
   });
 
   responseHeaders.set('Content-Type', 'text/html');
-  responseHeaders.set('Cross-Origin-Embedder-Policy', 'credentialless');
-  responseHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
+  responseHeaders.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
   return new Response(stream, {
     headers: responseHeaders,

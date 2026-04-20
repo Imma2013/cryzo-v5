@@ -110,16 +110,21 @@ export function useChatHistory() {
   const [urlId, setUrlId] = useState<string | undefined>();
 
   const chatList = useMemo<ChatHistoryItem[]>(
-    () =>
-      (listChats || []).map((chat) => ({
+    () => {
+      if (!user) {
+        return [];
+      }
+
+      return (listChats || []).map((chat) => ({
         description: chat.description,
         id: chat.routeId,
         messages: chat.messages,
         metadata: chat.metadata,
         timestamp: chat.timestamp,
         urlId: chat.routeId,
-      })),
-    [listChats],
+      }));
+    },
+    [listChats, user],
   );
 
   useEffect(() => {

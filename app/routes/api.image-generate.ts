@@ -3,6 +3,7 @@ import { generateGoogleImage } from '~/lib/.server/images/google-image-generatio
 import { getServerEnv } from '~/lib/server-env';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
+import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
 
 type GenerateImageRequest = Parameters<typeof generateGoogleImage>[0] & {
   prompt?: string;
@@ -23,6 +24,51 @@ export async function action({ context, request }: ActionFunctionArgs) {
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
+  const authHeader = request.headers.get('Authorization');
+  const firebaseIdToken = getBearerTokenFromAuthorizationHeader(authHeader);
+
+  if (!firebaseIdToken) {
+    return new Response(
+      JSON.stringify({
+        error: true,
+        errorType: 'auth_required',
+        isRetryable: false,
+        message: 'Sign in with Firebase before generating images.',
+        provider: 'Cryzo',
+        statusCode: 401,
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        statusText: 'Unauthorized',
+      },
+    );
+  }
+
+  try {
+    await verifyFirebaseIdToken(firebaseIdToken, serverEnv as any);
+  } catch {
+    return new Response(
+      JSON.stringify({
+        error: true,
+        errorType: 'auth_required',
+        isRetryable: false,
+        message: 'Sign in with Firebase before generating images.',
+        provider: 'Cryzo',
+        statusCode: 401,
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        statusText: 'Unauthorized',
+      },
+    );
+  }
+
   const googleKeyResolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
   logGoogleServerKeyResolution('api.image-generate', googleKeyResolution);
 

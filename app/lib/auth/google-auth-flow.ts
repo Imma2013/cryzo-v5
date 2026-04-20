@@ -1,8 +1,18 @@
 export type GoogleSignInMethod = 'popup' | 'redirect';
 
 export function getGoogleSignInMethod(hostname: string | null | undefined): GoogleSignInMethod {
-  void hostname;
-  return 'popup';
+  if (!hostname) {
+    return 'redirect';
+  }
+
+  const normalizedHostname = hostname.trim().toLowerCase();
+  const isLocalhost =
+    normalizedHostname === 'localhost' ||
+    normalizedHostname === '127.0.0.1' ||
+    normalizedHostname === '0.0.0.0' ||
+    normalizedHostname === '[::1]';
+
+  return isLocalhost ? 'popup' : 'redirect';
 }
 
 export function getCurrentHostname() {

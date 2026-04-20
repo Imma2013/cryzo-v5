@@ -202,6 +202,25 @@ function getMimeTypeFromPath(filePath: string): string {
   }
 }
 
+async function getFirebaseAuthHeaderForImageRequest() {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  try {
+    const { firebaseAuth } = await import('~/lib/firebase/client');
+    const token = await firebaseAuth?.currentUser?.getIdToken();
+
+    if (!token) {
+      return undefined;
+    }
+
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return undefined;
+  }
+}
+
 export type ActionStatus = 'pending' | 'running' | 'complete' | 'aborted' | 'failed';
 
 export type BaseActionState = BoltAction & {
@@ -621,6 +640,7 @@ export class ActionRunner {
 
   async #runImageAction(action: ImageAction) {
     const webcontainer = await this.#webcontainer;
+    const authHeader = await getFirebaseAuthHeaderForImageRequest();
     const inputs: Array<{ source: 'project'; path: string; data: string; mimeType: string }> = [];
 
     for (const inputPath of action.inputPaths || []) {
@@ -644,6 +664,7 @@ export class ActionRunner {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeader,
       },
       body: JSON.stringify({
         operation: action.operation || 'generate',

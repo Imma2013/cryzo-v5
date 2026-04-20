@@ -9,11 +9,13 @@ describe('getGoogleSignInMethod', () => {
   it('uses popup flow on localhost', () => {
     expect(getGoogleSignInMethod('localhost')).toBe('popup');
     expect(getGoogleSignInMethod('127.0.0.1')).toBe('popup');
+    expect(getGoogleSignInMethod('0.0.0.0')).toBe('popup');
+    expect(getGoogleSignInMethod('[::1]')).toBe('popup');
   });
 
-  it('uses popup flow on deployed hosts', () => {
-    expect(getGoogleSignInMethod('cryzo-v5.vercel.app')).toBe('popup');
-    expect(getGoogleSignInMethod('cryzo.me')).toBe('popup');
+  it('uses redirect flow on deployed hosts', () => {
+    expect(getGoogleSignInMethod('cryzo-v5.vercel.app')).toBe('redirect');
+    expect(getGoogleSignInMethod('cryzo.me')).toBe('redirect');
   });
 });
 
