@@ -1,8 +1,6 @@
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useMutation } from 'convex/react';
-import { api } from '@convex/_generated/api';
 import { chatId as chatIdStore, description as descriptionStore, useChatHistory } from '~/lib/persistence';
 
 interface EditChatDescriptionOptions {
@@ -27,7 +25,7 @@ type EditChatDescriptionHook = {
  * Offers functions to:
  * - Switch between edit and view modes.
  * - Manage input changes, blur, and form submission events.
- * - Save updates to IndexedDB and optionally to the global application state.
+ * - Save updates to the Firebase-backed chat API and optionally to the global application state.
  *
  * @param {Object} options
  * @param {string} options.initialDescription - The current chat description.
@@ -41,8 +39,7 @@ export function useEditChatDescription({
   syncWithGlobalStore,
 }: EditChatDescriptionOptions): EditChatDescriptionHook {
   const chatIdFromStore = useStore(chatIdStore);
-  const { chatList } = useChatHistory();
-  const updateChatDescription = useMutation(api.chats.updateCurrentUserChatDescription);
+  const { chatList, updateChatDescription } = useChatHistory();
   const [editing, setEditing] = useState(false);
   const [currentDescription, setCurrentDescription] = useState(initialDescription);
 
@@ -121,10 +118,7 @@ export function useEditChatDescription({
           return;
         }
 
-        await updateChatDescription({
-          description: currentDescription.trim(),
-          routeId: chatId,
-        });
+        await updateChatDescription(chatId, currentDescription.trim());
 
         if (syncWithGlobalStore) {
           descriptionStore.set(currentDescription.trim());

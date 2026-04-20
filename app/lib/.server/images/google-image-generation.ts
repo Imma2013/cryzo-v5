@@ -52,7 +52,11 @@ export async function generateGoogleImage({
     throw new Error('Prompt is required.');
   }
 
-  const selectedModel = isSupportedGoogleImageModel(model) ? model : getDefaultGoogleImageModel().id;
+  if (model && !isSupportedGoogleImageModel(model)) {
+    throw new Error(`Unsupported Google image model: ${model}`);
+  }
+
+  const selectedModel = model || getDefaultGoogleImageModel().id;
   const parts: Array<Record<string, unknown>> = [];
 
   for (const reference of references) {

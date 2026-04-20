@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@convex/_generated/api';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs';
 import type { Snapshot } from './types';
@@ -28,13 +26,14 @@ export interface IChatMetadata {
   netlifySiteId?: string;
 }
 
-type ConvexChatRecord = {
+type FirebaseChatRecord = {
   routeId: string;
   description?: string;
   messages: Message[];
   metadata?: IChatMetadata;
   snapshot?: Snapshot;
   timestamp: string;
+  lastUpdatedAt?: number;
 };
 
 export const db = undefined;
@@ -89,25 +88,118 @@ function buildArchivedMessagesPayload(
   };
 }
 
+function mergeChatRecord(records: FirebaseChatRecord[] | undefined, nextRecord: FirebaseChatRecord) {
+  const next = records ? [...records] : [];
+  const existingIndex = next.findIndex((record) => record.routeId === nextRecord.routeId);
+
+  if (existingIndex >= 0) {
+    next[existingIndex] = nextRecord;
+  } else {
+    next.unshift(nextRecord);
+  }
+
+  next.sort((left, right) => {
+    const leftTime = left.lastUpdatedAt ?? (Date.parse(left.timestamp) || 0);
+    const rightTime = right.lastUpdatedAt ?? (Date.parse(right.timestamp) || 0);
+    return rightTime - leftTime;
+  });
+
+  return next;
+}
+
 export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
-  const { isLoading: isAuthLoading, user } = useFirebaseAuth();
-  const listChats = useQuery(api.chats.listCurrentUserChats, user ? {} : 'skip') as ConvexChatRecord[] | undefined;
-  const currentChat = useQuery(api.chats.getCurrentUserChatByRouteId, user && mixedId ? { routeId: mixedId } : 'skip') as
-    | ConvexChatRecord
-    | null
-    | undefined;
-  const upsertChat = useMutation(api.chats.upsertCurrentUserChat);
-  const deleteChatMutation = useMutation(api.chats.deleteCurrentUserChat);
-  const duplicateChatMutation = useMutation(api.chats.duplicateCurrentUserChat);
-  const forkChatMutation = useMutation(api.chats.forkCurrentUserChat);
+  const { getAccessToken, isLoading: isAuthLoading, user } = useFirebaseAuth();
+  const [listChats, setListChats] = useState<FirebaseChatRecord[] | undefined>(undefined);
+  const [currentChat, setCurrentChat] = useState<FirebaseChatRecord | null | undefined>(undefined);
 
   const [archivedMessages, setArchivedMessages] = useState<Message[]>([]);
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
+
+  const getAuthHeaders = useCallback(async () => {
+    const token = await getAccessToken();
+
+    if (!token) {
+      throw new Error('Sign in with Firebase before accessing chats.');
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadChats = async () => {
+      if (isAuthLoading) {
+        return;
+      }
+
+      if (!user) {
+        if (!cancelled) {
+          setListChats([]);
+          setCurrentChat(null);
+        }
+        return;
+      }
+
+      try {
+        const headers = await getAuthHeaders();
+        const listResponse = await fetch('/api/chats', {
+          method: 'GET',
+          headers,
+        });
+        const listPayload = (await listResponse.json()) as { chats?: FirebaseChatRecord[]; message?: string };
+
+        if (!listResponse.ok) {
+          throw new Error(listPayload.message || 'Failed to load chat list.');
+        }
+
+        let nextCurrentChat: FirebaseChatRecord | null | undefined = null;
+
+        if (mixedId) {
+          const currentResponse = await fetch(`/api/chats?routeId=${encodeURIComponent(mixedId)}`, {
+            method: 'GET',
+            headers,
+          });
+          const currentPayload = (await currentResponse.json()) as { chat?: FirebaseChatRecord | null; message?: string };
+
+          if (!currentResponse.ok) {
+            throw new Error(currentPayload.message || 'Failed to load chat.');
+          }
+
+          nextCurrentChat = currentPayload.chat ?? null;
+        }
+
+        if (!cancelled) {
+          setListChats(listPayload.chats || []);
+          setCurrentChat(nextCurrentChat);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error(error);
+          setListChats([]);
+          setCurrentChat(null);
+        }
+      }
+    };
+
+    loadChats().catch((error) => {
+      if (!cancelled) {
+        console.error(error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAuthHeaders, isAuthLoading, mixedId, user]);
 
   const chatList = useMemo<ChatHistoryItem[]>(
     () => {
@@ -252,19 +344,62 @@ ${value.content}
 
   const updateStoredChat = useCallback(
     async (routeId: string, messages: Message[], metadata?: IChatMetadata, nextDescription?: string, snapshot?: Snapshot) => {
-      await upsertChat({
-        description: nextDescription,
-        messagesJson: JSON.stringify(messages),
-        metadata,
-        routeId,
-        snapshotJson: snapshot ? JSON.stringify(snapshot) : currentChat?.snapshot ? JSON.stringify(currentChat.snapshot) : undefined,
-        timestamp:
-          currentChat?.routeId === routeId
-            ? currentChat.timestamp
-            : chatList.find((chat) => chat.id === routeId)?.timestamp || new Date().toISOString(),
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          operation: 'upsert',
+          description: nextDescription,
+          messagesJson: JSON.stringify(messages),
+          metadata,
+          routeId,
+          snapshotJson:
+            snapshot ? JSON.stringify(snapshot) : currentChat?.snapshot ? JSON.stringify(currentChat.snapshot) : undefined,
+          timestamp:
+            currentChat?.routeId === routeId
+              ? currentChat.timestamp
+              : chatList.find((chat) => chat.id === routeId)?.timestamp || new Date().toISOString(),
+        }),
       });
+      const payload = (await response.json()) as { chat?: FirebaseChatRecord; message?: string };
+
+      if (!response.ok || !payload.chat) {
+        throw new Error(payload.message || 'Failed to persist chat.');
+      }
+
+      setCurrentChat((existing) => (existing?.routeId === routeId ? payload.chat! : existing));
+      setListChats((existing) => mergeChatRecord(existing, payload.chat!));
     },
-    [chatList, currentChat, upsertChat],
+    [chatList, currentChat, getAuthHeaders],
+  );
+
+  const updateChatDescription = useCallback(
+    async (routeId: string, nextDescription: string) => {
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          operation: 'updateDescription',
+          routeId,
+          description: nextDescription,
+        }),
+      });
+      const payload = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Failed to update chat description.');
+      }
+
+      setCurrentChat((existing) =>
+        existing && existing.routeId === routeId ? { ...existing, description: nextDescription } : existing,
+      );
+      setListChats((existing) =>
+        (existing || []).map((chat) => (chat.routeId === routeId ? { ...chat, description: nextDescription } : chat)),
+      );
+    },
+    [getAuthHeaders],
   );
 
   const restoreSnapshot = useCallback(async (_id: string, snapshot?: Snapshot) => {
@@ -377,10 +512,23 @@ ${value.content}
       }
 
       try {
-        const newId = await duplicateChatMutation({
-          nextRouteId: createRouteId(sourceId),
-          routeId: sourceId,
+        const headers = await getAuthHeaders();
+        const response = await fetch('/api/chats', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            operation: 'duplicate',
+            nextRouteId: createRouteId(sourceId),
+            routeId: sourceId,
+          }),
         });
+        const payload = (await response.json()) as { routeId?: string; message?: string };
+
+        if (!response.ok || !payload.routeId) {
+          throw new Error(payload.message || 'Failed to duplicate chat.');
+        }
+
+        const newId = payload.routeId;
         navigate(`/chat/${newId}`);
         toast.success('Chat duplicated successfully');
       } catch (error) {
@@ -389,7 +537,22 @@ ${value.content}
       }
     },
     deleteChat: async (id: string) => {
-      await deleteChatMutation({ routeId: id });
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          operation: 'delete',
+          routeId: id,
+        }),
+      });
+      const payload = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Failed to delete chat.');
+      }
+
+      setListChats((existing) => (existing || []).filter((chat) => chat.routeId !== id));
     },
     forkCurrentChat: async (messageId: string) => {
       const sourceId = chatId.get();
@@ -398,12 +561,26 @@ ${value.content}
         throw new Error('Chat not found');
       }
 
-      return forkChatMutation({
-        messageId,
-        nextRouteId: createRouteId(sourceId),
-        routeId: sourceId,
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          operation: 'fork',
+          messageId,
+          nextRouteId: createRouteId(sourceId),
+          routeId: sourceId,
+        }),
       });
+      const payload = (await response.json()) as { routeId?: string; message?: string };
+
+      if (!response.ok || !payload.routeId) {
+        throw new Error(payload.message || 'Failed to fork chat.');
+      }
+
+      return payload.routeId;
     },
+    updateChatDescription,
     importChat: async (nextDescription: string, messages: Message[], metadata?: IChatMetadata) => {
       if (!user) {
         toast.error('Sign in before importing chats.');
@@ -412,13 +589,25 @@ ${value.content}
 
       try {
         const routeId = createRouteId(nextDescription);
-        await upsertChat({
-          description: nextDescription,
-          messagesJson: JSON.stringify(messages),
-          metadata,
-          routeId,
-          timestamp: new Date().toISOString(),
+        const headers = await getAuthHeaders();
+        const response = await fetch('/api/chats', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            operation: 'upsert',
+            description: nextDescription,
+            messagesJson: JSON.stringify(messages),
+            metadata,
+            routeId,
+            timestamp: new Date().toISOString(),
+          }),
         });
+        const payload = (await response.json()) as { message?: string };
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to import chat.');
+        }
+
         window.location.href = `/chat/${routeId}`;
         toast.success('Chat imported successfully');
       } catch (error) {

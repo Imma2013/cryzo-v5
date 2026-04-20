@@ -5,7 +5,7 @@ import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
-import { getGoogleChatModels } from '~/lib/llm/google-catalog';
+import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
 import { resolveGoogleCatalog } from '~/lib/llm/google-catalog.server';
 
 const logger = createScopedLogger('google-provider');
@@ -45,6 +45,17 @@ export default class GoogleProvider extends BaseProvider {
       throw new Error(`Missing API key for ${this.name} provider`);
     }
 
+    const fallbackModel = this.staticModels[0]?.name;
+    const selectedModel = isSupportedGoogleChatModel(model) ? model : fallbackModel;
+
+    if (!selectedModel) {
+      throw new Error('No supported Google chat models are configured.');
+    }
+
+    if (selectedModel !== model) {
+      logger.warn(`Unsupported Google model "${model}" requested; falling back to "${selectedModel}".`);
+    }
+
     const google = createGoogleGenerativeAI({
       apiKey,
       fetch: async (input, init) => {
@@ -67,6 +78,6 @@ export default class GoogleProvider extends BaseProvider {
       },
     });
 
-    return google(model);
+    return google(selectedModel);
   }
 }

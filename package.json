@@ -10,11 +10,9 @@
     "name": "bolt.diy team",
     "email": "maintainers@bolt.diy"
   },
-  "scripts": {
+    "scripts": {
     "deploy": "npm run build && wrangler pages deploy",
     "build": "remix vite:build",
-    "convex:deploy": "convex deploy",
-    "convex:dev": "convex dev",
     "dev": "node pre-start.cjs  && remix vite:dev",
     "test": "vitest --run",
     "test:watch": "vitest",
@@ -118,7 +116,6 @@
     "chart.js": "^4.4.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "convex": "^1.25.4",
     "date-fns": "^3.6.0",
     "diff": "^5.2.0",
     "dotenv": "^16.4.7",
@@ -127,6 +124,7 @@
     "electron-updater": "^6.3.9",
     "file-saver": "^2.0.5",
     "firebase": "^12.2.1",
+    "firebase-admin": "^13.0.2",
     "framer-motion": "^11.12.0",
     "ignore": "^6.0.2",
     "isbot": "^4.4.0",

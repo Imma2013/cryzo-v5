@@ -76,14 +76,14 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
           <div className="space-y-1">
             <DialogTitle className="text-2xl font-semibold">Sign in to Cryzo</DialogTitle>
             <DialogDescription>
-              Use Firebase Auth for user access and keep Convex ready for your app data.
+              Use Firebase Auth for access. Your chats and preferences sync through Firebase Firestore.
             </DialogDescription>
           </div>
 
           {!isConfigured ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
               Firebase Auth is not configured yet. Add the `VITE_FIREBASE_*` keys for your Cryzo Firebase app, then
-              restart the app. `VITE_CONVEX_URL` is only needed for Convex-backed user sync after sign-in.
+              restart the app.
             </div>
           ) : !isHostSupported ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">

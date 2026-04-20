@@ -34,7 +34,7 @@ import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
-import { useConvexUserPreferences } from '~/lib/convex/client';
+import { useFirebaseUserPreferences } from '~/lib/firebase/user-preferences.client';
 import { resolveActiveProviderSelection } from '~/lib/llm/provider-selection';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
@@ -122,7 +122,7 @@ export const ChatImpl = memo(
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
     const { getAccessToken, user } = useFirebaseAuth();
     const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
-    const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
+    const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useFirebaseUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
     const syncedPreferences = currentUserRecord?.llmPreferences;

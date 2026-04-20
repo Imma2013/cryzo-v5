@@ -3,6 +3,7 @@ import { withSecurity } from '~/lib/security';
 import { getServerEnv } from '~/lib/server-env';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
+import { isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
 import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
 
 type GeminiPart = {
@@ -148,6 +149,21 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   }
 
   const selectedModel = normalizeImageModel(model);
+
+  if (!isSupportedGoogleImageModel(selectedModel)) {
+    return new Response(
+      JSON.stringify({
+        message: `Unsupported Google image model: ${selectedModel}`,
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  }
+
   const payload = {
     contents: [
       {

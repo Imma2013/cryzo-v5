@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Server-owned data access only. All client reads/writes must go through authenticated API routes.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

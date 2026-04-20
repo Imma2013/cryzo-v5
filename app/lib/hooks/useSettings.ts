@@ -27,7 +27,7 @@ import type { TabWindowConfig } from '~/components/@settings/core/types';
 import { logStore } from '~/lib/stores/logs';
 import { getLocalStorage, setLocalStorage } from '~/lib/persistence';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { useConvexUserPreferences } from '~/lib/convex/client';
+import { useFirebaseUserPreferences } from '~/lib/firebase/user-preferences.client';
 
 export interface Settings {
   theme: 'light' | 'dark' | 'system';
@@ -93,7 +93,7 @@ export function useSettings(): UseSettingsReturn {
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
   const { isLoading: isAuthLoading, user } = useFirebaseAuth();
-  const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
+  const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useFirebaseUserPreferences();
   const isSignedInSyncMode = Boolean(user) && isSyncAvailable;
   const [providersReady, setProvidersReady] = useState(false);
   const [syncReadinessTimedOut, setSyncReadinessTimedOut] = useState(false);
