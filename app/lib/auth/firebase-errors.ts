@@ -21,6 +21,14 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
     return 'The Google sign-in popup was blocked by the browser. Allow popups for this site and retry sign-in.';
   }
 
+  if (authCode === 'auth/web-storage-unsupported') {
+    return 'This browser does not allow the storage required for Google sign-in. Enable site data/cookies for this site and retry.';
+  }
+
+  if (authCode === 'auth/operation-not-supported-in-this-environment') {
+    return 'Google popup sign-in is not supported in this browser context. Retry and complete the redirect sign-in flow.';
+  }
+
   if (authCode === 'auth/cancelled-popup-request') {
     return 'A Google sign-in popup is already in progress. Finish the open popup or close it before retrying.';
   }

@@ -79,6 +79,8 @@ interface ProviderSettingWithIndex extends IProviderSetting {
 
 let lastHydratedProviderSettingsSignature: string | null = null;
 let lastPersistedProviderSettingsSignature: string | null = null;
+const SYNC_PROVIDER_READINESS_TIMEOUT_MS = 4000;
+const SYNC_TIMEOUT_PROVIDER_SIGNATURE = '__sync-timeout-defaults__';
 
 export function useSettings(): UseSettingsReturn {
   const providers = useStore(providersStore);
@@ -94,7 +96,11 @@ export function useSettings(): UseSettingsReturn {
   const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useConvexUserPreferences();
   const isSignedInSyncMode = Boolean(user) && isSyncAvailable;
   const [providersReady, setProvidersReady] = useState(false);
-  const llmPreferencesReady = !isSignedInSyncMode ? !isAuthLoading : !isAuthLoading && currentUserRecord !== undefined;
+  const [syncReadinessTimedOut, setSyncReadinessTimedOut] = useState(false);
+  const isSignedInSyncPending = isSignedInSyncMode && !isAuthLoading && currentUserRecord === undefined;
+  const llmPreferencesReady = !isSignedInSyncMode
+    ? !isAuthLoading
+    : !isAuthLoading && (currentUserRecord !== undefined || syncReadinessTimedOut);
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {
@@ -111,7 +117,20 @@ export function useSettings(): UseSettingsReturn {
     lastHydratedProviderSettingsSignature = null;
     lastPersistedProviderSettingsSignature = null;
     setProvidersReady(false);
+    setSyncReadinessTimedOut(false);
   }, [isSignedInSyncMode, user?.uid]);
+
+  useEffect(() => {
+    if (!isSignedInSyncPending || syncReadinessTimedOut) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSyncReadinessTimedOut(true);
+    }, SYNC_PROVIDER_READINESS_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isSignedInSyncPending, syncReadinessTimedOut]);
 
   useEffect(() => {
     if (isSignedInSyncMode && !llmPreferencesReady) {
@@ -146,8 +165,20 @@ export function useSettings(): UseSettingsReturn {
     }
 
     if (currentUserRecord === undefined) {
-      resetProviderSettingsToDefaults();
-      setProvidersReady(false);
+      if (!syncReadinessTimedOut) {
+        resetProviderSettingsToDefaults();
+        setProvidersReady(false);
+        return;
+      }
+
+      if (lastHydratedProviderSettingsSignature !== SYNC_TIMEOUT_PROVIDER_SIGNATURE) {
+        resetProviderSettingsToDefaults();
+        lastHydratedProviderSettingsSignature = SYNC_TIMEOUT_PROVIDER_SIGNATURE;
+        lastPersistedProviderSettingsSignature = SYNC_TIMEOUT_PROVIDER_SIGNATURE;
+        void initializeProviders();
+      }
+
+      setProvidersReady(true);
       return;
     }
 
@@ -171,7 +202,7 @@ export function useSettings(): UseSettingsReturn {
       lastHydratedProviderSettingsSignature = defaultSignature;
       void saveLlmPreferences({ providerSettings: defaultSnapshot });
     }
-  }, [currentUserRecord, isAuthLoading, isSignedInSyncMode, saveLlmPreferences]);
+  }, [currentUserRecord, isAuthLoading, isSignedInSyncMode, saveLlmPreferences, syncReadinessTimedOut]);
 
   const saveSettings = useCallback((newSettings: Partial<Settings>) => {
     setSettings((prev) => {

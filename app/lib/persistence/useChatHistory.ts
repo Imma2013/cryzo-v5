@@ -1,5 +1,5 @@
 import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
@@ -12,7 +12,6 @@ import { webcontainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { getAll as getAllLegacyChats, getSnapshot as getLegacySnapshot, openDatabase } from './db';
 
 export interface ChatHistoryItem {
   id: string;
@@ -109,7 +108,6 @@ export function useChatHistory() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
-  const hasMigratedLegacyChatsRef = useRef(false);
 
   const chatList = useMemo<ChatHistoryItem[]>(
     () =>
@@ -246,45 +244,6 @@ ${value.content}
       setReady(true);
     });
   }, [currentChat, isAuthLoading, mixedId, navigate, searchParams, user]);
-
-  useEffect(() => {
-    if (!user || hasMigratedLegacyChatsRef.current || listChats === undefined) {
-      return;
-    }
-
-    hasMigratedLegacyChatsRef.current = true;
-
-    const migrateLegacyChats = async () => {
-      const legacyDb = await openDatabase();
-
-      if (!legacyDb) {
-        return;
-      }
-
-      const legacyChats = await getAllLegacyChats(legacyDb);
-
-      await Promise.all(
-        legacyChats.map(async (legacyChat) => {
-          const routeId = legacyChat.urlId || legacyChat.id;
-          const legacySnapshot = await getLegacySnapshot(legacyDb, legacyChat.id).catch(() => undefined);
-
-          await upsertChat({
-            description: legacyChat.description,
-            messagesJson: JSON.stringify(legacyChat.messages),
-            metadata: legacyChat.metadata,
-            routeId,
-            snapshotJson: legacySnapshot ? JSON.stringify(legacySnapshot) : undefined,
-            timestamp: legacyChat.timestamp,
-          });
-        }),
-      );
-    };
-
-    migrateLegacyChats().catch((error) => {
-      hasMigratedLegacyChatsRef.current = false;
-      console.error('Failed to migrate legacy chats into Convex:', error);
-    });
-  }, [listChats, upsertChat, user]);
 
   const updateStoredChat = useCallback(
     async (routeId: string, messages: Message[], metadata?: IChatMetadata, nextDescription?: string, snapshot?: Snapshot) => {

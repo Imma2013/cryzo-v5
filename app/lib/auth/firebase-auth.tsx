@@ -4,6 +4,7 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   updateProfile,
@@ -13,13 +14,49 @@ import {
 import { ensureFirebaseAuthPersistence, firebaseAuth, googleAuthProvider } from '~/lib/firebase/client';
 import { isFirebaseConfigured } from '~/lib/firebase/config';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
-import { getCurrentHostname, getGoogleSignInMethod, type GoogleSignInMethod } from './google-auth-flow';
+import {
+  getCurrentHostname,
+  getGoogleSignInMethod,
+  shouldFallbackToRedirectFromPopupError,
+  type GoogleSignInMethod,
+} from './google-auth-flow';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('firebase-auth');
-const SESSION_BOOTSTRAP_TIMEOUT_MS = 5000;
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 15000;
+const GOOGLE_REDIRECT_PENDING_STORAGE_KEY = 'cryzo.firebase.googleRedirectPending';
 export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE =
   'Session check took too long. You can keep using the app or retry sign-in if your account does not appear.';
+
+function setGoogleRedirectPendingFlag() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(GOOGLE_REDIRECT_PENDING_STORAGE_KEY, '1');
+  } catch {
+    // Ignore browser storage restrictions and continue with sign-in.
+  }
+}
+
+function consumeGoogleRedirectPendingFlag() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return false;
+  }
+
+  try {
+    const isPending = window.sessionStorage.getItem(GOOGLE_REDIRECT_PENDING_STORAGE_KEY) === '1';
+
+    if (isPending) {
+      window.sessionStorage.removeItem(GOOGLE_REDIRECT_PENDING_STORAGE_KEY);
+    }
+
+    return isPending;
+  } catch {
+    return false;
+  }
+}
 
 export async function waitForFirebaseAuthReady(auth: Auth) {
   if (typeof auth.authStateReady === 'function') {
@@ -124,6 +161,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
       logger.info(`Firebase auth state changed: ${nextUser ? 'signed-in' : 'signed-out'}`);
       setUser(nextUser);
+      setError(null);
     });
 
     (async () => {
@@ -132,7 +170,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         await ensureFirebaseAuthPersistence();
         logger.info('Firebase auth persistence ready');
 
-        if (googleSignInMethod === 'redirect') {
+        if (consumeGoogleRedirectPendingFlag()) {
           logger.info('Resolving Firebase redirect result');
           await getRedirectResult(firebaseAuth);
         }
@@ -174,8 +212,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     setError(null);
     await ensureFirebaseAuthPersistence();
-    await signInWithRedirect(firebaseAuth, googleAuthProvider);
-  }, [googleSignInMethod]);
+
+    try {
+      await signInWithPopup(firebaseAuth, googleAuthProvider);
+      return;
+    } catch (popupError) {
+      if (!shouldFallbackToRedirectFromPopupError(popupError)) {
+        throw popupError;
+      }
+
+      logger.warn('Google popup sign-in failed, falling back to redirect', popupError);
+      setGoogleRedirectPendingFlag();
+      await signInWithRedirect(firebaseAuth, googleAuthProvider);
+    }
+  }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth) {
