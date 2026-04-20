@@ -48,7 +48,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         error: true,
         errorType: 'auth_required',
         isRetryable: false,
-        message: 'Sign in with Firebase before sending chat requests.',
+        message: 'Sign in before sending chat requests.',
         provider: 'Cryzo',
         statusCode: 401,
       }),
@@ -65,14 +65,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     verifiedAuth = await verifyFirebaseIdToken(firebaseIdToken, serverEnv);
   } catch (error) {
-    logger.warn('Firebase token verification failed for /api/chat', error);
+    logger.warn('Auth token verification failed for /api/chat', error);
 
     return new Response(
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
         isRetryable: false,
-        message: 'Sign in with Firebase before sending chat requests.',
+        message: 'Sign in before sending chat requests.',
         provider: 'Cryzo',
         statusCode: 401,
       }),
@@ -491,8 +491,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           return 'Custom error: Invalid or missing API key. Please check your API key configuration.';
         }
 
-        if (errorMessage.toLowerCase().includes('sign in with firebase')) {
-          return 'Custom error: Sign in with Firebase before sending chat requests.';
+        if (errorMessage.toLowerCase().includes('sign in before')) {
+          return 'Custom error: Sign in before sending chat requests.';
         }
 
         if (errorMessage.includes('token') && errorMessage.includes('limit')) {

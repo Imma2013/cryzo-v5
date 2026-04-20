@@ -4,7 +4,6 @@ import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
 import { getFirebaseAuthErrorMessage } from '~/lib/auth/firebase-errors';
-import { getGoogleSignInPendingLabel } from '~/lib/auth/google-auth-flow';
 
 interface AuthDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -12,22 +11,12 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
-  const {
-    error,
-    googleSignInMethod,
-    hostSupportMessage,
-    isConfigured,
-    isHostSupported,
-    signInWithEmail,
-    signInWithGoogle,
-    signUpWithEmail,
-    user,
-  } = useFirebaseAuth();
+  const { error, isConfigured, isLoading, signInWithEmail, signUpWithEmail, user } = useFirebaseAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pendingAction, setPendingAction] = useState<'email' | 'google' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'email' | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,7 +26,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
   }, [onOpenChange, open, user]);
 
   const authError = localError ?? error;
-  const isPending = pendingAction !== null;
+  const isPending = pendingAction !== null || isLoading;
 
   const handleEmailAuth = async () => {
     setPendingAction('email');
@@ -56,38 +45,20 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     }
   };
 
-  const handleGoogleAuth = async () => {
-    setPendingAction('google');
-    setLocalError(null);
-
-    try {
-      await signInWithGoogle();
-    } catch (authFailure) {
-      setLocalError(getFirebaseAuthErrorMessage(authFailure));
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <Dialog className="w-[min(92vw,30rem)]">
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-6">
           <div className="space-y-1">
             <DialogTitle className="text-2xl font-semibold">Sign in to Cryzo</DialogTitle>
             <DialogDescription>
-              Use Firebase Auth for access. Your chats and preferences sync through Firebase Firestore.
+              Create an account or sign in to use Cryzo. Authentication and sync are powered by Convex.
             </DialogDescription>
           </div>
 
           {!isConfigured ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              Firebase Auth is not configured yet. Add the `VITE_FIREBASE_*` keys for your Cryzo Firebase app, then
-              restart the app.
-            </div>
-          ) : !isHostSupported ? (
-            <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              {hostSupportMessage ?? 'Firebase sign-in is disabled on this domain.'}
+              Auth is not configured yet. Add `VITE_CONVEX_URL` and `CONVEX_URL` env vars, then restart the app.
             </div>
           ) : (
             <>
@@ -152,16 +123,6 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
                   variant="outline"
                 >
                   {pendingAction === 'email' ? 'Working...' : mode === 'signup' ? 'Create account' : 'Sign in'}
-                </Button>
-
-                <Button
-                  className="h-11 w-full"
-                  disabled={isPending}
-                  onClick={handleGoogleAuth}
-                  type="button"
-                  variant="secondary"
-                >
-                  {pendingAction === 'google' ? getGoogleSignInPendingLabel(googleSignInMethod) : 'Continue with Google'}
                 </Button>
               </div>
             </>

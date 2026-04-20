@@ -30,7 +30,7 @@ export default function LlmErrorAlert({ alert, clearAlert }: Props) {
   const getErrorMessage = () => {
     switch (errorType) {
       case 'auth_required':
-        return 'Sign in with Firebase before sending requests.';
+        return 'Sign in before sending requests.';
       case 'setup':
         return `${provider} needs server setup before requests can run.`;
       case 'authentication':

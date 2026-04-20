@@ -52,7 +52,7 @@ export function createLlmErrorAlert(error: unknown, fallbackProvider: string): L
   }
 
   if (parsed.statusCode === 401 || parsed.message.toLowerCase().includes('api key')) {
-    if (parsed.message.toLowerCase().includes('sign in with firebase')) {
+    if (parsed.message.toLowerCase().includes('sign in before')) {
       return {
         type: 'error',
         title: 'Sign-In Required',

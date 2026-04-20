@@ -25,7 +25,7 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in with Firebase before reading preferences.',
+        message: 'Sign in before reading preferences.',
       }),
       {
         status: 401,
@@ -37,13 +37,14 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
   }
 
   try {
-    return await verifyFirebaseIdToken(token, serverEnv as any);
+    const verified = await verifyFirebaseIdToken(token, serverEnv as any);
+    return { token, verified };
   } catch {
     throw new Response(
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in with Firebase before reading preferences.',
+        message: 'Sign in before reading preferences.',
       }),
       {
         status: 401,
@@ -59,8 +60,8 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const verified = await requireFirebaseAuth(request, serverEnv);
-    const current = await getCurrentUserRecord(serverEnv, verified.uid);
+    const { token, verified } = await requireFirebaseAuth(request, serverEnv);
+    const current = await getCurrentUserRecord(serverEnv, token);
 
     return jsonResponse({
       user: current ?? {
@@ -100,20 +101,20 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const verified = await requireFirebaseAuth(request, serverEnv);
+    const { token, verified } = await requireFirebaseAuth(request, serverEnv);
     const body = (await request.json()) as UserPreferencesRequest;
 
-    await upsertCurrentUserProfile(serverEnv, verified.uid, {
+    await upsertCurrentUserProfile(serverEnv, token, {
       email: body.profile?.email ?? verified.email,
-      image: body.profile?.image,
-      name: body.profile?.name,
+      image: body.profile?.image ?? verified.image,
+      name: body.profile?.name ?? verified.name,
     });
 
     if (body.llmPreferences) {
-      await upsertCurrentUserLlmPreferences(serverEnv, verified.uid, body.llmPreferences);
+      await upsertCurrentUserLlmPreferences(serverEnv, token, body.llmPreferences);
     }
 
-    const current = await getCurrentUserRecord(serverEnv, verified.uid);
+    const current = await getCurrentUserRecord(serverEnv, token);
     return jsonResponse({ ok: true, user: current });
   } catch (error) {
     if (error instanceof Response) {

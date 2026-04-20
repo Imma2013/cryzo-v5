@@ -20,7 +20,7 @@ function jsonResponse(payload: unknown, status = 200) {
   });
 }
 
-async function requireFirebaseUid(request: Request, serverEnv: Record<string, string | undefined>) {
+async function requireFirebaseSession(request: Request, serverEnv: Record<string, string | undefined>) {
   const token = getBearerTokenFromAuthorizationHeader(request.headers.get('Authorization'));
 
   if (!token) {
@@ -28,7 +28,7 @@ async function requireFirebaseUid(request: Request, serverEnv: Record<string, st
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in with Firebase before accessing chats.',
+        message: 'Sign in before accessing chats.',
       }),
       {
         status: 401,
@@ -41,13 +41,13 @@ async function requireFirebaseUid(request: Request, serverEnv: Record<string, st
 
   try {
     const verified = await verifyFirebaseIdToken(token, serverEnv as any);
-    return verified.uid;
+    return { token, uid: verified.uid };
   } catch {
     throw new Response(
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in with Firebase before accessing chats.',
+        message: 'Sign in before accessing chats.',
       }),
       {
         status: 401,
@@ -63,16 +63,16 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const uid = await requireFirebaseUid(request, serverEnv);
+    const session = await requireFirebaseSession(request, serverEnv);
     const url = new URL(request.url);
     const routeId = url.searchParams.get('routeId');
 
     if (routeId) {
-      const chat = await getCurrentUserChatByRouteId(serverEnv, uid, routeId);
+      const chat = await getCurrentUserChatByRouteId(serverEnv, session.token, routeId);
       return jsonResponse({ chat });
     }
 
-    const chats = await listCurrentUserChats(serverEnv, uid);
+    const chats = await listCurrentUserChats(serverEnv, session.token);
     return jsonResponse({ chats });
   } catch (error) {
     if (error instanceof Response) {
@@ -116,31 +116,37 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const uid = await requireFirebaseUid(request, serverEnv);
+    const session = await requireFirebaseSession(request, serverEnv);
     const payload = (await request.json()) as ChatsMutationRequest;
 
     if (payload.operation === 'upsert') {
-      const chat = await upsertCurrentUserChat(serverEnv, uid, payload);
+      const chat = await upsertCurrentUserChat(serverEnv, session.token, payload);
       return jsonResponse({ ok: true, chat });
     }
 
     if (payload.operation === 'delete') {
-      await deleteCurrentUserChat(serverEnv, uid, payload.routeId);
+      await deleteCurrentUserChat(serverEnv, session.token, payload.routeId);
       return jsonResponse({ ok: true });
     }
 
     if (payload.operation === 'duplicate') {
-      const routeId = await duplicateCurrentUserChat(serverEnv, uid, payload.routeId, payload.nextRouteId);
+      const routeId = await duplicateCurrentUserChat(serverEnv, session.token, payload.routeId, payload.nextRouteId);
       return jsonResponse({ ok: true, routeId });
     }
 
     if (payload.operation === 'fork') {
-      const routeId = await forkCurrentUserChat(serverEnv, uid, payload.routeId, payload.nextRouteId, payload.messageId);
+      const routeId = await forkCurrentUserChat(
+        serverEnv,
+        session.token,
+        payload.routeId,
+        payload.nextRouteId,
+        payload.messageId,
+      );
       return jsonResponse({ ok: true, routeId });
     }
 
     if (payload.operation === 'updateDescription') {
-      await updateCurrentUserChatDescription(serverEnv, uid, payload.routeId, payload.description);
+      await updateCurrentUserChatDescription(serverEnv, session.token, payload.routeId, payload.description);
       return jsonResponse({ ok: true });
     }
 

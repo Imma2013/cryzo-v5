@@ -206,7 +206,7 @@ export const ChatImpl = memo(
         try {
           token = await getAccessToken();
         } catch (error) {
-          logger.warn('Failed to read Firebase access token for chat request headers', error);
+          logger.warn('Failed to read auth access token for chat request headers', error);
         }
 
         if (!cancelled) {
@@ -509,7 +509,7 @@ export const ChatImpl = memo(
         setLlmErrorAlert({
           type: 'error',
           title: 'Sign-In Required',
-          description: 'Sign in with Firebase before sending chat requests.',
+          description: 'Sign in before sending chat requests.',
           provider: 'Cryzo',
           errorType: 'auth_required',
         });

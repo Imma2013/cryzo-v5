@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { isFirebaseConfigured } from '~/lib/firebase/config';
+import { isConvexConfigured } from '~/lib/convex/client';
 import type { IProviderSetting } from '~/types/model';
 
-export const isFirebaseSyncConfigured = isFirebaseConfigured;
+export const isFirebaseSyncConfigured = isConvexConfigured;
 
 interface LlmPreferencesPayload {
   providerSettings?: Record<string, IProviderSetting>;
@@ -120,7 +120,7 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load Firebase user preferences:', error);
+          console.error('Failed to load user preferences:', error);
           setCurrentUserRecord(null);
         }
       }
@@ -134,7 +134,7 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
   const value = useMemo<FirebaseUserPreferencesContextValue>(
     () => ({
       currentUserRecord,
-      isSyncAvailable: isFirebaseConfigured,
+      isSyncAvailable: isConvexConfigured,
       saveLlmPreferences,
     }),
     [currentUserRecord, saveLlmPreferences],

@@ -202,14 +202,14 @@ function getMimeTypeFromPath(filePath: string): string {
   }
 }
 
-async function getFirebaseAuthHeaderForImageRequest() {
+async function getAuthHeaderForImageRequest() {
   if (typeof window === 'undefined') {
     return undefined;
   }
 
   try {
-    const { firebaseAuth } = await import('~/lib/firebase/client');
-    const token = await firebaseAuth?.currentUser?.getIdToken();
+    const { getCurrentAuthAccessToken } = await import('~/lib/auth/firebase-auth');
+    const token = getCurrentAuthAccessToken();
 
     if (!token) {
       return undefined;
@@ -640,7 +640,7 @@ export class ActionRunner {
 
   async #runImageAction(action: ImageAction) {
     const webcontainer = await this.#webcontainer;
-    const authHeader = await getFirebaseAuthHeaderForImageRequest();
+    const authHeader = await getAuthHeaderForImageRequest();
     const inputs: Array<{ source: 'project'; path: string; data: string; mimeType: string }> = [];
 
     for (const inputPath of action.inputPaths || []) {

@@ -110,7 +110,7 @@ export function NanoBananaDialog({
       const token = await getAccessToken();
 
       if (!token) {
-        throw new Error('Sign in with Firebase before generating images.');
+        throw new Error('Sign in before generating images.');
       }
 
       const response = await fetch('/api/image-generate', {

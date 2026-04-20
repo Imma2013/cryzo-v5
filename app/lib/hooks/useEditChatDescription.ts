@@ -25,7 +25,7 @@ type EditChatDescriptionHook = {
  * Offers functions to:
  * - Switch between edit and view modes.
  * - Manage input changes, blur, and form submission events.
- * - Save updates to the Firebase-backed chat API and optionally to the global application state.
+ * - Save updates to the authenticated chat API and optionally to the global application state.
  *
  * @param {Object} options
  * @param {string} options.initialDescription - The current chat description.

@@ -124,7 +124,7 @@ export function useChatHistory() {
     const token = await getAccessToken();
 
     if (!token) {
-      throw new Error('Sign in with Firebase before accessing chats.');
+      throw new Error('Sign in before accessing chats.');
     }
 
     return {
