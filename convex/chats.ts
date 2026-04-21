@@ -1,4 +1,3 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
 import { mutationGeneric, queryGeneric } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -43,30 +42,32 @@ function normalizeChatRecord(doc: any) {
   };
 }
 
-async function requireCurrentUserId(ctx: any) {
-  const userId = await getAuthUserId(ctx);
+function normalizeFirebaseUid(firebaseUid: string) {
+  const normalized = firebaseUid.trim();
 
-  if (!userId) {
+  if (!normalized) {
     throw new Error('Unauthorized');
   }
 
-  return userId;
+  return normalized;
 }
 
-async function getCurrentChatDoc(ctx: any, userId: any, routeId: string) {
+async function getCurrentChatDoc(ctx: any, firebaseUid: string, routeId: string) {
   return await ctx.db
     .query('userChats')
-    .withIndex('by_user_id_route_id', (q: any) => q.eq('userId', userId).eq('routeId', routeId))
+    .withIndex('by_firebase_uid_route_id', (q: any) => q.eq('firebaseUid', firebaseUid).eq('routeId', routeId))
     .unique();
 }
 
 export const listCurrentUserChats = queryGeneric({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await requireCurrentUserId(ctx);
+  args: {
+    firebaseUid: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
     const docs = await ctx.db
       .query('userChats')
-      .withIndex('by_user_id_last_updated_at', (q: any) => q.eq('userId', userId))
+      .withIndex('by_firebase_uid_last_updated_at', (q: any) => q.eq('firebaseUid', firebaseUid))
       .order('desc')
       .collect();
 
@@ -76,11 +77,12 @@ export const listCurrentUserChats = queryGeneric({
 
 export const getCurrentUserChatByRouteId = queryGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const doc = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const doc = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!doc) {
       return null;
@@ -92,6 +94,7 @@ export const getCurrentUserChatByRouteId = queryGeneric({
 
 export const upsertCurrentUserChat = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
     description: v.optional(v.string()),
     messagesJson: v.string(),
@@ -100,14 +103,15 @@ export const upsertCurrentUserChat = mutationGeneric({
     timestamp: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const existing = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const existing = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
 
     if (existing) {
       await ctx.db.patch(existing._id, {
         ...(args.description !== undefined ? { description: args.description } : {}),
+        firebaseUid,
         messagesJson: args.messagesJson,
         ...(args.metadata !== undefined ? { metadata: args.metadata } : {}),
         ...(args.snapshotJson !== undefined ? { snapshotJson: args.snapshotJson } : {}),
@@ -117,7 +121,7 @@ export const upsertCurrentUserChat = mutationGeneric({
       });
     } else {
       await ctx.db.insert('userChats', {
-        userId,
+        firebaseUid,
         routeId: args.routeId,
         description: args.description,
         messagesJson: args.messagesJson,
@@ -130,7 +134,7 @@ export const upsertCurrentUserChat = mutationGeneric({
       });
     }
 
-    const next = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const next = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!next) {
       throw new Error('Failed to load updated chat.');
@@ -142,12 +146,13 @@ export const upsertCurrentUserChat = mutationGeneric({
 
 export const updateCurrentUserChatDescription = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
     description: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const existing = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const existing = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!existing) {
       throw new Error('Chat not found');
@@ -166,11 +171,12 @@ export const updateCurrentUserChatDescription = mutationGeneric({
 
 export const deleteCurrentUserChat = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const existing = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const existing = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!existing) {
       return { ok: true };
@@ -183,12 +189,13 @@ export const deleteCurrentUserChat = mutationGeneric({
 
 export const duplicateCurrentUserChat = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
     nextRouteId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const source = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const source = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!source) {
       throw new Error('Chat not found');
@@ -202,7 +209,7 @@ export const duplicateCurrentUserChat = mutationGeneric({
         : 'Chat copy';
 
     await ctx.db.insert('userChats', {
-      userId,
+      firebaseUid,
       routeId: args.nextRouteId,
       description,
       messagesJson: source.messagesJson,
@@ -220,13 +227,14 @@ export const duplicateCurrentUserChat = mutationGeneric({
 
 export const forkCurrentUserChat = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     routeId: v.string(),
     nextRouteId: v.string(),
     messageId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const source = await getCurrentChatDoc(ctx, userId, args.routeId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const source = await getCurrentChatDoc(ctx, firebaseUid, args.routeId);
 
     if (!source) {
       throw new Error('Chat not found');
@@ -248,7 +256,7 @@ export const forkCurrentUserChat = mutationGeneric({
         : 'Forked chat';
 
     await ctx.db.insert('userChats', {
-      userId,
+      firebaseUid,
       routeId: args.nextRouteId,
       description,
       messagesJson: JSON.stringify(forkMessages),
@@ -263,3 +271,4 @@ export const forkCurrentUserChat = mutationGeneric({
     return { routeId: args.nextRouteId };
   },
 });
+

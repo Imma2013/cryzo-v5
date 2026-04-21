@@ -38,7 +38,7 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
 
   try {
     const verified = await verifyFirebaseIdToken(token, serverEnv as any);
-    return { token, verified };
+    return { verified };
   } catch {
     throw new Response(
       JSON.stringify({
@@ -60,8 +60,8 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const { token, verified } = await requireFirebaseAuth(request, serverEnv);
-    const current = await getCurrentUserRecord(serverEnv, token);
+    const { verified } = await requireFirebaseAuth(request, serverEnv);
+    const current = await getCurrentUserRecord(serverEnv, verified.uid);
 
     return jsonResponse({
       user: current ?? {
@@ -101,20 +101,20 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const { token, verified } = await requireFirebaseAuth(request, serverEnv);
+    const { verified } = await requireFirebaseAuth(request, serverEnv);
     const body = (await request.json()) as UserPreferencesRequest;
 
-    await upsertCurrentUserProfile(serverEnv, token, {
+    await upsertCurrentUserProfile(serverEnv, verified.uid, {
       email: body.profile?.email ?? verified.email,
       image: body.profile?.image ?? verified.image,
       name: body.profile?.name ?? verified.name,
     });
 
     if (body.llmPreferences) {
-      await upsertCurrentUserLlmPreferences(serverEnv, token, body.llmPreferences);
+      await upsertCurrentUserLlmPreferences(serverEnv, verified.uid, body.llmPreferences);
     }
 
-    const current = await getCurrentUserRecord(serverEnv, token);
+    const current = await getCurrentUserRecord(serverEnv, verified.uid);
     return jsonResponse({ ok: true, user: current });
   } catch (error) {
     if (error instanceof Response) {

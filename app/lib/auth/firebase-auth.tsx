@@ -1,8 +1,18 @@
-import { useAuthActions, useAuthToken } from '@convex-dev/auth/react';
-import { useConvexAuth } from 'convex/react';
+import {
+  createUserWithEmailAndPassword,
+  onIdTokenChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { convexClient } from '~/lib/convex/client';
-import { isConvexConfigured } from '~/lib/convex/client';
+import {
+  getFirebaseAuthInstance,
+  getFirebaseGoogleProvider,
+  isFirebaseConfigured,
+  waitForFirebaseAuthReady as waitForFirebaseAuthClientReady,
+} from './firebase-client';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
 
 export type GoogleSignInMethod = 'popup';
@@ -16,7 +26,7 @@ export interface AuthUser {
 }
 
 export async function waitForFirebaseAuthReady() {
-  return null;
+  return await waitForFirebaseAuthClientReady();
 }
 
 let currentAccessToken: string | null = null;
@@ -47,7 +57,7 @@ const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
   getAccessToken: async () => null,
   googleSignInMethod: 'popup',
   hostSupportMessage: null,
-  isConfigured: isConvexConfigured,
+  isConfigured: isFirebaseConfigured,
   isHostSupported: true,
   isLoading: false,
   signInWithEmail: async () => {
@@ -68,22 +78,92 @@ function normalizeAuthError(error: unknown) {
 }
 
 function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
-  const { signIn, signOut } = useAuthActions();
-  const authToken = useAuthToken();
-  const { isLoading: isConvexAuthLoading } = useConvexAuth();
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [isAuthStateLoading, setIsAuthStateLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    currentAccessToken = authToken;
-  }, [authToken]);
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    (async () => {
+      try {
+        await waitForFirebaseAuthClientReady();
+        const auth = getFirebaseAuthInstance();
+
+        if (!auth) {
+          if (!cancelled) {
+            currentAccessToken = null;
+            setAuthToken(null);
+            setError(null);
+            setUser(null);
+            setIsAuthStateLoading(false);
+          }
+          return;
+        }
+
+        unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
+          if (!nextUser) {
+            if (!cancelled) {
+              currentAccessToken = null;
+              setAuthToken(null);
+              setError(null);
+              setUser(null);
+              setIsAuthStateLoading(false);
+            }
+            return;
+          }
+
+          try {
+            const nextToken = await nextUser.getIdToken();
+
+            if (!cancelled) {
+              currentAccessToken = nextToken;
+              setAuthToken(nextToken);
+              setError(null);
+              setUser({
+                displayName: nextUser.displayName ?? undefined,
+                email: nextUser.email ?? undefined,
+                photoURL: nextUser.photoURL ?? undefined,
+                uid: nextUser.uid,
+              });
+            }
+          } catch (tokenError) {
+            if (!cancelled) {
+              currentAccessToken = null;
+              setAuthToken(null);
+              setError(normalizeAuthError(tokenError));
+              setUser(null);
+            }
+          } finally {
+            if (!cancelled) {
+              setIsAuthStateLoading(false);
+            }
+          }
+        });
+      } catch (authBootstrapError) {
+        if (!cancelled) {
+          currentAccessToken = null;
+          setAuthToken(null);
+          setError(normalizeAuthError(authBootstrapError));
+          setUser(null);
+          setIsAuthStateLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     if (!authToken) {
-      setUser(null);
       setIsProfileLoading(false);
       return () => {
         cancelled = true;
@@ -114,29 +194,27 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
         if (response.status === 401 || payload.errorType === 'auth_required') {
           if (!cancelled) {
             setError(null);
-            setUser(null);
           }
 
           return;
         }
 
-        if (!response.ok || !payload.user?.uid) {
+        if (!response.ok) {
           throw new Error(payload.message || 'Failed to load account profile.');
         }
 
-        if (!cancelled) {
+        if (!cancelled && payload.user?.uid) {
           setError(null);
-          setUser({
-            displayName: payload.user.name,
-            email: payload.user.email,
-            photoURL: payload.user.image,
-            uid: payload.user.uid,
-          });
+          setUser((currentUser) => ({
+            uid: payload.user?.uid ?? currentUser?.uid ?? '',
+            displayName: payload.user?.name ?? currentUser?.displayName,
+            email: payload.user?.email ?? currentUser?.email,
+            photoURL: payload.user?.image ?? currentUser?.photoURL,
+          }));
         }
       } catch (profileError) {
         if (!cancelled) {
           setError(normalizeAuthError(profileError));
-          setUser(null);
         }
       } finally {
         if (!cancelled) {
@@ -153,54 +231,103 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       setError(null);
-      await signIn('password', {
-        email: email.trim(),
-        flow: 'signIn',
-        password,
-      } as any);
+      await waitForFirebaseAuthClientReady();
+
+      const auth = getFirebaseAuthInstance();
+
+      if (!auth) {
+        throw new Error('Firebase auth is not configured.');
+      }
+
+      await signInWithEmailAndPassword(auth, email.trim(), password);
     },
-    [signIn],
+    [],
   );
 
   const signUpWithEmail = useCallback(
     async (name: string, email: string, password: string) => {
       setError(null);
       const normalizedEmail = email.trim().toLowerCase();
+      await waitForFirebaseAuthClientReady();
 
-      if (convexClient) {
-        const exists = await convexClient.query('users:doesPasswordAccountExist' as any, {
-          email: normalizedEmail,
-        });
+      const auth = getFirebaseAuthInstance();
 
-        if (exists) {
-          throw new Error('An account with this email already exists. Sign in instead.');
-        }
+      if (!auth) {
+        throw new Error('Firebase auth is not configured.');
       }
 
-      await signIn('password', {
-        email: normalizedEmail,
-        flow: 'signUp',
-        name: name.trim(),
-        password,
-      } as any);
+      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      const trimmedName = name.trim();
+
+      if (trimmedName) {
+        await updateProfile(credential.user, { displayName: trimmedName });
+      }
+
+      await credential.user.getIdToken(true);
     },
-    [signIn],
+    [],
   );
+
+  const signInWithGoogle = useCallback(async () => {
+    setError(null);
+    await waitForFirebaseAuthClientReady();
+
+    const auth = getFirebaseAuthInstance();
+
+    if (!auth) {
+      throw new Error('Firebase auth is not configured.');
+    }
+
+    await signInWithPopup(auth, getFirebaseGoogleProvider());
+  }, []);
 
   const signOutUser = useCallback(async () => {
     setError(null);
-    await signOut();
-  }, [signOut]);
+    const auth = getFirebaseAuthInstance();
+
+    if (!auth) {
+      currentAccessToken = null;
+      setAuthToken(null);
+      setUser(null);
+      return;
+    }
+
+    await signOut(auth);
+  }, []);
+
+  const getAccessToken = useCallback(
+    async (forceRefresh?: boolean) => {
+      if (!isFirebaseConfigured) {
+        currentAccessToken = null;
+        return null;
+      }
+
+      await waitForFirebaseAuthClientReady();
+      const auth = getFirebaseAuthInstance();
+      const authUser = auth?.currentUser;
+
+      if (!authUser) {
+        currentAccessToken = null;
+        return null;
+      }
+
+      const token = await authUser.getIdToken(Boolean(forceRefresh));
+      currentAccessToken = token;
+      setAuthToken(token);
+      return token;
+    },
+    [setAuthToken],
+  );
 
   const value = useMemo<FirebaseAuthContextValue>(
     () => ({
       error,
-      getAccessToken: async () => authToken ?? null,
+      getAccessToken,
       googleSignInMethod: 'popup',
       hostSupportMessage: null,
       isConfigured: true,
       isHostSupported: true,
-      isLoading: isConvexAuthLoading || (Boolean(authToken) && isProfileLoading),
+      isLoading: isAuthStateLoading || (Boolean(authToken) && isProfileLoading),
       signInWithEmail: async (email, password) => {
         try {
           await signInWithEmail(email, password);
@@ -210,11 +337,7 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           throw new Error(message);
         }
       },
-      signInWithGoogle: async () => {
-        const message = 'Google sign-in is disabled. Use email and password.';
-        setError(message);
-        throw new Error(message);
-      },
+      signInWithGoogle,
       signOutUser: async () => {
         try {
           await signOutUser();
@@ -235,14 +358,14 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
       },
       user,
     }),
-    [authToken, error, isConvexAuthLoading, isProfileLoading, signInWithEmail, signOutUser, signUpWithEmail, user],
+    [authToken, error, getAccessToken, isAuthStateLoading, isProfileLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
   );
 
   return <FirebaseAuthContext.Provider value={value}>{children}</FirebaseAuthContext.Provider>;
 }
 
 export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
-  if (!isConvexConfigured) {
+  if (!isFirebaseConfigured) {
     return <FirebaseAuthContext.Provider value={fallbackFirebaseAuthContextValue}>{children}</FirebaseAuthContext.Provider>;
   }
 

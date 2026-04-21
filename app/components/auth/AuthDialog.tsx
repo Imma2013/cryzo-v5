@@ -11,12 +11,12 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
-  const { error, isConfigured, isLoading, signInWithEmail, signUpWithEmail, user } = useFirebaseAuth();
+  const { error, isConfigured, isLoading, signInWithEmail, signInWithGoogle, signUpWithEmail, user } = useFirebaseAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pendingAction, setPendingAction] = useState<'email' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'email' | 'google' | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,6 +45,19 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     }
   };
 
+  const handleGoogleAuth = async () => {
+    setPendingAction('google');
+    setLocalError(null);
+
+    try {
+      await signInWithGoogle();
+    } catch (authFailure) {
+      setLocalError(getFirebaseAuthErrorMessage(authFailure));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <Dialog className="w-[min(92vw,30rem)]">
@@ -52,13 +65,14 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
           <div className="space-y-1">
             <DialogTitle className="text-2xl font-semibold">Sign in to Cryzo</DialogTitle>
             <DialogDescription>
-              Create an account or sign in to use Cryzo. Authentication and sync are powered by Convex.
+              Create an account or sign in to use Cryzo. Authentication runs on Firebase and data is synced to Convex.
             </DialogDescription>
           </div>
 
           {!isConfigured ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              Auth is not configured yet. Add `VITE_CONVEX_URL` and `CONVEX_URL` env vars, then restart the app.
+              Auth is not configured yet. Add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
+              `VITE_FIREBASE_APP_ID`, and `VITE_FIREBASE_MESSAGING_SENDER_ID`, then restart the app.
             </div>
           ) : (
             <>
@@ -115,6 +129,15 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
               {authError && <p className="text-sm text-red-500">{authError}</p>}
 
               <div className="space-y-3">
+                <Button
+                  className="h-11 w-full"
+                  disabled={isPending}
+                  onClick={handleGoogleAuth}
+                  type="button"
+                  variant="outline"
+                >
+                  {pendingAction === 'google' ? 'Working...' : 'Continue with Google'}
+                </Button>
                 <Button
                   className="h-11 w-full bg-white text-black hover:bg-neutral-200"
                   disabled={isPending || !email || !password || (mode === 'signup' && !name.trim())}

@@ -41,7 +41,7 @@ async function requireFirebaseSession(request: Request, serverEnv: Record<string
 
   try {
     const verified = await verifyFirebaseIdToken(token, serverEnv as any);
-    return { token, uid: verified.uid };
+    return { uid: verified.uid };
   } catch {
     throw new Response(
       JSON.stringify({
@@ -68,11 +68,11 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     const routeId = url.searchParams.get('routeId');
 
     if (routeId) {
-      const chat = await getCurrentUserChatByRouteId(serverEnv, session.token, routeId);
+      const chat = await getCurrentUserChatByRouteId(serverEnv, session.uid, routeId);
       return jsonResponse({ chat });
     }
 
-    const chats = await listCurrentUserChats(serverEnv, session.token);
+    const chats = await listCurrentUserChats(serverEnv, session.uid);
     return jsonResponse({ chats });
   } catch (error) {
     if (error instanceof Response) {
@@ -120,24 +120,24 @@ export async function action({ context, request }: ActionFunctionArgs) {
     const payload = (await request.json()) as ChatsMutationRequest;
 
     if (payload.operation === 'upsert') {
-      const chat = await upsertCurrentUserChat(serverEnv, session.token, payload);
+      const chat = await upsertCurrentUserChat(serverEnv, session.uid, payload);
       return jsonResponse({ ok: true, chat });
     }
 
     if (payload.operation === 'delete') {
-      await deleteCurrentUserChat(serverEnv, session.token, payload.routeId);
+      await deleteCurrentUserChat(serverEnv, session.uid, payload.routeId);
       return jsonResponse({ ok: true });
     }
 
     if (payload.operation === 'duplicate') {
-      const routeId = await duplicateCurrentUserChat(serverEnv, session.token, payload.routeId, payload.nextRouteId);
+      const routeId = await duplicateCurrentUserChat(serverEnv, session.uid, payload.routeId, payload.nextRouteId);
       return jsonResponse({ ok: true, routeId });
     }
 
     if (payload.operation === 'fork') {
       const routeId = await forkCurrentUserChat(
         serverEnv,
-        session.token,
+        session.uid,
         payload.routeId,
         payload.nextRouteId,
         payload.messageId,
@@ -146,7 +146,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
     }
 
     if (payload.operation === 'updateDescription') {
-      await updateCurrentUserChatDescription(serverEnv, session.token, payload.routeId, payload.description);
+      await updateCurrentUserChatDescription(serverEnv, session.uid, payload.routeId, payload.description);
       return jsonResponse({ ok: true });
     }
 

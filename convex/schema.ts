@@ -1,11 +1,10 @@
-import { authTables } from '@convex-dev/auth/server';
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
 export default defineSchema({
-  ...authTables,
   userProfiles: defineTable({
-    userId: v.id('users'),
+    firebaseUid: v.optional(v.string()),
+    userId: v.optional(v.string()),
     email: v.optional(v.string()),
     image: v.optional(v.string()),
     name: v.optional(v.string()),
@@ -18,9 +17,12 @@ export default defineSchema({
     ),
     lastSeenAt: v.number(),
     updatedAt: v.string(),
-  }).index('by_user_id', ['userId']),
+  })
+    .index('by_firebase_uid', ['firebaseUid'])
+    .index('by_user_id', ['userId']),
   userChats: defineTable({
-    userId: v.id('users'),
+    firebaseUid: v.optional(v.string()),
+    userId: v.optional(v.string()),
     routeId: v.string(),
     description: v.optional(v.string()),
     messagesJson: v.string(),
@@ -37,6 +39,9 @@ export default defineSchema({
     updatedAt: v.string(),
     lastUpdatedAt: v.number(),
   })
+    .index('by_firebase_uid_route_id', ['firebaseUid', 'routeId'])
+    .index('by_firebase_uid_last_updated_at', ['firebaseUid', 'lastUpdatedAt'])
     .index('by_user_id_route_id', ['userId', 'routeId'])
     .index('by_user_id_last_updated_at', ['userId', 'lastUpdatedAt']),
 });
+

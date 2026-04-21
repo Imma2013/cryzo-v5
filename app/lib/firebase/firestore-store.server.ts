@@ -33,29 +33,27 @@ export interface FirestoreChatRecord {
   lastUpdatedAt: number;
 }
 
-function createAuthenticatedConvexClient(serverEnv: ServerEnv, authToken: string) {
-  const client = createConvexServerClient(serverEnv as any);
-  client.setAuth(authToken);
-  return client;
+function createAdminConvexClient(serverEnv: ServerEnv) {
+  return createConvexServerClient(serverEnv as any);
 }
 
-export async function listCurrentUserChats(serverEnv: ServerEnv, authToken: string): Promise<FirestoreChatRecord[]> {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  return (await convex.query('chats:listCurrentUserChats' as any, {})) as FirestoreChatRecord[];
+export async function listCurrentUserChats(serverEnv: ServerEnv, firebaseUid: string): Promise<FirestoreChatRecord[]> {
+  const convex = createAdminConvexClient(serverEnv);
+  return (await convex.query('chats:listCurrentUserChats' as any, { firebaseUid })) as FirestoreChatRecord[];
 }
 
 export async function getCurrentUserChatByRouteId(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   routeId: string,
 ): Promise<FirestoreChatRecord | null> {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  return (await convex.query('chats:getCurrentUserChatByRouteId' as any, { routeId })) as FirestoreChatRecord | null;
+  const convex = createAdminConvexClient(serverEnv);
+  return (await convex.query('chats:getCurrentUserChatByRouteId' as any, { firebaseUid, routeId })) as FirestoreChatRecord | null;
 }
 
 export async function upsertCurrentUserChat(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   payload: {
     routeId: string;
     description?: string;
@@ -65,28 +63,32 @@ export async function upsertCurrentUserChat(
     timestamp: string;
   },
 ) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  return (await convex.mutation('chats:upsertCurrentUserChat' as any, payload)) as FirestoreChatRecord;
+  const convex = createAdminConvexClient(serverEnv);
+  return (await convex.mutation('chats:upsertCurrentUserChat' as any, { firebaseUid, ...payload })) as FirestoreChatRecord;
 }
 
 export async function updateCurrentUserChatDescription(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   routeId: string,
   description: string,
 ) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  await convex.mutation('chats:updateCurrentUserChatDescription' as any, { routeId, description });
+  const convex = createAdminConvexClient(serverEnv);
+  await convex.mutation('chats:updateCurrentUserChatDescription' as any, { firebaseUid, routeId, description });
 }
 
-export async function deleteCurrentUserChat(serverEnv: ServerEnv, authToken: string, routeId: string) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  await convex.mutation('chats:deleteCurrentUserChat' as any, { routeId });
+export async function deleteCurrentUserChat(serverEnv: ServerEnv, firebaseUid: string, routeId: string) {
+  const convex = createAdminConvexClient(serverEnv);
+  await convex.mutation('chats:deleteCurrentUserChat' as any, { firebaseUid, routeId });
 }
 
-export async function duplicateCurrentUserChat(serverEnv: ServerEnv, authToken: string, routeId: string, nextRouteId: string) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  const result = (await convex.mutation('chats:duplicateCurrentUserChat' as any, { routeId, nextRouteId })) as {
+export async function duplicateCurrentUserChat(serverEnv: ServerEnv, firebaseUid: string, routeId: string, nextRouteId: string) {
+  const convex = createAdminConvexClient(serverEnv);
+  const result = (await convex.mutation('chats:duplicateCurrentUserChat' as any, {
+    firebaseUid,
+    nextRouteId,
+    routeId,
+  })) as {
     routeId: string;
   };
   return result.routeId;
@@ -94,13 +96,18 @@ export async function duplicateCurrentUserChat(serverEnv: ServerEnv, authToken: 
 
 export async function forkCurrentUserChat(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   routeId: string,
   nextRouteId: string,
   messageId: string,
 ) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  const result = (await convex.mutation('chats:forkCurrentUserChat' as any, { routeId, nextRouteId, messageId })) as {
+  const convex = createAdminConvexClient(serverEnv);
+  const result = (await convex.mutation('chats:forkCurrentUserChat' as any, {
+    firebaseUid,
+    routeId,
+    nextRouteId,
+    messageId,
+  })) as {
     routeId: string;
   };
   return result.routeId;
@@ -108,27 +115,27 @@ export async function forkCurrentUserChat(
 
 export async function upsertCurrentUserProfile(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   payload: {
     email?: string;
     image?: string;
     name?: string;
   },
 ) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  await convex.mutation('users:upsertCurrentUserProfile' as any, payload);
+  const convex = createAdminConvexClient(serverEnv);
+  await convex.mutation('users:upsertCurrentUserProfile' as any, { firebaseUid, ...payload });
 }
 
-export async function getCurrentUserRecord(serverEnv: ServerEnv, authToken: string): Promise<FirestoreUserRecord | null> {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  return (await convex.query('users:getCurrentUserRecord' as any, {})) as FirestoreUserRecord | null;
+export async function getCurrentUserRecord(serverEnv: ServerEnv, firebaseUid: string): Promise<FirestoreUserRecord | null> {
+  const convex = createAdminConvexClient(serverEnv);
+  return (await convex.query('users:getCurrentUserRecord' as any, { firebaseUid })) as FirestoreUserRecord | null;
 }
 
 export async function upsertCurrentUserLlmPreferences(
   serverEnv: ServerEnv,
-  authToken: string,
+  firebaseUid: string,
   payload: FirestoreLlmPreferences,
 ) {
-  const convex = createAuthenticatedConvexClient(serverEnv, authToken);
-  await convex.mutation('users:upsertCurrentUserLlmPreferences' as any, { llmPreferences: payload });
+  const convex = createAdminConvexClient(serverEnv);
+  await convex.mutation('users:upsertCurrentUserLlmPreferences' as any, { firebaseUid, llmPreferences: payload });
 }

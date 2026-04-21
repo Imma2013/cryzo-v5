@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { isFirebaseConfigured } from '~/lib/auth/firebase-client';
 import { isConvexConfigured } from '~/lib/convex/client';
 import type { IProviderSetting } from '~/types/model';
 
-export const isFirebaseSyncConfigured = isConvexConfigured;
+export const isFirebaseSyncConfigured = isFirebaseConfigured && isConvexConfigured;
 
 interface LlmPreferencesPayload {
   providerSettings?: Record<string, IProviderSetting>;
@@ -146,7 +147,7 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
   const value = useMemo<FirebaseUserPreferencesContextValue>(
     () => ({
       currentUserRecord,
-      isSyncAvailable: isConvexConfigured,
+      isSyncAvailable: isFirebaseSyncConfigured,
       saveLlmPreferences,
     }),
     [currentUserRecord, saveLlmPreferences],

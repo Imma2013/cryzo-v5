@@ -1,4 +1,3 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
 import { mutationGeneric, queryGeneric } from 'convex/server';
 import { v, type Infer } from 'convex/values';
 
@@ -10,78 +9,52 @@ const llmPreferencesValidator = v.object({
 
 type LlmPreferences = Infer<typeof llmPreferencesValidator>;
 
-async function requireCurrentUserId(ctx: any) {
-  const userId = await getAuthUserId(ctx);
+function normalizeFirebaseUid(firebaseUid: string) {
+  const normalized = firebaseUid.trim();
 
-  if (!userId) {
+  if (!normalized) {
     throw new Error('Unauthorized');
   }
 
-  return userId;
+  return normalized;
 }
 
-async function getCurrentProfileDoc(ctx: any, userId: any) {
-  return await ctx.db.query('userProfiles').withIndex('by_user_id', (q: any) => q.eq('userId', userId)).unique();
+async function getCurrentProfileDoc(ctx: any, firebaseUid: string) {
+  return await ctx.db.query('userProfiles').withIndex('by_firebase_uid', (q: any) => q.eq('firebaseUid', firebaseUid)).unique();
 }
 
-async function getCurrentUserRecordInternal(ctx: any, userId: any) {
-  const authUser = await ctx.db.get(userId);
-  const profile = await getCurrentProfileDoc(ctx, userId);
+async function getCurrentUserRecordInternal(ctx: any, firebaseUid: string) {
+  const profile = await getCurrentProfileDoc(ctx, firebaseUid);
 
   return {
-    uid: String(userId),
-    email: profile?.email ?? authUser?.email ?? undefined,
-    image: profile?.image ?? authUser?.image ?? undefined,
-    name: profile?.name ?? authUser?.name ?? undefined,
+    uid: firebaseUid,
+    email: profile?.email ?? undefined,
+    image: profile?.image ?? undefined,
+    name: profile?.name ?? undefined,
     llmPreferences: profile?.llmPreferences ?? undefined,
   };
 }
 
-export const getViewerIdentity = queryGeneric({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await requireCurrentUserId(ctx);
-    return await getCurrentUserRecordInternal(ctx, userId);
-  },
-});
-
-export const doesPasswordAccountExist = queryGeneric({
+export const getCurrentUserRecord = queryGeneric({
   args: {
-    email: v.string(),
+    firebaseUid: v.string(),
   },
   handler: async (ctx, args) => {
-    const normalizedEmail = args.email.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      return false;
-    }
-
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q: any) => q.eq('provider', 'password').eq('providerAccountId', normalizedEmail))
-      .unique();
-
-    return Boolean(account);
-  },
-});
-
-export const getCurrentUserRecord = queryGeneric({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await requireCurrentUserId(ctx);
-    return await getCurrentUserRecordInternal(ctx, userId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    return await getCurrentUserRecordInternal(ctx, firebaseUid);
   },
 });
 
 export const upsertCurrentUserProfile = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     email: v.optional(v.string()),
     image: v.optional(v.string()),
     name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const existing = await getCurrentProfileDoc(ctx, userId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const existing = await getCurrentProfileDoc(ctx, firebaseUid);
     const now = Date.now();
     const updatedAt = new Date(now).toISOString();
 
@@ -90,33 +63,33 @@ export const upsertCurrentUserProfile = mutationGeneric({
         ...(args.email !== undefined ? { email: args.email } : {}),
         ...(args.image !== undefined ? { image: args.image } : {}),
         ...(args.name !== undefined ? { name: args.name } : {}),
+        firebaseUid,
         lastSeenAt: now,
         updatedAt,
       });
     } else {
-      const authUser = await ctx.db.get(userId);
-
       await ctx.db.insert('userProfiles', {
-        userId,
-        email: args.email ?? authUser?.email ?? undefined,
-        image: args.image ?? authUser?.image ?? undefined,
-        name: args.name ?? authUser?.name ?? undefined,
+        firebaseUid,
+        email: args.email ?? undefined,
+        image: args.image ?? undefined,
+        name: args.name ?? undefined,
         lastSeenAt: now,
         updatedAt,
       });
     }
 
-    return await getCurrentUserRecordInternal(ctx, userId);
+    return await getCurrentUserRecordInternal(ctx, firebaseUid);
   },
 });
 
 export const upsertCurrentUserLlmPreferences = mutationGeneric({
   args: {
+    firebaseUid: v.string(),
     llmPreferences: llmPreferencesValidator,
   },
   handler: async (ctx, args) => {
-    const userId = await requireCurrentUserId(ctx);
-    const existing = await getCurrentProfileDoc(ctx, userId);
+    const firebaseUid = normalizeFirebaseUid(args.firebaseUid);
+    const existing = await getCurrentProfileDoc(ctx, firebaseUid);
     const currentPreferences = (existing?.llmPreferences ?? {}) as LlmPreferences;
     const nextPreferences = {
       ...currentPreferences,
@@ -134,24 +107,21 @@ export const upsertCurrentUserLlmPreferences = mutationGeneric({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        firebaseUid,
         llmPreferences: nextPreferences,
         lastSeenAt: now,
         updatedAt,
       });
     } else {
-      const authUser = await ctx.db.get(userId);
-
       await ctx.db.insert('userProfiles', {
-        userId,
-        email: authUser?.email ?? undefined,
-        image: authUser?.image ?? undefined,
-        name: authUser?.name ?? undefined,
+        firebaseUid,
         llmPreferences: nextPreferences,
         lastSeenAt: now,
         updatedAt,
       });
     }
 
-    return await getCurrentUserRecordInternal(ctx, userId);
+    return await getCurrentUserRecordInternal(ctx, firebaseUid);
   },
 });
+
