@@ -101,6 +101,7 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           },
         });
         const payload = (await response.json()) as {
+          errorType?: string;
           message?: string;
           user?: {
             email?: string;
@@ -109,6 +110,15 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
             uid?: string;
           };
         };
+
+        if (response.status === 401 || payload.errorType === 'auth_required') {
+          if (!cancelled) {
+            setError(null);
+            setUser(null);
+          }
+
+          return;
+        }
 
         if (!response.ok || !payload.user?.uid) {
           throw new Error(payload.message || 'Failed to load account profile.');

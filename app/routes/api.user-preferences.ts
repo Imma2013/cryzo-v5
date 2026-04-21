@@ -25,7 +25,7 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in before reading preferences.',
+        message: 'Authentication required.',
       }),
       {
         status: 401,
@@ -44,7 +44,7 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
       JSON.stringify({
         error: true,
         errorType: 'auth_required',
-        message: 'Sign in before reading preferences.',
+        message: 'Authentication required.',
       }),
       {
         status: 401,

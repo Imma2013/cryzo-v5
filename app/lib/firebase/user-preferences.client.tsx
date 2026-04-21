@@ -66,6 +66,11 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
 
       const result = (await response.json()) as { message?: string; user?: FirebaseUserRecord };
 
+      if (response.status === 401) {
+        setCurrentUserRecord(null);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(result.message || 'Failed to save preferences.');
       }
@@ -110,6 +115,13 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
         });
 
         const result = (await response.json()) as { message?: string; user?: FirebaseUserRecord };
+
+        if (response.status === 401) {
+          if (!cancelled) {
+            setCurrentUserRecord(null);
+          }
+          return;
+        }
 
         if (!response.ok) {
           throw new Error(result.message || 'Failed to load user preferences.');
