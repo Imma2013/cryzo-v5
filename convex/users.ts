@@ -45,6 +45,26 @@ export const getViewerIdentity = queryGeneric({
   },
 });
 
+export const doesPasswordAccountExist = queryGeneric({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      return false;
+    }
+
+    const account = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q: any) => q.eq('provider', 'password').eq('providerAccountId', normalizedEmail))
+      .unique();
+
+    return Boolean(account);
+  },
+});
+
 export const getCurrentUserRecord = queryGeneric({
   args: {},
   handler: async (ctx) => {

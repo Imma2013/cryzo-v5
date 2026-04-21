@@ -1,6 +1,7 @@
 import { useAuthActions, useAuthToken } from '@convex-dev/auth/react';
 import { useConvexAuth } from 'convex/react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { convexClient } from '~/lib/convex/client';
 import { isConvexConfigured } from '~/lib/convex/client';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
 
@@ -154,8 +155,20 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
   const signUpWithEmail = useCallback(
     async (name: string, email: string, password: string) => {
       setError(null);
+      const normalizedEmail = email.trim().toLowerCase();
+
+      if (convexClient) {
+        const exists = await convexClient.query('users:doesPasswordAccountExist' as any, {
+          email: normalizedEmail,
+        });
+
+        if (exists) {
+          throw new Error('An account with this email already exists. Sign in instead.');
+        }
+      }
+
       await signIn('password', {
-        email: email.trim(),
+        email: normalizedEmail,
         flow: 'signUp',
         name: name.trim(),
         password,
