@@ -25,12 +25,32 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
     return 'This email is already linked to another sign-in method. Sign in with that method.';
   }
 
+  if (code === 'auth/unauthorized-domain') {
+    return 'This domain is not authorized for Firebase sign-in. Add it under Firebase Auth authorized domains.';
+  }
+
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'Google sign-in is unavailable in this browser context.';
+  }
+
+  if (code === 'auth/web-storage-unsupported') {
+    return 'Browser storage is unavailable. Enable cookies and local storage, then try again.';
+  }
+
+  if (code === 'auth/network-request-failed') {
+    return 'Network error during authentication. Check your connection and try again.';
+  }
+
+  if (code === 'auth/redirect-cancelled-by-user') {
+    return 'Google sign-in was cancelled before completion.';
+  }
+
   if (code === 'auth/popup-closed-by-user') {
-    return 'Google sign-in popup was closed before completion.';
+    return 'Google sign-in was closed before completion.';
   }
 
   if (code === 'auth/popup-blocked') {
-    return 'Popup blocked by browser. Allow popups and try Google sign-in again.';
+    return 'Google sign-in popup was blocked by the browser.';
   }
 
   if (normalized.includes('invalid credentials') || normalized.includes('wrong password')) {

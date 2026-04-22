@@ -52,8 +52,8 @@ describe('entry.server', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('text/html');
-    expect(response.headers.get('Cross-Origin-Embedder-Policy')).toBeNull();
-    expect(response.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
+    expect(response.headers.get('Cross-Origin-Embedder-Policy')).toBe('credentialless');
+    expect(response.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin');
 
     const body = await response.text();
 

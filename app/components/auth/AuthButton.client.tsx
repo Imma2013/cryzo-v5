@@ -13,7 +13,7 @@ function getInitials(label: string) {
 }
 
 export function AuthButton() {
-  const { error, isConfigured, isLoading, signOutUser, user } = useFirebaseAuth();
+  const { isConfigured, isLoading, signOutUser, user } = useFirebaseAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const identityLabel = useMemo(() => {
@@ -38,20 +38,12 @@ export function AuthButton() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-2">
-        {error && (
-          <span className="max-w-[18rem] truncate text-xs text-bolt-elements-textSecondary" title={error}>
-            {error}
-          </span>
-        )}
-        <Button className="h-10 rounded-full px-4" onClick={() => window.location.reload()} variant="outline">
-          Retry
-        </Button>
+      <>
         <Button className="h-10 rounded-full px-4" onClick={() => setIsOpen(true)} variant="outline">
           Sign In
         </Button>
         <AuthDialog onOpenChange={setIsOpen} open={isOpen} />
-      </div>
+      </>
     );
   }
 

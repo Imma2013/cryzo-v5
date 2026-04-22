@@ -1,8 +1,9 @@
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onIdTokenChanged,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -14,9 +15,6 @@ import {
   waitForFirebaseAuthReady as waitForFirebaseAuthClientReady,
 } from './firebase-client';
 import { getFirebaseAuthErrorMessage } from './firebase-errors';
-
-export type GoogleSignInMethod = 'popup';
-export const SESSION_BOOTSTRAP_TIMEOUT_MESSAGE = 'Session check took too long.';
 
 export interface AuthUser {
   displayName?: string;
@@ -38,10 +36,7 @@ export function getCurrentAuthAccessToken() {
 interface FirebaseAuthContextValue {
   error: string | null;
   getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
-  googleSignInMethod: GoogleSignInMethod;
-  hostSupportMessage: string | null;
   isConfigured: boolean;
-  isHostSupported: boolean;
   isLoading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -55,10 +50,7 @@ const FirebaseAuthContext = createContext<FirebaseAuthContextValue | null>(null)
 const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
   error: null,
   getAccessToken: async () => null,
-  googleSignInMethod: 'popup',
-  hostSupportMessage: null,
   isConfigured: isFirebaseConfigured,
-  isHostSupported: true,
   isLoading: false,
   signInWithEmail: async () => {
     throw new Error('Auth provider is not configured.');
@@ -104,12 +96,19 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           return;
         }
 
+        try {
+          await getRedirectResult(auth);
+        } catch (redirectError) {
+          if (!cancelled) {
+            setError(normalizeAuthError(redirectError));
+          }
+        }
+
         unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
           if (!nextUser) {
             if (!cancelled) {
               currentAccessToken = null;
               setAuthToken(null);
-              setError(null);
               setUser(null);
               setIsAuthStateLoading(false);
             }
@@ -278,7 +277,7 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
       throw new Error('Firebase auth is not configured.');
     }
 
-    await signInWithPopup(auth, getFirebaseGoogleProvider());
+    await signInWithRedirect(auth, getFirebaseGoogleProvider());
   }, []);
 
   const signOutUser = useCallback(async () => {
@@ -323,10 +322,7 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     () => ({
       error,
       getAccessToken,
-      googleSignInMethod: 'popup',
-      hostSupportMessage: null,
       isConfigured: true,
-      isHostSupported: true,
       isLoading: isAuthStateLoading || (Boolean(authToken) && isProfileLoading),
       signInWithEmail: async (email, password) => {
         try {
@@ -337,7 +333,15 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           throw new Error(message);
         }
       },
-      signInWithGoogle,
+      signInWithGoogle: async () => {
+        try {
+          await signInWithGoogle();
+        } catch (authError) {
+          const message = normalizeAuthError(authError);
+          setError(message);
+          throw new Error(message);
+        }
+      },
       signOutUser: async () => {
         try {
           await signOutUser();

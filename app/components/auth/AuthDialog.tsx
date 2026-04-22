@@ -136,7 +136,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
                   type="button"
                   variant="outline"
                 >
-                  {pendingAction === 'google' ? 'Working...' : 'Continue with Google'}
+                  {pendingAction === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
                 </Button>
                 <Button
                   className="h-11 w-full bg-white text-black hover:bg-neutral-200"
