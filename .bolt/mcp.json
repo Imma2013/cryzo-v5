@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "composip": {
+      "enabled": true
+    }
+  }
+}
