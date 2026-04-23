@@ -6,6 +6,7 @@ import {
   waitForSupabaseAuthReady as waitForAuthClientReady,
 } from './supabase-client';
 import { getSupabaseAuthErrorMessage } from './supabase-errors';
+import { buildGoogleAuthRedirectTo } from './redirect-path';
 
 export interface AuthUser {
   displayName?: string;
@@ -30,7 +31,7 @@ interface SupabaseAuthContextValue {
   isConfigured: boolean;
   isLoading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (nextPath?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   signUpWithEmail: (name: string, email: string, password: string) => Promise<void>;
   user: AuthUser | null;
@@ -286,7 +287,7 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     [],
   );
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (nextPath?: string) => {
     setError(null);
     await waitForAuthClientReady();
 
@@ -299,7 +300,7 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: getSupabaseGoogleProvider(),
       options: {
-        redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
+        redirectTo: buildGoogleAuthRedirectTo(nextPath),
       },
     });
 
@@ -375,9 +376,9 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           throw new Error(message);
         }
       },
-      signInWithGoogle: async () => {
+      signInWithGoogle: async (nextPath?: string) => {
         try {
-          await signInWithGoogle();
+          await signInWithGoogle(nextPath);
         } catch (authError) {
           const message = normalizeAuthError(authError);
           setError(message);

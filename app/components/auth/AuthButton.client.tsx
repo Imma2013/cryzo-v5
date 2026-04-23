@@ -39,8 +39,12 @@ export function AuthButton() {
   if (!user) {
     return (
       <>
-        <Button className="h-10 rounded-full px-4" onClick={() => setIsOpen(true)} variant="outline">
-          Sign In
+        <Button
+          className="h-10 rounded-full border-0 bg-white px-5 text-sm font-semibold text-black hover:bg-neutral-200"
+          onClick={() => setIsOpen(true)}
+          variant="outline"
+        >
+          Get started
         </Button>
         <AuthDialog onOpenChange={setIsOpen} open={isOpen} />
       </>

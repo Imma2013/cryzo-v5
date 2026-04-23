@@ -27,6 +27,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
 
   const authError = localError ?? error;
   const isPending = pendingAction !== null || isLoading;
+  const isEmailSubmitDisabled = isPending || !email || !password || (mode === 'signup' && !name.trim());
 
   const handleEmailAuth = async () => {
     setPendingAction('email');
@@ -50,7 +51,9 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     setLocalError(null);
 
     try {
-      await signInWithGoogle();
+      const nextPath =
+        typeof window === 'undefined' ? '/' : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      await signInWithGoogle(nextPath);
     } catch (authFailure) {
       setLocalError(getSupabaseAuthErrorMessage(authFailure));
     } finally {
@@ -60,12 +63,16 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
 
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <Dialog className="w-[min(92vw,30rem)]">
+      <Dialog className="w-[min(94vw,30rem)]">
         <div className="space-y-5 p-6">
-          <div className="space-y-1">
-            <DialogTitle className="text-2xl font-semibold">Sign in to Cryzo</DialogTitle>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-bolt-elements-textSecondary">Start building.</p>
+            <DialogTitle className="text-3xl font-semibold leading-tight">
+              {mode === 'signup' ? 'Create free account' : 'Welcome back'}
+            </DialogTitle>
             <DialogDescription>
-              Create an account or sign in to use Cryzo. Authentication and synced data are powered by Supabase.
+              Sign in with Google first, or use your email as a fallback. Authentication and synced data are powered by
+              Supabase.
             </DialogDescription>
           </div>
 
@@ -75,6 +82,27 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
             </div>
           ) : (
             <>
+              <Button
+                className="h-12 w-full justify-start gap-3 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background px-4 text-left text-bolt-elements-textPrimary hover:bg-bolt-elements-background-depth-2"
+                disabled={isPending}
+                onClick={handleGoogleAuth}
+                type="button"
+                variant="outline"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-bolt-elements-borderColor bg-white text-base font-semibold text-black">
+                  G
+                </span>
+                <span className="text-sm font-medium">
+                  {pendingAction === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
+                </span>
+              </Button>
+
+              <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-bolt-elements-textSecondary">
+                <span className="h-px flex-1 bg-bolt-elements-borderColor" />
+                <span>Or continue with email</span>
+                <span className="h-px flex-1 bg-bolt-elements-borderColor" />
+              </div>
+
               <div className="grid grid-cols-2 gap-2 rounded-xl border border-bolt-elements-borderColor p-1">
                 <button
                   className={`rounded-lg px-3 py-2 text-sm transition-colors ${
@@ -127,26 +155,15 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
 
               {authError && <p className="text-sm text-red-500">{authError}</p>}
 
-              <div className="space-y-3">
-                <Button
-                  className="h-11 w-full"
-                  disabled={isPending}
-                  onClick={handleGoogleAuth}
-                  type="button"
-                  variant="outline"
-                >
-                  {pendingAction === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
-                </Button>
-                <Button
-                  className="h-11 w-full bg-white text-black hover:bg-neutral-200"
-                  disabled={isPending || !email || !password || (mode === 'signup' && !name.trim())}
-                  onClick={handleEmailAuth}
-                  type="button"
-                  variant="outline"
-                >
-                  {pendingAction === 'email' ? 'Working...' : mode === 'signup' ? 'Create account' : 'Sign in'}
-                </Button>
-              </div>
+              <Button
+                className="h-11 w-full rounded-xl bg-white text-black hover:bg-neutral-200"
+                disabled={isEmailSubmitDisabled}
+                onClick={handleEmailAuth}
+                type="button"
+                variant="outline"
+              >
+                {pendingAction === 'email' ? 'Working...' : mode === 'signup' ? 'Create account' : 'Sign in'}
+              </Button>
             </>
           )}
         </div>
