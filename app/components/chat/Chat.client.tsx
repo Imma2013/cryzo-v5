@@ -505,6 +505,10 @@ export const ChatImpl = memo(
         return;
       }
 
+      if (isLoading) {
+        return;
+      }
+
       if (!user) {
         setLlmErrorAlert({
           type: 'error',
@@ -516,8 +520,20 @@ export const ChatImpl = memo(
         return;
       }
 
+      const token = await getAccessToken();
+
+      if (!token) {
+        setLlmErrorAlert({
+          type: 'error',
+          title: 'Sign-In Required',
+          description: 'Sign in before sending chat requests.',
+          provider: 'Cryzo',
+          errorType: 'auth_required',
+        });
+        return;
+      }
+
       if (isLoading) {
-        abort();
         return;
       }
 

@@ -225,6 +225,10 @@ export function useChatHistory() {
     }
 
     if (!user) {
+      if (isAuthLoading) {
+        return;
+      }
+
       setArchivedMessages([]);
       setInitialMessages([]);
       setUrlId(undefined);

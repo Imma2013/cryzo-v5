@@ -17,7 +17,12 @@ export default function AuthCallbackRoute() {
         const supabase = getSupabaseAuthClient();
 
         if (supabase) {
-          await supabase.auth.getSession();
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          // If we have a session, wait a tiny bit for the auth state to propagate
+          if (session) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
         }
 
         if (!cancelled && typeof window !== 'undefined') {
