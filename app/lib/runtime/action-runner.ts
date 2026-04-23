@@ -208,8 +208,8 @@ async function getAuthHeaderForImageRequest() {
   }
 
   try {
-    const { getCurrentAuthAccessToken } = await import('~/lib/auth/firebase-auth');
-    const token = getCurrentAuthAccessToken();
+    const { getCurrentSupabaseAccessToken } = await import('~/lib/auth/supabase-auth');
+    const token = getCurrentSupabaseAccessToken();
 
     if (!token) {
       return undefined;

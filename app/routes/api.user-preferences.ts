@@ -1,11 +1,11 @@
 import { type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
-import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
+import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 import {
   getCurrentUserRecord,
   upsertCurrentUserLlmPreferences,
   upsertCurrentUserProfile,
-  type FirestoreLlmPreferences,
-} from '~/lib/firebase/firestore-store.server';
+  type SupabaseLlmPreferences,
+} from '~/lib/supabase/supabase-store.server';
 import { getServerEnv } from '~/lib/server-env';
 
 function jsonResponse(payload: unknown, status = 200) {
@@ -17,7 +17,7 @@ function jsonResponse(payload: unknown, status = 200) {
   });
 }
 
-async function requireFirebaseAuth(request: Request, serverEnv: Record<string, string | undefined>) {
+async function requireSupabaseAuth(request: Request, serverEnv: Record<string, string | undefined>) {
   const token = getBearerTokenFromAuthorizationHeader(request.headers.get('Authorization'));
 
   if (!token) {
@@ -37,8 +37,8 @@ async function requireFirebaseAuth(request: Request, serverEnv: Record<string, s
   }
 
   try {
-    const verified = await verifyFirebaseIdToken(token, serverEnv as any);
-    return { verified };
+    const verified = await verifySupabaseAccessToken(token, serverEnv as any);
+    return { accessToken: token, verified };
   } catch {
     throw new Response(
       JSON.stringify({
@@ -60,8 +60,8 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const { verified } = await requireFirebaseAuth(request, serverEnv);
-    const current = await getCurrentUserRecord(serverEnv, verified.uid);
+    const { verified, accessToken } = await requireSupabaseAuth(request, serverEnv);
+    const current = await getCurrentUserRecord(serverEnv, verified.uid, accessToken);
 
     return jsonResponse({
       user: current ?? {
@@ -85,7 +85,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
 }
 
 type UserPreferencesRequest = {
-  llmPreferences?: FirestoreLlmPreferences;
+  llmPreferences?: SupabaseLlmPreferences;
   profile?: {
     email?: string;
     image?: string;
@@ -101,20 +101,20 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const serverEnv = getServerEnv(context as any);
 
   try {
-    const { verified } = await requireFirebaseAuth(request, serverEnv);
+    const { verified, accessToken } = await requireSupabaseAuth(request, serverEnv);
     const body = (await request.json()) as UserPreferencesRequest;
 
-    await upsertCurrentUserProfile(serverEnv, verified.uid, {
+    await upsertCurrentUserProfile(serverEnv, verified.uid, accessToken, {
       email: body.profile?.email ?? verified.email,
       image: body.profile?.image ?? verified.image,
       name: body.profile?.name ?? verified.name,
     });
 
     if (body.llmPreferences) {
-      await upsertCurrentUserLlmPreferences(serverEnv, verified.uid, body.llmPreferences);
+      await upsertCurrentUserLlmPreferences(serverEnv, verified.uid, accessToken, body.llmPreferences);
     }
 
-    const current = await getCurrentUserRecord(serverEnv, verified.uid);
+    const current = await getCurrentUserRecord(serverEnv, verified.uid, accessToken);
     return jsonResponse({ ok: true, user: current });
   } catch (error) {
     if (error instanceof Response) {

@@ -1,10 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { isFirebaseConfigured } from '~/lib/auth/firebase-client';
-import { isConvexConfigured } from '~/lib/convex/client';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
+import { isSupabaseConfigured } from '~/lib/auth/supabase-client';
 import type { IProviderSetting } from '~/types/model';
 
-export const isFirebaseSyncConfigured = isFirebaseConfigured && isConvexConfigured;
+export const isSupabaseSyncConfigured = isSupabaseConfigured;
 
 interface LlmPreferencesPayload {
   providerSettings?: Record<string, IProviderSetting>;
@@ -12,7 +11,7 @@ interface LlmPreferencesPayload {
   selectedModel?: string;
 }
 
-interface FirebaseUserRecord {
+interface SupabaseUserRecord {
   email?: string;
   image?: string;
   llmPreferences?: LlmPreferencesPayload;
@@ -20,25 +19,25 @@ interface FirebaseUserRecord {
   uid?: string;
 }
 
-interface FirebaseUserPreferencesContextValue {
-  currentUserRecord?: FirebaseUserRecord | null;
+interface SupabaseUserPreferencesContextValue {
+  currentUserRecord?: SupabaseUserRecord | null;
   isSyncAvailable: boolean;
   saveLlmPreferences: (payload: LlmPreferencesPayload) => Promise<void>;
 }
 
-const fallbackFirebaseUserPreferencesContextValue: FirebaseUserPreferencesContextValue = {
+const fallbackSupabaseUserPreferencesContextValue: SupabaseUserPreferencesContextValue = {
   currentUserRecord: undefined,
   isSyncAvailable: false,
   saveLlmPreferences: async () => {},
 };
 
-const FirebaseUserPreferencesContext = createContext<FirebaseUserPreferencesContextValue>(
-  fallbackFirebaseUserPreferencesContextValue,
+const SupabaseUserPreferencesContext = createContext<SupabaseUserPreferencesContextValue>(
+  fallbackSupabaseUserPreferencesContextValue,
 );
 
-function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken, isLoading, user } = useFirebaseAuth();
-  const [currentUserRecord, setCurrentUserRecord] = useState<FirebaseUserRecord | null | undefined>(undefined);
+function SupabaseUserPreferencesProvider({ children }: { children: ReactNode }) {
+  const { getAccessToken, isLoading, user } = useSupabaseAuth();
+  const [currentUserRecord, setCurrentUserRecord] = useState<SupabaseUserRecord | null | undefined>(undefined);
 
   const saveLlmPreferences = useCallback(
     async (payload: LlmPreferencesPayload) => {
@@ -65,7 +64,7 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
         }),
       });
 
-      const result = (await response.json()) as { message?: string; user?: FirebaseUserRecord };
+      const result = (await response.json()) as { message?: string; user?: SupabaseUserRecord };
 
       if (response.status === 401) {
         setCurrentUserRecord(null);
@@ -115,7 +114,7 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
           },
         });
 
-        const result = (await response.json()) as { message?: string; user?: FirebaseUserRecord };
+        const result = (await response.json()) as { message?: string; user?: SupabaseUserRecord };
 
         if (response.status === 401) {
           if (!cancelled) {
@@ -144,22 +143,22 @@ function FirebaseUserPreferencesProvider({ children }: { children: ReactNode }) 
     };
   }, [getAccessToken, isLoading, user]);
 
-  const value = useMemo<FirebaseUserPreferencesContextValue>(
+  const value = useMemo<SupabaseUserPreferencesContextValue>(
     () => ({
       currentUserRecord,
-      isSyncAvailable: isFirebaseSyncConfigured,
+      isSyncAvailable: isSupabaseSyncConfigured,
       saveLlmPreferences,
     }),
     [currentUserRecord, saveLlmPreferences],
   );
 
-  return <FirebaseUserPreferencesContext.Provider value={value}>{children}</FirebaseUserPreferencesContext.Provider>;
+  return <SupabaseUserPreferencesContext.Provider value={value}>{children}</SupabaseUserPreferencesContext.Provider>;
 }
 
-export function useFirebaseUserPreferences() {
-  return useContext(FirebaseUserPreferencesContext);
+export function useSupabaseUserPreferences() {
+  return useContext(SupabaseUserPreferencesContext);
 }
 
-export function FirebaseAppProvider({ children }: { children: ReactNode }) {
-  return <FirebaseUserPreferencesProvider>{children}</FirebaseUserPreferencesProvider>;
+export function SupabaseAppProvider({ children }: { children: ReactNode }) {
+  return <SupabaseUserPreferencesProvider>{children}</SupabaseUserPreferencesProvider>;
 }

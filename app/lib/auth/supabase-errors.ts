@@ -1,4 +1,4 @@
-export function getFirebaseAuthErrorMessage(error: unknown) {
+export function getSupabaseAuthErrorMessage(error: unknown) {
   const code =
     error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
       ? (error as { code: string }).code.toLowerCase()
@@ -9,15 +9,19 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
       : '';
   const normalized = message.toLowerCase();
 
-  if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+  if (
+    code === 'auth/invalid-credential' ||
+    code === 'auth/invalid-login-credentials' ||
+    code === 'invalid_credentials'
+  ) {
     return 'Invalid email or password.';
   }
 
-  if (code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'user_not_found') {
     return 'Invalid email or password.';
   }
 
-  if (code === 'auth/email-already-in-use') {
+  if (code === 'auth/email-already-in-use' || code === 'email_exists') {
     return 'An account with this email already exists. Sign in instead.';
   }
 
@@ -25,8 +29,12 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
     return 'This email is already linked to another sign-in method. Sign in with that method.';
   }
 
+  if (code === 'email_not_confirmed') {
+    return 'Email confirmation is required before signing in.';
+  }
+
   if (code === 'auth/unauthorized-domain') {
-    return 'This domain is not authorized for Firebase sign-in. Add it under Firebase Auth authorized domains.';
+    return 'This domain is not authorized for sign-in. Add it in Supabase Auth URL settings.';
   }
 
   if (code === 'auth/operation-not-supported-in-this-environment') {
@@ -51,6 +59,14 @@ export function getFirebaseAuthErrorMessage(error: unknown) {
 
   if (code === 'auth/popup-blocked') {
     return 'Google sign-in popup was blocked by the browser.';
+  }
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'Invalid email or password.';
+  }
+
+  if (normalized.includes('email not confirmed')) {
+    return 'Email confirmation is required before signing in.';
   }
 
   if (normalized.includes('invalid credentials') || normalized.includes('wrong password')) {

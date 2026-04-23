@@ -26,8 +26,8 @@ import type { IProviderSetting, ProviderInfo, IProviderConfig } from '~/types/mo
 import type { TabWindowConfig } from '~/components/@settings/core/types';
 import { logStore } from '~/lib/stores/logs';
 import { getLocalStorage, setLocalStorage } from '~/lib/persistence';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { useFirebaseUserPreferences } from '~/lib/firebase/user-preferences.client';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
+import { useSupabaseUserPreferences } from '~/lib/supabase/user-preferences.client';
 
 export interface Settings {
   theme: 'light' | 'dark' | 'system';
@@ -92,8 +92,8 @@ export function useSettings(): UseSettingsReturn {
   const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
-  const { isLoading: isAuthLoading, user } = useFirebaseAuth();
-  const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useFirebaseUserPreferences();
+  const { isLoading: isAuthLoading, user } = useSupabaseAuth();
+  const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
   const isSignedInSyncMode = Boolean(user) && isSyncAvailable;
   const [providersReady, setProvidersReady] = useState(false);
   const [syncReadinessTimedOut, setSyncReadinessTimedOut] = useState(false);

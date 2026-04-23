@@ -3,7 +3,7 @@ import { generateGoogleImage } from '~/lib/.server/images/google-image-generatio
 import { getServerEnv } from '~/lib/server-env';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
-import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
+import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 
 type GenerateImageRequest = Parameters<typeof generateGoogleImage>[0] & {
   prompt?: string;
@@ -25,9 +25,9 @@ export async function action({ context, request }: ActionFunctionArgs) {
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
   const authHeader = request.headers.get('Authorization');
-  const firebaseIdToken = getBearerTokenFromAuthorizationHeader(authHeader);
+  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
 
-  if (!firebaseIdToken) {
+  if (!accessToken) {
     return new Response(
       JSON.stringify({
         error: true,
@@ -48,7 +48,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
   }
 
   try {
-    await verifyFirebaseIdToken(firebaseIdToken, serverEnv as any);
+    await verifySupabaseAccessToken(accessToken, serverEnv as any);
   } catch {
     return new Response(
       JSON.stringify({

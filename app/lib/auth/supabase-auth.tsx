@@ -1,20 +1,11 @@
-import {
-  createUserWithEmailAndPassword,
-  getRedirectResult,
-  onIdTokenChanged,
-  signInWithEmailAndPassword,
-  signInWithRedirect,
-  signOut,
-  updateProfile,
-} from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  getFirebaseAuthInstance,
-  getFirebaseGoogleProvider,
-  isFirebaseConfigured,
-  waitForFirebaseAuthReady as waitForFirebaseAuthClientReady,
-} from './firebase-client';
-import { getFirebaseAuthErrorMessage } from './firebase-errors';
+  getSupabaseAuthClient,
+  getSupabaseGoogleProvider,
+  isSupabaseConfigured,
+  waitForSupabaseAuthReady as waitForAuthClientReady,
+} from './supabase-client';
+import { getSupabaseAuthErrorMessage } from './supabase-errors';
 
 export interface AuthUser {
   displayName?: string;
@@ -23,17 +14,17 @@ export interface AuthUser {
   uid: string;
 }
 
-export async function waitForFirebaseAuthReady() {
-  return await waitForFirebaseAuthClientReady();
+export async function waitForSupabaseAuthReady() {
+  return await waitForAuthClientReady();
 }
 
 let currentAccessToken: string | null = null;
 
-export function getCurrentAuthAccessToken() {
+export function getCurrentSupabaseAccessToken() {
   return currentAccessToken;
 }
 
-interface FirebaseAuthContextValue {
+interface SupabaseAuthContextValue {
   error: string | null;
   getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
   isConfigured: boolean;
@@ -45,12 +36,12 @@ interface FirebaseAuthContextValue {
   user: AuthUser | null;
 }
 
-const FirebaseAuthContext = createContext<FirebaseAuthContextValue | null>(null);
+const SupabaseAuthContext = createContext<SupabaseAuthContextValue | null>(null);
 
-const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
+const fallbackSupabaseAuthContextValue: SupabaseAuthContextValue = {
   error: null,
   getAccessToken: async () => null,
-  isConfigured: isFirebaseConfigured,
+  isConfigured: isSupabaseConfigured,
   isLoading: false,
   signInWithEmail: async () => {
     throw new Error('Auth provider is not configured.');
@@ -66,10 +57,10 @@ const fallbackFirebaseAuthContextValue: FirebaseAuthContextValue = {
 };
 
 function normalizeAuthError(error: unknown) {
-  return getFirebaseAuthErrorMessage(error);
+  return getSupabaseAuthErrorMessage(error);
 }
 
-function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
+function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isAuthStateLoading, setIsAuthStateLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +73,10 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        await waitForFirebaseAuthClientReady();
-        const auth = getFirebaseAuthInstance();
+        await waitForAuthClientReady();
+        const supabase = getSupabaseAuthClient();
 
-        if (!auth) {
+        if (!supabase) {
           if (!cancelled) {
             currentAccessToken = null;
             setAuthToken(null);
@@ -96,15 +87,38 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
           return;
         }
 
-        try {
-          await getRedirectResult(auth);
-        } catch (redirectError) {
-          if (!cancelled) {
-            setError(normalizeAuthError(redirectError));
-          }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!cancelled) {
+          const initialUser = session?.user ?? null;
+          const initialToken = session?.access_token ?? null;
+          currentAccessToken = initialToken;
+          setAuthToken(initialToken);
+          setUser(
+            initialUser
+              ? {
+                  displayName:
+                    (initialUser.user_metadata?.full_name as string | undefined) ??
+                    (initialUser.user_metadata?.name as string | undefined) ??
+                    undefined,
+                  email: initialUser.email ?? undefined,
+                  photoURL:
+                    (initialUser.user_metadata?.avatar_url as string | undefined) ??
+                    (initialUser.user_metadata?.picture as string | undefined) ??
+                    undefined,
+                  uid: initialUser.id,
+                }
+              : null,
+          );
+          setIsAuthStateLoading(false);
         }
 
-        unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((_event: unknown, nextSession: any) => {
+          const nextUser = nextSession?.user ?? null;
+          const nextToken = nextSession?.access_token ?? null;
+
           if (!nextUser) {
             if (!cancelled) {
               currentAccessToken = null;
@@ -115,33 +129,27 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
             return;
           }
 
-          try {
-            const nextToken = await nextUser.getIdToken();
-
-            if (!cancelled) {
-              currentAccessToken = nextToken;
-              setAuthToken(nextToken);
-              setError(null);
-              setUser({
-                displayName: nextUser.displayName ?? undefined,
-                email: nextUser.email ?? undefined,
-                photoURL: nextUser.photoURL ?? undefined,
-                uid: nextUser.uid,
-              });
-            }
-          } catch (tokenError) {
-            if (!cancelled) {
-              currentAccessToken = null;
-              setAuthToken(null);
-              setError(normalizeAuthError(tokenError));
-              setUser(null);
-            }
-          } finally {
-            if (!cancelled) {
-              setIsAuthStateLoading(false);
-            }
+          if (!cancelled) {
+            currentAccessToken = nextToken;
+            setAuthToken(nextToken);
+            setError(null);
+            setUser({
+              displayName:
+                (nextUser.user_metadata?.full_name as string | undefined) ??
+                (nextUser.user_metadata?.name as string | undefined) ??
+                undefined,
+              email: nextUser.email ?? undefined,
+              photoURL:
+                (nextUser.user_metadata?.avatar_url as string | undefined) ??
+                (nextUser.user_metadata?.picture as string | undefined) ??
+                undefined,
+              uid: nextUser.id,
+            });
+            setIsAuthStateLoading(false);
           }
         });
+
+        unsubscribe = () => authListener.subscription.unsubscribe();
       } catch (authBootstrapError) {
         if (!cancelled) {
           currentAccessToken = null;
@@ -230,15 +238,22 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       setError(null);
-      await waitForFirebaseAuthClientReady();
+      await waitForAuthClientReady();
 
-      const auth = getFirebaseAuthInstance();
+      const supabase = getSupabaseAuthClient();
 
-      if (!auth) {
-        throw new Error('Firebase auth is not configured.');
+      if (!supabase) {
+        throw new Error('Supabase auth is not configured.');
       }
 
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
     },
     [],
   );
@@ -247,70 +262,97 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     async (name: string, email: string, password: string) => {
       setError(null);
       const normalizedEmail = email.trim().toLowerCase();
-      await waitForFirebaseAuthClientReady();
+      await waitForAuthClientReady();
 
-      const auth = getFirebaseAuthInstance();
+      const supabase = getSupabaseAuthClient();
 
-      if (!auth) {
-        throw new Error('Firebase auth is not configured.');
+      if (!supabase) {
+        throw new Error('Supabase auth is not configured.');
       }
 
-      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       const trimmedName = name.trim();
+      const { error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: trimmedName ? { name: trimmedName } : undefined,
+        },
+      });
 
-      if (trimmedName) {
-        await updateProfile(credential.user, { displayName: trimmedName });
+      if (error) {
+        throw error;
       }
-
-      await credential.user.getIdToken(true);
     },
     [],
   );
 
   const signInWithGoogle = useCallback(async () => {
     setError(null);
-    await waitForFirebaseAuthClientReady();
+    await waitForAuthClientReady();
 
-    const auth = getFirebaseAuthInstance();
+    const supabase = getSupabaseAuthClient();
 
-    if (!auth) {
-      throw new Error('Firebase auth is not configured.');
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured.');
     }
 
-    await signInWithRedirect(auth, getFirebaseGoogleProvider());
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: getSupabaseGoogleProvider(),
+      options: {
+        redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
   }, []);
 
   const signOutUser = useCallback(async () => {
     setError(null);
-    const auth = getFirebaseAuthInstance();
+    const supabase = getSupabaseAuthClient();
 
-    if (!auth) {
+    if (!supabase) {
       currentAccessToken = null;
       setAuthToken(null);
       setUser(null);
       return;
     }
 
-    await signOut(auth);
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      throw error;
+    }
   }, []);
 
   const getAccessToken = useCallback(
     async (forceRefresh?: boolean) => {
-      if (!isFirebaseConfigured) {
+      if (!isSupabaseConfigured) {
         currentAccessToken = null;
         return null;
       }
 
-      await waitForFirebaseAuthClientReady();
-      const auth = getFirebaseAuthInstance();
-      const authUser = auth?.currentUser;
+      await waitForAuthClientReady();
+      const supabase = getSupabaseAuthClient();
 
-      if (!authUser) {
+      if (!supabase) {
         currentAccessToken = null;
         return null;
       }
 
-      const token = await authUser.getIdToken(Boolean(forceRefresh));
+      if (forceRefresh) {
+        const { error } = await supabase.auth.refreshSession();
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
       currentAccessToken = token;
       setAuthToken(token);
       return token;
@@ -318,7 +360,7 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     [setAuthToken],
   );
 
-  const value = useMemo<FirebaseAuthContextValue>(
+  const value = useMemo<SupabaseAuthContextValue>(
     () => ({
       error,
       getAccessToken,
@@ -365,18 +407,18 @@ function FirebaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     [authToken, error, getAccessToken, isAuthStateLoading, isProfileLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
   );
 
-  return <FirebaseAuthContext.Provider value={value}>{children}</FirebaseAuthContext.Provider>;
+  return <SupabaseAuthContext.Provider value={value}>{children}</SupabaseAuthContext.Provider>;
 }
 
-export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
-  if (!isFirebaseConfigured) {
-    return <FirebaseAuthContext.Provider value={fallbackFirebaseAuthContextValue}>{children}</FirebaseAuthContext.Provider>;
+export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
+  if (!isSupabaseConfigured) {
+    return <SupabaseAuthContext.Provider value={fallbackSupabaseAuthContextValue}>{children}</SupabaseAuthContext.Provider>;
   }
 
-  return <FirebaseAuthProviderConfigured>{children}</FirebaseAuthProviderConfigured>;
+  return <SupabaseAuthProviderConfigured>{children}</SupabaseAuthProviderConfigured>;
 }
 
-export function useFirebaseAuth() {
-  const context = useContext(FirebaseAuthContext);
-  return context ?? fallbackFirebaseAuthContextValue;
+export function useSupabaseAuth() {
+  const context = useContext(SupabaseAuthContext);
+  return context ?? fallbackSupabaseAuthContextValue;
 }

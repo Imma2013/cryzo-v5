@@ -16,7 +16,7 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
-import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
+import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 import {
   isGoogleProvider,
   logGoogleServerKeyResolution,
@@ -40,9 +40,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const requestOrigin = new URL(request.url).origin;
   const serverEnv = getServerEnv(context as any);
   const authHeader = request.headers.get('Authorization');
-  const firebaseIdToken = getBearerTokenFromAuthorizationHeader(authHeader);
+  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
 
-  if (!firebaseIdToken) {
+  if (!accessToken) {
     return new Response(
       JSON.stringify({
         error: true,
@@ -60,10 +60,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     );
   }
 
-  let verifiedAuth: Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
+  let verifiedAuth: Awaited<ReturnType<typeof verifySupabaseAccessToken>>;
 
   try {
-    verifiedAuth = await verifyFirebaseIdToken(firebaseIdToken, serverEnv);
+    verifiedAuth = await verifySupabaseAccessToken(accessToken, serverEnv);
   } catch (error) {
     logger.warn('Auth token verification failed for /api/chat', error);
 

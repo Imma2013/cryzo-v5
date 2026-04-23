@@ -12,7 +12,7 @@ import {
   APPS_VIEW_QUERY_VALUE,
   COMPOSIO_GUEST_ID_STORAGE_KEY,
 } from '~/components/apps/apps.constants';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
@@ -164,7 +164,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [activeMainView, setActiveMainView] = useState<'chat' | 'apps'>('chat');
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
-    const { user } = useFirebaseAuth();
+    const { user } = useSupabaseAuth();
     const composioUserId = user?.uid || localGuestId;
     const selectedModelLabel = modelList.find((entry) => entry.name === model)?.label;
     const collapsedModelLabel = selectedModelLabel || model || provider?.name || 'Engine';

@@ -4,7 +4,7 @@ import { getServerEnv } from '~/lib/server-env';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
-import { getBearerTokenFromAuthorizationHeader, verifyFirebaseIdToken } from '~/lib/auth/firebase-server';
+import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 
 type GeminiPart = {
   text?: string;
@@ -60,9 +60,9 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
   const authHeader = request.headers.get('Authorization');
-  const firebaseIdToken = getBearerTokenFromAuthorizationHeader(authHeader);
+  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
 
-  if (!firebaseIdToken) {
+  if (!accessToken) {
     return new Response(
       JSON.stringify({
         error: true,
@@ -83,7 +83,7 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   }
 
   try {
-    await verifyFirebaseIdToken(firebaseIdToken, serverEnv as any);
+    await verifySupabaseAccessToken(accessToken, serverEnv as any);
   } catch {
     return new Response(
       JSON.stringify({

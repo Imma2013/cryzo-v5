@@ -9,7 +9,7 @@ import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 
 export interface ChatHistoryItem {
   id: string;
@@ -26,7 +26,7 @@ export interface IChatMetadata {
   netlifySiteId?: string;
 }
 
-type FirebaseChatRecord = {
+type SupabaseChatRecord = {
   routeId: string;
   description?: string;
   messages: Message[];
@@ -88,7 +88,7 @@ function buildArchivedMessagesPayload(
   };
 }
 
-function mergeChatRecord(records: FirebaseChatRecord[] | undefined, nextRecord: FirebaseChatRecord) {
+function mergeChatRecord(records: SupabaseChatRecord[] | undefined, nextRecord: SupabaseChatRecord) {
   const next = records ? [...records] : [];
   const existingIndex = next.findIndex((record) => record.routeId === nextRecord.routeId);
 
@@ -111,9 +111,9 @@ export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
-  const { getAccessToken, isLoading: isAuthLoading, user } = useFirebaseAuth();
-  const [listChats, setListChats] = useState<FirebaseChatRecord[] | undefined>(undefined);
-  const [currentChat, setCurrentChat] = useState<FirebaseChatRecord | null | undefined>(undefined);
+  const { getAccessToken, isLoading: isAuthLoading, user } = useSupabaseAuth();
+  const [listChats, setListChats] = useState<SupabaseChatRecord[] | undefined>(undefined);
+  const [currentChat, setCurrentChat] = useState<SupabaseChatRecord | null | undefined>(undefined);
 
   const [archivedMessages, setArchivedMessages] = useState<Message[]>([]);
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
@@ -155,20 +155,20 @@ export function useChatHistory() {
           method: 'GET',
           headers,
         });
-        const listPayload = (await listResponse.json()) as { chats?: FirebaseChatRecord[]; message?: string };
+        const listPayload = (await listResponse.json()) as { chats?: SupabaseChatRecord[]; message?: string };
 
         if (!listResponse.ok) {
           throw new Error(listPayload.message || 'Failed to load chat list.');
         }
 
-        let nextCurrentChat: FirebaseChatRecord | null | undefined = null;
+        let nextCurrentChat: SupabaseChatRecord | null | undefined = null;
 
         if (mixedId) {
           const currentResponse = await fetch(`/api/chats?routeId=${encodeURIComponent(mixedId)}`, {
             method: 'GET',
             headers,
           });
-          const currentPayload = (await currentResponse.json()) as { chat?: FirebaseChatRecord | null; message?: string };
+          const currentPayload = (await currentResponse.json()) as { chat?: SupabaseChatRecord | null; message?: string };
 
           if (!currentResponse.ok) {
             throw new Error(currentPayload.message || 'Failed to load chat.');
@@ -362,7 +362,7 @@ ${value.content}
               : chatList.find((chat) => chat.id === routeId)?.timestamp || new Date().toISOString(),
         }),
       });
-      const payload = (await response.json()) as { chat?: FirebaseChatRecord; message?: string };
+      const payload = (await response.json()) as { chat?: SupabaseChatRecord; message?: string };
 
       if (!response.ok || !payload.chat) {
         throw new Error(payload.message || 'Failed to persist chat.');

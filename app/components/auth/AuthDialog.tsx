@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
-import { getFirebaseAuthErrorMessage } from '~/lib/auth/firebase-errors';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
+import { getSupabaseAuthErrorMessage } from '~/lib/auth/supabase-errors';
 
 interface AuthDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -11,7 +11,7 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
-  const { error, isConfigured, isLoading, signInWithEmail, signInWithGoogle, signUpWithEmail, user } = useFirebaseAuth();
+  const { error, isConfigured, isLoading, signInWithEmail, signInWithGoogle, signUpWithEmail, user } = useSupabaseAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +39,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
         await signInWithEmail(email, password);
       }
     } catch (authFailure) {
-      setLocalError(getFirebaseAuthErrorMessage(authFailure));
+      setLocalError(getSupabaseAuthErrorMessage(authFailure));
     } finally {
       setPendingAction(null);
     }
@@ -52,7 +52,7 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
     try {
       await signInWithGoogle();
     } catch (authFailure) {
-      setLocalError(getFirebaseAuthErrorMessage(authFailure));
+      setLocalError(getSupabaseAuthErrorMessage(authFailure));
     } finally {
       setPendingAction(null);
     }
@@ -65,14 +65,13 @@ export function AuthDialog({ onOpenChange, open }: AuthDialogProps) {
           <div className="space-y-1">
             <DialogTitle className="text-2xl font-semibold">Sign in to Cryzo</DialogTitle>
             <DialogDescription>
-              Create an account or sign in to use Cryzo. Authentication runs on Firebase and data is synced to Convex.
+              Create an account or sign in to use Cryzo. Authentication and synced data are powered by Supabase.
             </DialogDescription>
           </div>
 
           {!isConfigured ? (
             <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
-              Auth is not configured yet. Add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
-              `VITE_FIREBASE_APP_ID`, and `VITE_FIREBASE_MESSAGING_SENDER_ID`, then restart the app.
+              Auth is not configured yet. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then restart the app.
             </div>
           ) : (
             <>

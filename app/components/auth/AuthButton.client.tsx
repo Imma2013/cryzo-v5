@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '~/components/ui/Button';
 import { AuthDialog } from '~/components/auth/AuthDialog';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 
 function getInitials(label: string) {
   return label
@@ -13,7 +13,7 @@ function getInitials(label: string) {
 }
 
 export function AuthButton() {
-  const { isConfigured, isLoading, signOutUser, user } = useFirebaseAuth();
+  const { isConfigured, isLoading, signOutUser, user } = useSupabaseAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const identityLabel = useMemo(() => {

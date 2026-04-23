@@ -29,12 +29,12 @@ import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import type { LlmErrorAlertType } from '~/types/actions';
 import type { GeneratedImageAssetData } from '~/types/context';
 import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource } from '~/lib/common/generated-image-manifest';
-import { useFirebaseAuth } from '~/lib/auth/firebase-auth';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
-import { useFirebaseUserPreferences } from '~/lib/firebase/user-preferences.client';
+import { useSupabaseUserPreferences } from '~/lib/supabase/user-preferences.client';
 import { resolveActiveProviderSelection } from '~/lib/llm/provider-selection';
 import { getApiKeysFromCookies } from './APIKeyManager';
 
@@ -120,9 +120,9 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
-    const { getAccessToken, user } = useFirebaseAuth();
-    const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
-    const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useFirebaseUserPreferences();
+    const { getAccessToken, user } = useSupabaseAuth();
+    const [authAccessToken, setAuthAccessToken] = useState<string | null>(null);
+    const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
     const syncedPreferences = currentUserRecord?.llmPreferences;
@@ -196,7 +196,7 @@ export const ChatImpl = memo(
       let cancelled = false;
 
       if (!user) {
-        setFirebaseIdToken(null);
+        setAuthAccessToken(null);
         return;
       }
 
@@ -210,7 +210,7 @@ export const ChatImpl = memo(
         }
 
         if (!cancelled) {
-          setFirebaseIdToken(token);
+          setAuthAccessToken(token);
         }
       })();
 
@@ -235,7 +235,7 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
-      headers: firebaseIdToken ? { Authorization: `Bearer ${firebaseIdToken}` } : undefined,
+      headers: authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : undefined,
       body: {
         apiKeys,
         files,
