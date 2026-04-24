@@ -94,10 +94,13 @@ describe('design system routing', () => {
     expect(diagnostics.canonicalCount).toBe(diagnostics.supportedSlugs.length);
     expect(diagnostics.fallbackCount).toBe(0);
     expect(diagnostics.missingCanonicalSlugs).toEqual([]);
+    expect(diagnostics.missingCanonicalProfileSlugs).toEqual([]);
     expect(library.every((reference) => reference.markdown.includes('## Signature Markers'))).toBe(true);
     expect(library.every((reference) => reference.markdown.includes('## Must Keep'))).toBe(true);
     expect(library.every((reference) => reference.markdown.includes('## Must Avoid'))).toBe(true);
     expect(library.every((reference) => reference.markdown.includes('## Section Archetypes'))).toBe(true);
+    expect(library.every((reference) => reference.profile.compositionRecipes.length > 0)).toBe(true);
+    expect(library.every((reference) => reference.profile.exemplarCues.length > 0)).toBe(true);
   });
 
   it('auto-picks a best-fit primary for broad build prompts', () => {

@@ -813,6 +813,248 @@ function deriveFailConditions(metadata, blueprint) {
   ]);
 }
 
+function deriveHeroStructure(slug, metadata) {
+  if (slug === 'cryzo-10') {
+    return 'Build a poster-field hero with one dominant surreal pet-fashion image, a hard color block, and giant condensed type that overlaps the subject instead of sitting in a safe adjacent column.';
+  }
+
+  if (metadata.supportsEditorial) {
+    return 'Build a chapter-like hero with one dominant visual field, aggressive display hierarchy, and enough compositional tension that the page cannot be mistaken for a generic startup homepage.';
+  }
+
+  if ((metadata.categories || []).includes('hardware')) {
+    return 'Build a keynote-style hero anchored by one dominant product object, quiet negative space, and a compact copy block that frames the object rather than competing with it.';
+  }
+
+  if (
+    (metadata.categories || []).includes('developer') ||
+    (metadata.categories || []).includes('database') ||
+    (metadata.categories || []).includes('infra')
+  ) {
+    return 'Build a technical product hero around one crisp product frame or UI surface, with severe hierarchy and no decorative lifestyle composition.';
+  }
+
+  if ((metadata.categories || []).includes('travel') || (metadata.categories || []).includes('hospitality')) {
+    return 'Build an atmospheric destination-led hero with one dominant scene and enough editorial restraint that service guidance feels curated rather than marketplace-generic.';
+  }
+
+  return 'Build a reference-native hero with one dominant focal moment, strong hierarchy, and no fallback to generic text-left image-right startup composition.';
+}
+
+function deriveHeadlineImageRelationship(slug, metadata) {
+  if (slug === 'cryzo-10') {
+    return 'Place the oversized headline in front of or directly over the hero subject so the type and image visibly compete; the subject should remain legible behind the typography instead of being isolated in a separate panel.';
+  }
+
+  if (metadata.supportsEditorial) {
+    return 'Allow direct overlap or hard adjacency between headline and imagery when that preserves the reference tension; do not split them into disconnected polite columns.';
+  }
+
+  if ((metadata.categories || []).includes('hardware')) {
+    return 'Keep the headline framing the product from above, beside, or just over the object with disciplined restraint; only use overlap when it strengthens the product keynote feel.';
+  }
+
+  if (
+    (metadata.categories || []).includes('developer') ||
+    (metadata.categories || []).includes('database') ||
+    (metadata.categories || []).includes('infra')
+  ) {
+    return 'Keep the headline structurally tied to the product surface or code frame, but avoid loud overlap that would make the page feel editorial instead of technical.';
+  }
+
+  return 'Tie the headline closely to the hero imagery so they read as one composition instead of two unrelated blocks.';
+}
+
+function deriveLayeringRules(slug, metadata) {
+  const baseRules = [
+    'Use one dominant foreground relationship and one subordinate supporting layer; do not stack decorative layers without purpose.',
+    'Every overlap, crop, or z-index shift should strengthen the selected reference rather than adding generic drama.',
+  ];
+
+  if (slug === 'cryzo-10') {
+    return dedupe([
+      'Keep the hero subject partially behind the giant display type or inside a hard poster field instead of isolated in a clean adjacent panel.',
+      'Let color fields, image planes, and typography create visible depth even before motion is applied.',
+      ...baseRules,
+    ]);
+  }
+
+  if (metadata.supportsEditorial) {
+    return dedupe([
+      'Use overlap, crop tension, or chapter-field layering to keep the composition visibly art-directed.',
+      ...baseRules,
+    ]);
+  }
+
+  if (metadata.supportsMinimalShowcase) {
+    return dedupe([
+      'Keep layering sparse and exact so the product remains dominant and the composition stays severe.',
+      ...baseRules,
+    ]);
+  }
+
+  return baseRules;
+}
+
+function deriveTypeSystemBehaviorList(metadata) {
+  return dedupe([
+    metadata.supportsEditorial
+      ? 'Use display type with visible scale tension and chapter rhythm instead of evenly weighted marketing hierarchy.'
+      : 'Use typography to reinforce the product category and reference family rather than generic startup-safe hierarchy.',
+    metadata.supportsMinimalShowcase
+      ? 'Keep the type system restrained, exact, and highly disciplined.'
+      : 'Allow one or two dominant type moments to set the emotional scale of the page.',
+    (metadata.categories || []).includes('developer') || (metadata.categories || []).includes('database')
+      ? 'Keep supporting typography crisp, technical, and structurally informative.'
+      : 'Keep supporting typography subordinate to the primary visual system instead of flattening everything into one neutral sans rhythm.',
+  ]);
+}
+
+function derivePaletteBehaviorList(metadata) {
+  return dedupe([
+    derivePaletteBehavior(metadata),
+    metadata.supportsEditorial
+      ? 'Use color as a real field or chapter device, not just an accent sprinkled over otherwise generic layout.'
+      : 'Use color to support hierarchy and domain clarity before decoration.',
+    (metadata.categories || []).includes('developer') || (metadata.categories || []).includes('database')
+      ? 'Keep accents sparse and product-led rather than cinematic or lifestyle-driven.'
+      : 'Keep palette choices visibly native to the selected reference family.',
+  ]);
+}
+
+function deriveAllowedVariation(metadata) {
+  return dedupe([
+    'Content, brand naming, and product specifics may change freely as long as the composition DNA remains recognizably native to the selected reference family.',
+    metadata.supportsEditorial
+      ? 'You may vary the exact crop, chapter sequencing, or copy cadence, but the page must stay visibly editorial and reference-led.'
+      : 'You may vary product details and supporting section order, but not the core restraint or system logic of the reference.',
+    'Do not use variety as an excuse to fall back to generic AI-generated landing-page patterns.',
+  ]);
+}
+
+function deriveExemplarCues(slug, metadata) {
+  if (slug === 'cryzo-10') {
+    return [
+      {
+        id: 'poster-overlap',
+        label: 'Poster overlap hero',
+        cues: [
+          'Oversized condensed headline sits in front of the subject.',
+          'Hero subject remains readable behind typography instead of living in a detached panel.',
+          'Hard color fields and image planes create immediate poster tension.',
+        ],
+      },
+      {
+        id: 'editorial-chapters',
+        label: 'Editorial chapter rhythm',
+        cues: [
+          'Use hard section breaks and chapter-like pacing rather than feature-card repetition.',
+          'Let at least one section feel sparse and attitude-led instead of explanatory.',
+        ],
+      },
+    ];
+  }
+
+  if ((metadata.categories || []).includes('hardware')) {
+    return [
+      {
+        id: 'keynote-object',
+        label: 'Keynote object framing',
+        cues: [
+          'One hero object dominates the viewport.',
+          'Headline and copy frame the object with severe restraint.',
+          'Supporting sections stay quieter than the hero.',
+        ],
+      },
+    ];
+  }
+
+  if (
+    (metadata.categories || []).includes('developer') ||
+    (metadata.categories || []).includes('database') ||
+    (metadata.categories || []).includes('infra')
+  ) {
+    return [
+      {
+        id: 'technical-product-frame',
+        label: 'Technical product framing',
+        cues: [
+          'Use crisp product surfaces or code-adjacent frames as the hero anchor.',
+          'Favor modular product chapters over decorative storytelling.',
+          'Keep the system exact, sparse, and structurally legible.',
+        ],
+      },
+    ];
+  }
+
+  if (metadata.supportsEditorial) {
+    return [
+      {
+        id: 'editorial-hero',
+        label: 'Editorial hero composition',
+        cues: [
+          'Use one dominant image field and one dominant display-type move.',
+          'Keep the composition tense enough that it avoids generic startup symmetry.',
+          'Let section rhythm feel chaptered rather than repetitively modular.',
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: 'reference-default',
+      label: 'Reference-default composition',
+      cues: [
+        'Keep one dominant focal moment per viewport.',
+        'Tie text hierarchy directly to the primary visual system.',
+        'Avoid generic text-left image-right marketing defaults.',
+      ],
+    },
+  ];
+}
+
+function buildReferenceJson(slug, metadata) {
+  const blueprint = SPECIAL_BLUEPRINTS[slug] || buildGenericBlueprint(slug, metadata);
+  const sectionArchetypes = dedupe(blueprint.sectionArchetypes || deriveSectionArchetypes(slug, metadata));
+
+  return {
+    slug,
+    title: blueprint.title,
+    visualIntent: blueprint.identity,
+    compositionRecipes: [
+      {
+        id: 'default',
+        label: `${blueprint.title} default`,
+        whenToUse: `Use this as the default build recipe whenever ${blueprint.title} is the locked primary reference.`,
+        heroStructure: deriveHeroStructure(slug, metadata),
+        sectionOrder: sectionArchetypes,
+        headlineImageRelationship: deriveHeadlineImageRelationship(slug, metadata),
+        layeringRules: deriveLayeringRules(slug, metadata),
+        typeScaleRelationship: deriveScaleBehavior(metadata),
+        paletteDistribution: derivePaletteBehavior(metadata),
+        imageFraming: deriveImageryTreatment(slug, metadata),
+        asymmetry:
+          metadata.supportsEditorial
+            ? 'Allow tension, crop pressure, and asymmetry when it preserves the reference family.'
+            : 'Keep asymmetry restrained and category-correct rather than theatrical for its own sake.',
+        ctaPosture:
+          metadata.supportsMinimalShowcase || (metadata.categories || []).includes('developer')
+            ? 'Keep CTAs sparse, exact, and product-native.'
+            : 'Make CTAs feel native to the reference family instead of generic bright buttons.',
+      },
+    ],
+    headlineImageRelationships: [deriveHeadlineImageRelationship(slug, metadata)],
+    layeringRules: deriveLayeringRules(slug, metadata),
+    typeSystemBehavior: deriveTypeSystemBehaviorList(metadata),
+    paletteBehavior: derivePaletteBehaviorList(metadata),
+    sectionSkeletons: sectionArchetypes,
+    antiPatterns: dedupe(blueprint.mustAvoid || deriveMustAvoid(metadata, blueprint)),
+    allowedVariation: deriveAllowedVariation(metadata),
+    exemplarCues: deriveExemplarCues(slug, metadata),
+  };
+}
+
 function buildGenericBlueprint(slug, metadata) {
   const name = formatName(slug);
   const categories = joinPhrases(metadata.categories || []);
@@ -920,10 +1162,13 @@ fs.mkdirSync(outputRoot, { recursive: true });
 
 for (const slug of slugs) {
   const markdown = createMarkdown(slug, metadataBySlug[slug]);
+  const referenceJson = buildReferenceJson(slug, metadataBySlug[slug]);
   const slugDir = path.join(outputRoot, slug);
   const outputPath = path.join(slugDir, 'DESIGN.md');
+  const referencePath = path.join(slugDir, 'REFERENCE.json');
   fs.mkdirSync(slugDir, { recursive: true });
   fs.writeFileSync(outputPath, markdown.trim() + '\n', 'utf8');
+  fs.writeFileSync(referencePath, JSON.stringify(referenceJson, null, 2) + '\n', 'utf8');
 }
 
 console.log(`Synced ${slugs.length} design references into ${outputRoot}`);

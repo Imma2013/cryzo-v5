@@ -30,6 +30,12 @@ import { getComposioTools } from './composio';
 import { getBuildWithToolsSystemPrompt, getExternalToolSystemPrompt, resolveAssistantMode } from './external-tool-mode';
 import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
 import { buildDesignAuditSystemPrompt, buildDesignAuditUserPrompt, parseBuildDesignAudit } from './design-audit';
+import {
+  buildDesignLayoutPlanBlock,
+  buildDesignLayoutPlanSystemPrompt,
+  buildDesignLayoutPlanUserPrompt,
+  parseDesignLayoutPlan,
+} from './design-layout-plan';
 
 export type Messages = Message[];
 
@@ -269,14 +275,16 @@ Do not return the same generic structure again. Rebuild the output so it feels u
 
 async function auditBuildDraft({
   generatedText,
-  compiledReferenceBrief,
+  executionPacket,
+  layoutPlan,
   primaryReference,
   userPrompt,
   model,
   isReasoning,
 }: {
   generatedText: string;
-  compiledReferenceBrief: string;
+  executionPacket: string;
+  layoutPlan: string;
   primaryReference: DesignReferenceDoc;
   userPrompt: string;
   model: Parameters<typeof generateText>[0]['model'];
@@ -284,7 +292,8 @@ async function auditBuildDraft({
 }) {
   const auditPrompt = buildDesignAuditUserPrompt({
     generatedText: compactGeneratedDraft(generatedText),
-    compiledReferenceBrief,
+    executionPacket,
+    layoutPlan,
     primarySlug: primaryReference.slug,
     userPrompt,
   });
@@ -302,6 +311,38 @@ async function auditBuildDraft({
   });
 
   return parseBuildDesignAudit(auditResult.text);
+}
+
+async function buildLockedLayoutPlan({
+  executionPacket,
+  primaryReference,
+  userPrompt,
+  model,
+  isReasoning,
+}: {
+  executionPacket: string;
+  primaryReference: DesignReferenceDoc;
+  userPrompt: string;
+  model: Parameters<typeof generateText>[0]['model'];
+  isReasoning: boolean;
+}) {
+  const layoutPlanResult = await generateText({
+    model,
+    system: buildDesignLayoutPlanSystemPrompt(),
+    messages: [
+      {
+        role: 'user',
+        content: buildDesignLayoutPlanUserPrompt({
+          executionPacket,
+          primarySlug: primaryReference.slug,
+          userPrompt,
+        }),
+      },
+    ],
+    ...(isReasoning ? { maxCompletionTokens: 1400, temperature: 1 } : { maxTokens: 1400, temperature: 0 }),
+  });
+
+  return parseDesignLayoutPlan(layoutPlanResult.text);
 }
 
 export function getGoogleProviderOptions(
@@ -721,6 +762,7 @@ export async function streamText(props: {
         relativePath: selectedPrimaryReference.relativePath,
         excerpt: selectedPrimaryReference.excerpt,
         markdown: selectedPrimaryReference.markdown,
+        profile: selectedPrimaryReference.profile,
         source: selectedPrimaryReference.source,
       })
     : '';
@@ -758,6 +800,7 @@ export async function streamText(props: {
           relativePath: reference.relativePath,
           excerpt: reference.excerpt,
           markdown: reference.markdown,
+          profile: reference.profile,
           source: reference.source,
         })),
       selectionSource,
@@ -1014,7 +1057,38 @@ export async function streamText(props: {
       onFinish?: StreamingOptions['onFinish'];
     };
 
-    const firstDraft = await generateText(nonStreamingStreamParams);
+    let layoutPlanBlock = '';
+    let layoutPlanGenerated = false;
+    let layoutPlanDegraded = false;
+    let firstDraftSystemPrompt = String(nonStreamingStreamParams.system);
+
+    if (selectedPrimaryReference && compiledReferenceBrief) {
+      try {
+        const layoutPlan = await buildLockedLayoutPlan({
+          executionPacket: compiledReferenceBrief,
+          primaryReference: selectedPrimaryReference,
+          userPrompt: latestUserPrompt,
+          model: nonStreamingStreamParams.model,
+          isReasoning,
+        });
+
+        if (layoutPlan) {
+          layoutPlanBlock = buildDesignLayoutPlanBlock(layoutPlan);
+          firstDraftSystemPrompt = `${firstDraftSystemPrompt}\n\n${layoutPlanBlock}`;
+          layoutPlanGenerated = true;
+        } else {
+          layoutPlanDegraded = true;
+        }
+      } catch (error) {
+        layoutPlanDegraded = true;
+        logger.warn(`Build layout-plan generation degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
+      }
+    }
+
+    const firstDraft = await generateText({
+      ...nonStreamingStreamParams,
+      system: firstDraftSystemPrompt,
+    });
     let finalDraft = firstDraft;
     let auditVerdict = 'skipped';
     let auditRetryCount = 0;
@@ -1024,7 +1098,8 @@ export async function streamText(props: {
       try {
         const audit = await auditBuildDraft({
           generatedText: firstDraft.text,
-          compiledReferenceBrief,
+          executionPacket: compiledReferenceBrief,
+          layoutPlan: layoutPlanBlock || '<design_layout_lock status="degraded">No locked layout plan was available.</design_layout_lock>',
           primaryReference: selectedPrimaryReference,
           userPrompt: latestUserPrompt,
           model: nonStreamingStreamParams.model,
@@ -1038,7 +1113,7 @@ export async function streamText(props: {
             auditRetryCount = 1;
             finalDraft = await generateText({
               ...nonStreamingStreamParams,
-              system: appendRetryAuditBlock(String(nonStreamingStreamParams.system), audit.critique),
+              system: appendRetryAuditBlock(firstDraftSystemPrompt, audit.critique),
             });
           }
         } else {
@@ -1053,7 +1128,7 @@ export async function streamText(props: {
     }
 
     logger.info(
-      `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
+      `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} layoutPlan=${layoutPlanGenerated ? 'yes' : 'no'} layoutPlanDegraded=${layoutPlanDegraded ? 'yes' : 'no'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
     );
 
     return createGenerateTextCompatResult({

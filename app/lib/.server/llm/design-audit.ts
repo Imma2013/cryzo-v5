@@ -2,13 +2,15 @@ import { stripIndents } from '~/utils/stripIndent';
 
 export interface BuildDesignAuditInput {
   generatedText: string;
-  compiledReferenceBrief: string;
+  executionPacket: string;
+  layoutPlan: string;
   primarySlug: string;
   userPrompt: string;
 }
 
 export interface ParsedBuildDesignAudit {
   verdict: 'pass' | 'retry';
+  compositionVerdict: 'aligned' | 'drifted' | 'unclear';
   score: number;
   reasons: string[];
   critique: string[];
@@ -22,12 +24,13 @@ export function buildDesignAuditSystemPrompt() {
     Rules:
     - Judge reference fidelity, not general niceness.
     - Fail drafts that drift into generic startup, SaaS, hero/features/footer, or polished-but-weak layouts when the selected reference is more specific.
-    - Fail drafts that ignore the selected reference's typography behavior, palette dominance, imagery treatment, or section rhythm.
+    - Fail drafts that ignore the selected reference's typography behavior, palette dominance, imagery treatment, section rhythm, or locked layout plan.
+    - Pay special attention to headline/image relationship, overlap strategy, and section sequencing.
     - Pass drafts only when they feel recognizably native to the selected reference family.
     - Return JSON only. No markdown. No prose outside JSON.
 
     Required JSON shape:
-    {"verdict":"pass"|"retry","score":0-100,"reasons":["..."],"critique":["..."]}
+    {"verdict":"pass"|"retry","compositionVerdict":"aligned"|"drifted"|"unclear","score":0-100,"reasons":["..."],"critique":["..."]}
   `;
 }
 
@@ -39,8 +42,11 @@ export function buildDesignAuditUserPrompt(input: BuildDesignAuditInput) {
     SELECTED PRIMARY REFERENCE:
     ${input.primarySlug}
 
-    COMPILED DESIGN EXECUTION BRIEF:
-    ${input.compiledReferenceBrief}
+    DESIGN EXECUTION PACKET:
+    ${input.executionPacket}
+
+    LOCKED LAYOUT PLAN:
+    ${input.layoutPlan}
 
     GENERATED DRAFT:
     ${input.generatedText}
@@ -71,6 +77,12 @@ export function parseBuildDesignAudit(text: string): ParsedBuildDesignAudit | nu
   try {
     const parsed = JSON.parse(jsonText) as Partial<ParsedBuildDesignAudit>;
     const verdict = parsed.verdict === 'retry' ? 'retry' : parsed.verdict === 'pass' ? 'pass' : null;
+    const compositionVerdict =
+      parsed.compositionVerdict === 'aligned' || parsed.compositionVerdict === 'drifted' || parsed.compositionVerdict === 'unclear'
+        ? parsed.compositionVerdict
+        : verdict === 'pass'
+          ? 'aligned'
+          : 'drifted';
 
     if (!verdict) {
       return null;
@@ -78,6 +90,7 @@ export function parseBuildDesignAudit(text: string): ParsedBuildDesignAudit | nu
 
     return {
       verdict,
+      compositionVerdict,
       score: typeof parsed.score === 'number' ? parsed.score : verdict === 'pass' ? 100 : 0,
       reasons: Array.isArray(parsed.reasons) ? parsed.reasons.filter((entry): entry is string => typeof entry === 'string') : [],
       critique: Array.isArray(parsed.critique)

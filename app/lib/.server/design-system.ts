@@ -3,6 +3,10 @@ const designDocumentModules = import.meta.glob('../../../vendor/awesome-design-m
   import: 'default',
   eager: true,
 }) as Record<string, string>;
+const designReferenceModules = import.meta.glob('../../../vendor/awesome-design-md/design-md/*/REFERENCE.json', {
+  import: 'default',
+  eager: true,
+}) as Record<string, DesignReferenceProfile>;
 
 export const CANONICAL_DESIGN_LIBRARY_PATH = 'vendor/awesome-design-md/design-md';
 export type DesignReferenceSource = 'canonical' | 'fallback';
@@ -59,12 +63,49 @@ interface DesignReferenceMetadata {
   family?: 'cryzo' | 'external';
 }
 
+export interface DesignCompositionRecipe {
+  id: string;
+  label: string;
+  whenToUse: string;
+  heroStructure: string;
+  sectionOrder: string[];
+  headlineImageRelationship: string;
+  layeringRules: string[];
+  typeScaleRelationship: string;
+  paletteDistribution: string;
+  imageFraming: string;
+  asymmetry: string;
+  ctaPosture: string;
+}
+
+export interface DesignExemplarCue {
+  id: string;
+  label: string;
+  cues: string[];
+}
+
+export interface DesignReferenceProfile {
+  slug: string;
+  title: string;
+  visualIntent: string;
+  compositionRecipes: DesignCompositionRecipe[];
+  headlineImageRelationships: string[];
+  layeringRules: string[];
+  typeSystemBehavior: string[];
+  paletteBehavior: string[];
+  sectionSkeletons: string[];
+  antiPatterns: string[];
+  allowedVariation: string[];
+  exemplarCues: DesignExemplarCue[];
+}
+
 export interface DesignReferenceDoc {
   slug: string;
   relativePath: string;
   markdown: string;
   excerpt: string;
   source: DesignReferenceSource;
+  profile: DesignReferenceProfile;
 }
 
 interface EnrichedDesignReferenceDoc extends DesignReferenceDoc {
@@ -949,6 +990,80 @@ function createExcerpt(markdown: string) {
     .trim();
 }
 
+function createFallbackDesignProfile(slug: string, metadata: Required<DesignReferenceMetadata>, markdown: string): DesignReferenceProfile {
+  const firstMeaningfulLine =
+    markdown
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith('#')) ?? `${slug} reference`;
+
+  return {
+    slug,
+    title: slug,
+    visualIntent: firstMeaningfulLine,
+    compositionRecipes: [
+      {
+        id: 'fallback',
+        label: `${slug} fallback`,
+        whenToUse: `Fallback recipe for ${slug} when canonical structured metadata is unavailable.`,
+        heroStructure:
+          metadata.supportsEditorial
+            ? 'Use a chapter-like, image-led hero that stays visibly reference-native and avoids generic startup symmetry.'
+            : 'Use a category-correct hero anchored by one dominant focal moment.',
+        sectionOrder: [
+          'Primary reference-native hero',
+          'Reference-native capability or narrative section',
+          'Supporting showcase section',
+          'Reference-native close',
+        ],
+        headlineImageRelationship: metadata.supportsEditorial
+          ? 'Keep headline and hero image tightly coupled or overlapping when useful.'
+          : 'Keep headline and hero image structurally tied rather than disconnected.',
+        layeringRules: ['Keep layering purposeful and reference-led.', 'Avoid generic decorative overlap.'],
+        typeScaleRelationship: metadata.supportsEditorial
+          ? 'Use visible scale tension and chapter rhythm.'
+          : 'Use disciplined hierarchy native to the product category.',
+        paletteDistribution: 'Keep palette behavior aligned to the selected reference family instead of generic defaults.',
+        imageFraming: 'Treat imagery as part of the design system rather than decorative filler.',
+        asymmetry: metadata.supportsEditorial
+          ? 'Allow asymmetry when it preserves reference tension.'
+          : 'Keep asymmetry restrained and category-correct.',
+        ctaPosture: 'Keep CTA styling native to the selected reference.',
+      },
+    ],
+    headlineImageRelationships: [
+      metadata.supportsEditorial
+        ? 'Allow overlap or close adjacency between headline and hero imagery.'
+        : 'Keep headline and hero imagery structurally connected.',
+    ],
+    layeringRules: ['Keep the composition reference-led.', 'Avoid generic startup layering patterns.'],
+    typeSystemBehavior: [
+      metadata.supportsEditorial
+        ? 'Use editorial scale contrast.'
+        : 'Use restrained type hierarchy that fits the selected category.',
+    ],
+    paletteBehavior: ['Use palette behavior native to the selected reference family.'],
+    sectionSkeletons: [
+      'Reference-native hero',
+      'Reference-native proof or narrative section',
+      'Supporting showcase section',
+      'Reference-native close',
+    ],
+    antiPatterns: [
+      'generic AI-generated landing-page structure',
+      'hero/features/testimonials/footer normalization',
+    ],
+    allowedVariation: ['Vary content and copy, but keep the composition recognizably native to the selected reference.'],
+    exemplarCues: [
+      {
+        id: 'fallback-default',
+        label: 'Fallback reference cue',
+        cues: ['Preserve one dominant focal moment.', 'Avoid generic startup-safe composition.'],
+      },
+    ],
+  };
+}
+
 function formatReferenceName(slug: string) {
   if (slug === 'linear.app') {
     return 'Linear';
@@ -1173,23 +1288,33 @@ const canonicalDesignDocsBySlug = new Map(
     return [slug, markdown.trim()] as const;
   }),
 );
+const canonicalDesignProfilesBySlug = new Map(
+  Object.entries(designReferenceModules).map(([modulePath, profile]) => {
+    const segments = modulePath.split('/');
+    const slug = segments[segments.length - 2];
+    return [slug, profile] as const;
+  }),
+);
 
 const designReferenceLibrary: EnrichedDesignReferenceDoc[] = Array.from(
-  new Set([...Object.keys(REFERENCE_METADATA), ...canonicalDesignDocsBySlug.keys()]),
+  new Set([...Object.keys(REFERENCE_METADATA), ...canonicalDesignDocsBySlug.keys(), ...canonicalDesignProfilesBySlug.keys()]),
 )
   .sort((left, right) => left.localeCompare(right))
   .map((slug) => {
     const metadata = getReferenceMetadata(slug);
     const normalizedNames = Array.from(new Set([slug, ...metadata.aliases].map((value) => normalizeText(value))));
     const canonicalMarkdown = canonicalDesignDocsBySlug.get(slug);
-    const source: DesignReferenceSource = canonicalMarkdown ? 'canonical' : 'fallback';
+    const canonicalProfile = canonicalDesignProfilesBySlug.get(slug);
+    const source: DesignReferenceSource = canonicalMarkdown && canonicalProfile ? 'canonical' : 'fallback';
     const markdown = canonicalMarkdown ?? createFallbackDesignMarkdown(slug, metadata);
+    const profile = canonicalProfile ?? createFallbackDesignProfile(slug, metadata, markdown);
 
     return {
       slug,
       relativePath: `${CANONICAL_DESIGN_LIBRARY_PATH}/${slug}/DESIGN.md`,
       markdown,
       excerpt: createExcerpt(markdown),
+      profile,
       metadata,
       normalizedNames,
       source,
@@ -1203,12 +1328,17 @@ export function getDesignReferenceLibrary(): DesignReferenceDoc[] {
 export function getDesignLibraryDiagnostics() {
   const canonical = designReferenceLibrary.filter((reference) => reference.source === 'canonical');
   const fallback = designReferenceLibrary.filter((reference) => reference.source === 'fallback');
+  const missingCanonicalProfileSlugs = designReferenceLibrary
+    .filter((reference) => !canonicalDesignProfilesBySlug.has(reference.slug))
+    .map((reference) => reference.slug);
 
   return {
     canonicalCount: canonical.length,
     fallbackCount: fallback.length,
+    profileCount: canonicalDesignProfilesBySlug.size,
     supportedSlugs: designReferenceLibrary.map((reference) => reference.slug),
     missingCanonicalSlugs: fallback.map((reference) => reference.slug),
+    missingCanonicalProfileSlugs,
   };
 }
 

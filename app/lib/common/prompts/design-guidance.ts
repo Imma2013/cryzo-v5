@@ -1,3 +1,8 @@
+import type {
+  DesignCompositionRecipe,
+  DesignExemplarCue,
+  DesignReferenceProfile,
+} from '~/lib/.server/design-system';
 import type { DesignScheme } from '~/types/design-scheme';
 import { stripIndents } from '~/utils/stripIndent';
 
@@ -6,19 +11,28 @@ export interface DesignPromptReference {
   relativePath: string;
   excerpt: string;
   markdown?: string;
+  profile?: DesignReferenceProfile;
   source?: 'canonical' | 'fallback';
 }
 
-export interface CompiledDesignReferenceBrief {
+export interface DesignExecutionPacket {
   slug: string;
   relativePath: string;
   source: 'canonical' | 'fallback';
   identity: string;
+  visualIntent: string;
+  primaryRecipe: DesignCompositionRecipe;
   signatureMarkers: string[];
   mustKeep: string[];
   mustAvoid: string[];
   sectionArchetypes: string[];
   failConditions: string[];
+  layeringRules: string[];
+  typeSystemBehavior: string[];
+  paletteBehavior: string[];
+  antiPatterns: string[];
+  allowedVariation: string[];
+  exemplarCues: DesignExemplarCue[];
 }
 
 function parseMarkdownSections(markdown: string) {
@@ -75,45 +89,82 @@ function getSectionParagraph(content: string | undefined) {
     ?.trim() ?? '';
 }
 
-function buildFallbackBrief(reference: DesignPromptReference): CompiledDesignReferenceBrief {
+function buildFallbackExecutionPacket(reference: DesignPromptReference): DesignExecutionPacket {
+  const fallbackRecipe: DesignCompositionRecipe = {
+    id: 'fallback',
+    label: `${reference.slug} fallback`,
+    whenToUse: `Fallback recipe for ${reference.slug} when structured canonical metadata is unavailable.`,
+    heroStructure: 'Build one dominant reference-native hero instead of a generic startup split layout.',
+    sectionOrder: [
+      'Reference-native hero',
+      'Reference-native proof or narrative section',
+      'Supporting showcase section',
+      'Reference-native close',
+    ],
+    headlineImageRelationship: 'Keep headline and hero imagery structurally tied; avoid detached polite columns.',
+    layeringRules: ['Keep layering purposeful and reference-led.', 'Avoid generic decorative overlap.'],
+    typeScaleRelationship: 'Use hierarchy native to the selected reference instead of generic startup-safe sizing.',
+    paletteDistribution: 'Use palette behavior native to the selected reference instead of default visual polish.',
+    imageFraming: 'Treat imagery as a structural part of the reference, not decorative filler.',
+    asymmetry: 'Allow only enough asymmetry to preserve the selected reference family.',
+    ctaPosture: 'Keep CTA styling native to the reference family.',
+  };
+
   return {
     slug: reference.slug,
     relativePath: reference.relativePath,
     source: reference.source ?? 'fallback',
     identity: reference.excerpt.trim(),
+    visualIntent: reference.excerpt.trim(),
+    primaryRecipe: fallbackRecipe,
     signatureMarkers: [],
     mustKeep: [],
     mustAvoid: [],
-    sectionArchetypes: [],
+    sectionArchetypes: fallbackRecipe.sectionOrder,
     failConditions: [],
+    layeringRules: fallbackRecipe.layeringRules,
+    typeSystemBehavior: [],
+    paletteBehavior: [],
+    antiPatterns: ['generic AI-generated landing-page structure'],
+    allowedVariation: ['Vary content, but keep the composition recognizably native to the selected reference family.'],
+    exemplarCues: [],
   };
 }
 
-export function compileDesignReferenceBrief(reference: DesignPromptReference): CompiledDesignReferenceBrief {
+export function compileDesignExecutionPacket(reference: DesignPromptReference): DesignExecutionPacket {
   const markdown = reference.markdown?.trim();
 
-  if (!markdown) {
-    return buildFallbackBrief(reference);
+  if (!markdown || !reference.profile) {
+    return buildFallbackExecutionPacket(reference);
   }
 
   const sections = parseMarkdownSections(markdown);
   const identity = getSectionParagraph(sections.get('identity')) || reference.excerpt.trim();
-  const signatureMarkers = getSectionBulletLines(sections.get('signature markers'), 5);
-  const mustKeep = getSectionBulletLines(sections.get('must keep'), 4);
-  const mustAvoid = getSectionBulletLines(sections.get('must avoid'), 4);
-  const sectionArchetypes = getSectionBulletLines(sections.get('section archetypes'), 4);
-  const failConditions = getSectionBulletLines(sections.get('anti-drift fail conditions'), 4);
+  const signatureMarkers = getSectionBulletLines(sections.get('signature markers'), 6);
+  const mustKeep = getSectionBulletLines(sections.get('must keep'), 5);
+  const mustAvoid = getSectionBulletLines(sections.get('must avoid'), 5);
+  const sectionArchetypes = getSectionBulletLines(sections.get('section archetypes'), 5);
+  const failConditions = getSectionBulletLines(sections.get('anti-drift fail conditions'), 5);
+  const primaryRecipe = reference.profile.compositionRecipes[0] ?? buildFallbackExecutionPacket(reference).primaryRecipe;
 
   return {
     slug: reference.slug,
     relativePath: reference.relativePath,
     source: reference.source ?? 'canonical',
     identity,
+    visualIntent: reference.profile.visualIntent || identity,
+    primaryRecipe,
     signatureMarkers,
     mustKeep,
     mustAvoid,
-    sectionArchetypes,
+    sectionArchetypes: sectionArchetypes.length > 0 ? sectionArchetypes : primaryRecipe.sectionOrder,
     failConditions,
+    layeringRules: reference.profile.layeringRules ?? primaryRecipe.layeringRules,
+    typeSystemBehavior: reference.profile.typeSystemBehavior ?? [],
+    paletteBehavior: reference.profile.paletteBehavior ?? [],
+    antiPatterns: reference.profile.antiPatterns ?? [],
+    allowedVariation: reference.profile.allowedVariation ?? [],
+    exemplarCues: reference.profile.exemplarCues ?? [],
   };
 }
 
@@ -129,23 +180,52 @@ function formatOptionalBulletSection(title: string, items: string[]) {
 }
 
 export function buildCompiledReferenceBlock(reference: DesignPromptReference) {
-  const brief = compileDesignReferenceBrief(reference);
+  const packet = compileDesignExecutionPacket(reference);
 
   return stripIndents`
-    <design_execution_brief slug="${brief.slug}" path="${brief.relativePath}" source="${brief.source}">
+    <design_execution_packet slug="${packet.slug}" path="${packet.relativePath}" source="${packet.source}">
       Identity:
-      - ${brief.identity}
+      - ${packet.identity}
 
-      ${formatOptionalBulletSection('Signature markers:', brief.signatureMarkers)}
+      Visual intent:
+      - ${packet.visualIntent}
 
-      ${formatOptionalBulletSection('Must keep:', brief.mustKeep)}
+      Locked composition recipe:
+      - Hero structure: ${packet.primaryRecipe.heroStructure}
+      - Headline/image relationship: ${packet.primaryRecipe.headlineImageRelationship}
+      - Type scale relationship: ${packet.primaryRecipe.typeScaleRelationship}
+      - Palette distribution: ${packet.primaryRecipe.paletteDistribution}
+      - Image framing: ${packet.primaryRecipe.imageFraming}
+      - Asymmetry: ${packet.primaryRecipe.asymmetry}
+      - CTA posture: ${packet.primaryRecipe.ctaPosture}
 
-      ${formatOptionalBulletSection('Must avoid:', brief.mustAvoid)}
+      ${formatOptionalBulletSection('Section order:', packet.primaryRecipe.sectionOrder)}
 
-      ${formatOptionalBulletSection('Section archetypes:', brief.sectionArchetypes)}
+      ${formatOptionalBulletSection('Signature markers:', packet.signatureMarkers)}
 
-      ${formatOptionalBulletSection('Anti-drift fail conditions:', brief.failConditions)}
-    </design_execution_brief>
+      ${formatOptionalBulletSection('Must keep:', packet.mustKeep)}
+
+      ${formatOptionalBulletSection('Must avoid:', packet.mustAvoid)}
+
+      ${formatOptionalBulletSection('Layering rules:', packet.layeringRules)}
+
+      ${formatOptionalBulletSection('Type system behavior:', packet.typeSystemBehavior)}
+
+      ${formatOptionalBulletSection('Palette behavior:', packet.paletteBehavior)}
+
+      ${formatOptionalBulletSection('Section archetypes:', packet.sectionArchetypes)}
+
+      ${formatOptionalBulletSection('Anti-patterns:', packet.antiPatterns)}
+
+      ${formatOptionalBulletSection('Allowed variation:', packet.allowedVariation)}
+
+      ${formatOptionalBulletSection(
+        'Exemplar cues:',
+        packet.exemplarCues.flatMap((cue) => [`${cue.label}: ${cue.cues.join(' | ')}`]),
+      )}
+
+      ${formatOptionalBulletSection('Anti-drift fail conditions:', packet.failConditions)}
+    </design_execution_packet>
   `;
 }
 
@@ -266,9 +346,10 @@ export function buildCanonicalDesignPreamble(options: {
     </design_reference_library>
 
     <design_reference_delivery>
-      The selected reference must be followed through the compact execution briefs below.
+      The selected reference must be followed through the structured execution packets below.
       Do not treat the reference docs as optional inspiration or raw markdown to paraphrase away.
-      Use the compiled brief as the direct implementation brief for the build.
+      Use the execution packet as the direct implementation brief for the build.
+      The locked composition recipe in the packet controls page architecture, overlap, hero framing, section order, and visual intensity.
     </design_reference_delivery>
 
     ${selectedReferences.map((reference) => buildCompiledReferenceBlock(reference)).join('\n\n')}

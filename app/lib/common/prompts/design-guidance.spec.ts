@@ -1,9 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCanonicalDesignPreamble,
-  compileDesignReferenceBrief,
+  compileDesignExecutionPacket,
   formatDesignSchemeOverrides,
 } from './design-guidance';
+
+const vercelProfile = {
+  slug: 'vercel',
+  title: 'Vercel',
+  visualIntent: 'Severe minimal technical framing.',
+  compositionRecipes: [
+    {
+      id: 'default',
+      label: 'Vercel default',
+      whenToUse: 'Default.',
+      heroStructure: 'Technical product hero.',
+      sectionOrder: ['Technical product hero', 'Platform capability band'],
+      headlineImageRelationship: 'Tie the headline to the product frame.',
+      layeringRules: ['Keep layering sparse and exact.'],
+      typeScaleRelationship: 'Controlled headlines.',
+      paletteDistribution: 'Restrained tonal palette.',
+      imageFraming: 'Use crisp product surfaces.',
+      asymmetry: 'Keep asymmetry restrained.',
+      ctaPosture: 'Keep CTA sparse and technical.',
+    },
+  ],
+  headlineImageRelationships: ['Tie the headline to the product frame.'],
+  layeringRules: ['Keep layering sparse and exact.'],
+  typeSystemBehavior: ['Keep typography exact and restrained.'],
+  paletteBehavior: ['Keep accents sparse.'],
+  sectionSkeletons: ['Technical product hero', 'Platform capability band'],
+  antiPatterns: ['generic startup card soup'],
+  allowedVariation: ['Vary product details, keep the system severe.'],
+  exemplarCues: [{ id: 'hero', label: 'Technical hero', cues: ['One product frame dominates.'] }],
+} as const;
 
 describe('design guidance prompt helpers', () => {
   it('formats runtime overrides when present', () => {
@@ -62,6 +92,7 @@ Minimal developer platform.
 ## Anti-Drift Fail Conditions
 - the result could be mistaken for a generic AI-generated startup landing page
 `,
+          profile: vercelProfile as any,
         },
       ],
       selectionSource: 'canonical',
@@ -73,7 +104,9 @@ Minimal developer platform.
     });
 
     expect(result).toContain('`vendor/awesome-design-md/design-md` is the canonical generic design reference library');
-    expect(result).toContain('<design_execution_brief slug="vercel"');
+    expect(result).toContain('<design_execution_packet slug="vercel"');
+    expect(result).toContain('Locked composition recipe:');
+    expect(result).toContain('Hero structure: Technical product hero.');
     expect(result).toContain('Signature markers:');
     expect(result).toContain('Severe minimal technical framing.');
     expect(result).toContain('If an override conflicts with the selected design references, ignore the override');
@@ -99,6 +132,18 @@ Surreal dog-editorial composition.
 ## Signature Markers
 - Poster-like vertical chapters.
 `,
+          profile: {
+            ...vercelProfile,
+            slug: 'cryzo-10',
+            title: 'Cryzo 10',
+            compositionRecipes: [
+              {
+                ...vercelProfile.compositionRecipes[0],
+                heroStructure: 'Poster-field hero with overlap.',
+                headlineImageRelationship: 'Headline in front of the subject.',
+              },
+            ],
+          } as any,
         },
       ],
       selectionSource: 'canonical',
@@ -109,8 +154,8 @@ Surreal dog-editorial composition.
     expect(result).toContain('Do not normalize an editorial, weird, asymmetrical, or poster-like reference into a safer startup layout.');
   });
 
-  it('compiles canonical markdown into a compact execution brief', () => {
-    const result = compileDesignReferenceBrief({
+  it('compiles canonical markdown into a structured execution packet', () => {
+    const result = compileDesignExecutionPacket({
       slug: 'apple',
       relativePath: 'vendor/awesome-design-md/design-md/apple/DESIGN.md',
       excerpt: 'fallback excerpt',
@@ -135,10 +180,25 @@ Hardware keynote restraint.
 ## Anti-Drift Fail Conditions
 - the page reads like a generic SaaS landing page rather than a product keynote
 `,
+      profile: {
+        ...vercelProfile,
+        slug: 'apple',
+        title: 'Apple',
+        visualIntent: 'Hardware keynote restraint.',
+        compositionRecipes: [
+          {
+            ...vercelProfile.compositionRecipes[0],
+            heroStructure: 'Keynote hero.',
+            headlineImageRelationship: 'Frame the product with quiet restraint.',
+          },
+        ],
+      } as any,
       source: 'canonical',
     });
 
     expect(result.identity).toBe('Hardware keynote restraint.');
+    expect(result.visualIntent).toBe('Hardware keynote restraint.');
+    expect(result.primaryRecipe.heroStructure).toBe('Keynote hero.');
     expect(result.signatureMarkers).toEqual(['Quiet product staging.', 'Large calm product imagery.']);
     expect(result.mustKeep).toEqual(['Keep one dominant device family.']);
     expect(result.mustAvoid).toEqual(['Do not add busy feature-card grids.']);
@@ -157,6 +217,7 @@ Hardware keynote restraint.
           slug: 'apple',
           relativePath: 'vendor/awesome-design-md/design-md/apple/DESIGN.md',
           excerpt: '# Design System\nFallback extract.',
+          profile: undefined,
         },
       ],
       selectionSource: 'fallback',
