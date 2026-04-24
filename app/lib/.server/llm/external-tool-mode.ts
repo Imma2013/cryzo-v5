@@ -23,6 +23,10 @@ export function resolveAssistantMode(chatMode: 'build' | 'discuss' | undefined, 
   return chatMode === 'discuss' ? 'discuss' : 'build';
 }
 
+export function shouldUseGoogleRuntimeForAssistantMode(assistantMode: AssistantMode) {
+  return assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
+}
+
 export function getExternalToolSystemPrompt(context: ExternalToolPromptContext) {
   const availabilityInstruction = context.toolsAvailable
     ? 'Composio tools are available for this request. Use them to discover the right app action, request auth when needed, and summarize results after execution.'

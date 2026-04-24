@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getBuildWithToolsSystemPrompt, getExternalToolSystemPrompt, resolveAssistantMode } from './external-tool-mode';
+import {
+  getBuildWithToolsSystemPrompt,
+  getExternalToolSystemPrompt,
+  resolveAssistantMode,
+  shouldUseGoogleRuntimeForAssistantMode,
+} from './external-tool-mode';
 
 describe('resolveAssistantMode', () => {
   it('routes personal app requests into external-tool mode', () => {
@@ -19,6 +24,18 @@ describe('resolveAssistantMode', () => {
     expect(resolveAssistantMode('build', 'make a CRM dashboard and create a GitHub issue in my repo')).toBe(
       'build-with-tools',
     );
+  });
+});
+
+describe('shouldUseGoogleRuntimeForAssistantMode', () => {
+  it('enables the Gemini runtime for external or mixed app requests', () => {
+    expect(shouldUseGoogleRuntimeForAssistantMode('external-tool')).toBe(true);
+    expect(shouldUseGoogleRuntimeForAssistantMode('build-with-tools')).toBe(true);
+  });
+
+  it('does not force the Gemini runtime for pure build or discuss requests', () => {
+    expect(shouldUseGoogleRuntimeForAssistantMode('build')).toBe(false);
+    expect(shouldUseGoogleRuntimeForAssistantMode('discuss')).toBe(false);
   });
 });
 

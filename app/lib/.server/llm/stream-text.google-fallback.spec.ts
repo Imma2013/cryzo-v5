@@ -131,4 +131,224 @@ describe('createGoogleGenerateFallbackResult', () => {
       }),
     ]);
   });
+
+  it('emits tool calls, tool results, and Google metadata annotations into the chat data stream', async () => {
+    mockedGenerateText.mockResolvedValue({
+      files: [],
+      finishReason: 'stop',
+      providerMetadata: {
+        google: {
+          groundingMetadata: null,
+        },
+      },
+      reasoning: [],
+      request: { body: '{}' },
+      response: {
+        id: 'resp-2',
+        messages: [
+          {
+            content: [
+              {
+                text: 'Checking Stripe',
+                type: 'text',
+              },
+              {
+                args: { query: 'connect stripe' },
+                experimental_providerMetadata: {
+                  google: {
+                    thoughtSignature: 'sig-1',
+                  },
+                },
+                toolCallId: 'call-1',
+                toolName: 'COMPOSIO_SEARCH_TOOLS',
+                type: 'tool-call',
+              },
+            ],
+            id: 'assistant-msg-1',
+            role: 'assistant',
+          },
+          {
+            content: [
+              {
+                result: {
+                  items: [{ slug: 'STRIPE_CREATE_PRODUCT' }],
+                },
+                toolCallId: 'call-1',
+                toolName: 'COMPOSIO_SEARCH_TOOLS',
+                type: 'tool-result',
+              },
+            ],
+            id: 'tool-msg-1',
+            role: 'tool',
+          },
+        ],
+      },
+      sources: [],
+      steps: [
+        {
+          finishReason: 'tool-calls',
+          response: {
+            messages: [
+              {
+                content: [
+                  {
+                    text: 'Checking Stripe',
+                    type: 'text',
+                  },
+                  {
+                    args: { query: 'connect stripe' },
+                    providerMetadata: {
+                      google: {
+                        thoughtSignature: 'sig-1',
+                      },
+                    },
+                    toolCallId: 'call-1',
+                    toolName: 'COMPOSIO_SEARCH_TOOLS',
+                    type: 'tool-call',
+                  },
+                ],
+                id: 'assistant-msg-1',
+                role: 'assistant',
+              },
+              {
+                content: [
+                  {
+                    result: {
+                      items: [{ slug: 'STRIPE_CREATE_PRODUCT' }],
+                    },
+                    toolCallId: 'call-1',
+                    toolName: 'COMPOSIO_SEARCH_TOOLS',
+                    type: 'tool-result',
+                  },
+                ],
+                id: 'tool-msg-1',
+                role: 'tool',
+              },
+            ],
+          },
+          text: 'Checking Stripe',
+          toolCalls: [
+            {
+              args: { query: 'connect stripe' },
+              toolCallId: 'call-1',
+              toolName: 'COMPOSIO_SEARCH_TOOLS',
+            },
+          ],
+          toolResults: [
+            {
+              result: {
+                items: [{ slug: 'STRIPE_CREATE_PRODUCT' }],
+              },
+              toolCallId: 'call-1',
+              toolName: 'COMPOSIO_SEARCH_TOOLS',
+            },
+          ],
+          usage: {
+            completionTokens: 4,
+            promptTokens: 3,
+            totalTokens: 7,
+          },
+        },
+      ],
+      text: 'Checking Stripe',
+      toolCalls: [
+        {
+          args: { query: 'connect stripe' },
+          toolCallId: 'call-1',
+          toolName: 'COMPOSIO_SEARCH_TOOLS',
+        },
+      ],
+      toolResults: [
+        {
+          result: {
+            items: [{ slug: 'STRIPE_CREATE_PRODUCT' }],
+          },
+          toolCallId: 'call-1',
+          toolName: 'COMPOSIO_SEARCH_TOOLS',
+        },
+      ],
+      usage: {
+        completionTokens: 4,
+        promptTokens: 3,
+        totalTokens: 7,
+      },
+      warnings: [],
+    } as any);
+
+    const result = await createGoogleGenerateFallbackResult({
+      streamParams: { model: {} as any },
+    });
+
+    const writes: string[] = [];
+    result.mergeIntoDataStream({
+      write(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    const parsedParts = writes.map((chunk) => parseDataStreamPart(chunk));
+
+    expect(parsedParts).toEqual([
+      {
+        type: 'start_step',
+        value: { messageId: 'assistant-msg-1' },
+      },
+      {
+        type: 'message_annotations',
+        value: [
+          {
+            type: 'googleToolCallMetadata',
+            toolCallId: 'call-1',
+            providerMetadata: {
+              google: {
+                thoughtSignature: 'sig-1',
+              },
+            },
+          },
+        ],
+      },
+      {
+        type: 'text',
+        value: 'Checking Stripe',
+      },
+      {
+        type: 'tool_call',
+        value: {
+          args: { query: 'connect stripe' },
+          toolCallId: 'call-1',
+          toolName: 'COMPOSIO_SEARCH_TOOLS',
+        },
+      },
+      {
+        type: 'tool_result',
+        value: {
+          result: {
+            items: [{ slug: 'STRIPE_CREATE_PRODUCT' }],
+          },
+          toolCallId: 'call-1',
+        },
+      },
+      {
+        type: 'finish_step',
+        value: {
+          finishReason: 'tool-calls',
+          isContinued: false,
+          usage: {
+            completionTokens: 4,
+            promptTokens: 3,
+          },
+        },
+      },
+      {
+        type: 'finish_message',
+        value: {
+          finishReason: 'stop',
+          usage: {
+            completionTokens: 4,
+            promptTokens: 3,
+          },
+        },
+      },
+    ]);
+  });
 });

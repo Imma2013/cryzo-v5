@@ -25,6 +25,7 @@ import {
   getGoogleProviderSetupPayloadForRuntime,
   resolveGoogleServerApiKeyForRuntime,
 } from '~/lib/llm/google-server-runtime';
+import { resolveAssistantMode, shouldUseGoogleRuntimeForAssistantMode } from '~/lib/.server/llm/external-tool-mode';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -131,6 +132,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const providerSettings = getProviderSettingsFromCookie(cookieHeader) as Record<string, IProviderSetting>;
   const lastUserMessage = messages.filter((message) => message.role === 'user').slice(-1)[0];
   const activeProviderName = lastUserMessage ? extractPropertiesFromMessage(lastUserMessage).provider : undefined;
+  const latestUserPrompt = messages
+    .filter((message) => message.role === 'user' && !isHiddenMessage(message))
+    .map((message) => message.content)
+    .join('\n')
+    .trim();
+  const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
+  const runtimeProviderName = shouldUseGoogleRuntimeForAssistantMode(assistantMode) ? 'Google' : activeProviderName;
 
   const stream = new SwitchableStream();
 
@@ -145,10 +153,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
-    if (isGoogleProvider(activeProviderName)) {
+    if (isGoogleProvider(runtimeProviderName)) {
       logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
     }
-    const setupPayload = getGoogleProviderSetupPayloadForRuntime(activeProviderName, serverEnv);
+    const setupPayload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
 
     if (setupPayload) {
       return new Response(JSON.stringify(setupPayload), {
@@ -456,11 +464,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const errorMessage = error.message || 'Unknown error';
         const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
 
-        if (isGoogleProvider(activeProviderName)) {
+        if (isGoogleProvider(runtimeProviderName)) {
           logger.error('Google stream failure diagnostics', {
             causeMessage: errorCauseMessage,
             errorMessage,
-            provider: activeProviderName,
+            provider: runtimeProviderName,
             statusCode: error?.statusCode,
             url: error?.url,
           });
@@ -483,7 +491,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           errorMessage.includes('unauthorized') ||
           errorMessage.includes('authentication')
         ) {
-          if (isGoogleProvider(activeProviderName)) {
+          if (isGoogleProvider(runtimeProviderName)) {
             return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
           }
 
@@ -574,9 +582,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     };
 
     if (error.message?.includes('API key')) {
-      const payload = getGoogleProviderSetupPayloadForRuntime(activeProviderName, serverEnv);
+      const payload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
 
-      if (payload || isGoogleProvider(activeProviderName)) {
+      if (payload || isGoogleProvider(runtimeProviderName)) {
         const setupResponse =
           payload ??
           {
@@ -585,7 +593,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             isRetryable: false,
             message:
               'Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.',
-            provider: activeProviderName || 'Google',
+            provider: runtimeProviderName || 'Google',
             setupKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
             setupSource: 'server_env' as const,
             statusCode: 503,

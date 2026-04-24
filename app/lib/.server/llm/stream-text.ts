@@ -26,8 +26,14 @@ import {
 import { buildCanonicalDesignPreamble, buildCompiledReferenceBlock } from '~/lib/common/prompts/design-guidance';
 import type { GoogleToolCallMetadataAnnotation } from '~/types/context';
 import { summarizeGoogleHistoryForDiagnostics } from './google-tool-runtime';
+import { writeGoogleToolMetadataAnnotations } from './google-tool-metadata';
 import { getComposioTools } from './composio';
-import { getBuildWithToolsSystemPrompt, getExternalToolSystemPrompt, resolveAssistantMode } from './external-tool-mode';
+import {
+  getBuildWithToolsSystemPrompt,
+  getExternalToolSystemPrompt,
+  resolveAssistantMode,
+  shouldUseGoogleRuntimeForAssistantMode,
+} from './external-tool-mode';
 import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
 import { buildDesignAuditSystemPrompt, buildDesignAuditUserPrompt, parseBuildDesignAudit } from './design-audit';
 import {
@@ -129,6 +135,92 @@ function createSinglePartObjectStream<T>(parts: T[]) {
   });
 }
 
+function buildGenerateTextCompatStepResults(result: Awaited<ReturnType<typeof generateText>>) {
+  if (Array.isArray(result.steps) && result.steps.length > 0) {
+    return result.steps;
+  }
+
+  return [
+    {
+      finishReason: result.finishReason ?? 'stop',
+      response: result.response,
+      text: result.text,
+      toolCalls: result.toolCalls,
+      toolResults: result.toolResults,
+      usage: result.usage,
+    },
+  ];
+}
+
+function buildGenerateTextCompatFullStreamParts(result: Awaited<ReturnType<typeof generateText>>, finishReason: string, usage: any) {
+  const parts: any[] = [];
+  const stepResults = buildGenerateTextCompatStepResults(result);
+
+  for (const step of stepResults) {
+    const responseMessages = Array.isArray(step?.response?.messages) ? step.response.messages : [];
+    let emittedContent = false;
+
+    for (const message of responseMessages) {
+      if (!Array.isArray(message?.content)) {
+        continue;
+      }
+
+      if (message.role === 'assistant') {
+        for (const part of message.content) {
+          if (part?.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+            emittedContent = true;
+            parts.push({
+              textDelta: part.text,
+              type: 'text-delta',
+            });
+          }
+
+          if (part?.type === 'tool-call') {
+            emittedContent = true;
+            parts.push({
+              args: part.args,
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              type: 'tool-call',
+            });
+          }
+        }
+      }
+
+      if (message.role === 'tool') {
+        for (const part of message.content) {
+          if (part?.type === 'tool-result') {
+            emittedContent = true;
+            parts.push({
+              result: part.result,
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              type: 'tool-result',
+            });
+          }
+        }
+      }
+    }
+
+    if (!emittedContent && typeof step?.text === 'string' && step.text.length > 0) {
+      parts.push({
+        textDelta: step.text,
+        type: 'text-delta',
+      });
+    }
+  }
+
+  parts.push({
+    finishReason,
+    providerMetadata: result.providerMetadata,
+    response: result.response,
+    type: 'finish',
+    usage,
+  });
+
+  return parts;
+}
+
 export function createGenerateTextCompatResult({
   result,
   onFinish,
@@ -143,7 +235,11 @@ export function createGenerateTextCompatResult({
     totalTokens:
       result.usage.totalTokens ?? (result.usage.promptTokens || 0) + (result.usage.completionTokens || 0),
   };
-  const messageId = 'msg-google-compat';
+  const compatStepResults = buildGenerateTextCompatStepResults(result);
+  const messageId =
+    compatStepResults
+      .flatMap((step) => (Array.isArray(step?.response?.messages) ? step.response.messages : []))
+      .find((message) => message?.role === 'assistant' && typeof message?.id === 'string')?.id || 'msg-google-compat';
   let finishTriggered = false;
 
   const runOnFinish = async () => {
@@ -163,42 +259,83 @@ export function createGenerateTextCompatResult({
     experimental_providerMetadata: Promise.resolve(result.providerMetadata),
     files: Promise.resolve(result.files),
     finishReason: Promise.resolve(finishReason),
-    fullStream: createSinglePartObjectStream<any>([
-      ...(result.text
-        ? [
-            {
-              textDelta: result.text,
-              type: 'text-delta',
-            },
-          ]
-        : []),
-      {
-        finishReason,
-        providerMetadata: result.providerMetadata,
-        response: result.response,
-        type: 'finish',
-        usage,
-      },
-    ]),
+    fullStream: createSinglePartObjectStream<any>(buildGenerateTextCompatFullStreamParts(result, finishReason, usage)),
     mergeIntoDataStream(writer: {
       write: (chunk: string) => void;
     }) {
-      writer.write(formatDataStreamPart('start_step', { messageId }));
+      for (const [index, step] of compatStepResults.entries()) {
+        const responseMessages = Array.isArray(step?.response?.messages) ? step.response.messages : [];
+        const stepMessageId =
+          responseMessages.find((message) => message?.role === 'assistant' && typeof message?.id === 'string')?.id ||
+          (index === 0 ? messageId : `${messageId}-${index}`);
 
-      if (result.text) {
-        writer.write(formatDataStreamPart('text', result.text));
+        writer.write(formatDataStreamPart('start_step', { messageId: stepMessageId }));
+
+        writeGoogleToolMetadataAnnotations(step, {
+          writeMessageAnnotation(annotation: any) {
+            writer.write(formatDataStreamPart('message_annotations', [annotation]));
+          },
+        } as any);
+
+        let emittedContent = false;
+
+        for (const responseMessage of responseMessages) {
+          if (!Array.isArray(responseMessage?.content)) {
+            continue;
+          }
+
+          if (responseMessage.role === 'assistant') {
+            for (const part of responseMessage.content) {
+              if (part?.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+                emittedContent = true;
+                writer.write(formatDataStreamPart('text', part.text));
+              }
+
+              if (part?.type === 'tool-call') {
+                emittedContent = true;
+                writer.write(
+                  formatDataStreamPart('tool_call', {
+                    args: part.args,
+                    toolCallId: part.toolCallId,
+                    toolName: part.toolName,
+                  }),
+                );
+              }
+            }
+          }
+
+          if (responseMessage.role === 'tool') {
+            for (const part of responseMessage.content) {
+              if (part?.type === 'tool-result') {
+                emittedContent = true;
+                writer.write(
+                  formatDataStreamPart('tool_result', {
+                    result: part.result,
+                    toolCallId: part.toolCallId,
+                  }),
+                );
+              }
+            }
+          }
+        }
+
+        if (!emittedContent && typeof step?.text === 'string' && step.text.length > 0) {
+          writer.write(formatDataStreamPart('text', step.text));
+        }
+
+        writer.write(
+          formatDataStreamPart('finish_step', {
+            finishReason:
+              typeof step?.finishReason === 'string' && step.finishReason.length > 0 ? step.finishReason : finishReason,
+            isContinued: false,
+            usage: {
+              completionTokens: step?.usage?.completionTokens ?? usage.completionTokens,
+              promptTokens: step?.usage?.promptTokens ?? usage.promptTokens,
+            },
+          }),
+        );
       }
 
-      writer.write(
-        formatDataStreamPart('finish_step', {
-          finishReason,
-          isContinued: false,
-          usage: {
-            completionTokens: usage.completionTokens,
-            promptTokens: usage.promptTokens,
-          },
-        }),
-      );
       writer.write(
         formatDataStreamPart('finish_message', {
           finishReason,
@@ -693,6 +830,16 @@ export async function streamText(props: {
 
     return newMessage;
   });
+  const latestUserPrompt = getAuthorPrompt(processedMessages);
+  const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
+
+  if (shouldUseGoogleRuntimeForAssistantMode(assistantMode)) {
+    currentProvider = 'Google';
+
+    if (!isSupportedGoogleChatModel(currentModel)) {
+      currentModel = DEFAULT_MODEL;
+    }
+  }
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
   const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
@@ -747,8 +894,6 @@ export async function streamText(props: {
   }
 
   const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
-  const latestUserPrompt = getAuthorPrompt(processedMessages);
-  const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
   const designReferenceLibrary =
     assistantMode === 'build' || assistantMode === 'build-with-tools' ? getDesignReferenceLibrary() : [];
   const designRouting =
@@ -911,7 +1056,7 @@ export async function streamText(props: {
           ),
         )
       : options || {};
-  const shouldInjectComposioTools = provider.name !== 'Google';
+  const shouldInjectComposioTools = shouldUseGoogleRuntimeForAssistantMode(assistantMode);
   const composioToolResolution = shouldInjectComposioTools
     ? await getComposioTools({
         env: serverEnv as unknown as Record<string, string | undefined>,
@@ -928,13 +1073,10 @@ export async function streamText(props: {
         tools: {},
       };
   const composioTools = composioToolResolution.tools;
-
-  if (!shouldInjectComposioTools) {
-    logger.info('Composio tools disabled for Google provider in chat stream path');
-  }
   logger.info(
     'Composio resolution',
     JSON.stringify({
+      assistantMode,
       errorMessage: composioToolResolution.errorMessage,
       hasIdentity: composioToolResolution.hasIdentity,
       provider: provider.name,
