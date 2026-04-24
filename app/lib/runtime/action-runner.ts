@@ -202,25 +202,6 @@ function getMimeTypeFromPath(filePath: string): string {
   }
 }
 
-async function getAuthHeaderForImageRequest() {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-
-  try {
-    const { getCurrentSupabaseAccessToken } = await import('~/lib/auth/supabase-auth');
-    const token = getCurrentSupabaseAccessToken();
-
-    if (!token) {
-      return undefined;
-    }
-
-    return { Authorization: `Bearer ${token}` };
-  } catch {
-    return undefined;
-  }
-}
-
 export type ActionStatus = 'pending' | 'running' | 'complete' | 'aborted' | 'failed';
 
 export type BaseActionState = BoltAction & {
@@ -640,7 +621,6 @@ export class ActionRunner {
 
   async #runImageAction(action: ImageAction) {
     const webcontainer = await this.#webcontainer;
-    const authHeader = await getAuthHeaderForImageRequest();
     const inputs: Array<{ source: 'project'; path: string; data: string; mimeType: string }> = [];
 
     for (const inputPath of action.inputPaths || []) {
@@ -664,7 +644,6 @@ export class ActionRunner {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeader,
       },
       body: JSON.stringify({
         operation: action.operation || 'generate',

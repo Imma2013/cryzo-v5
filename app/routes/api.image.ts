@@ -1,10 +1,10 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
+import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
+import { isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
+import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { withSecurity } from '~/lib/security';
 import { getServerEnv } from '~/lib/server-env';
-import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
-import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
-import { isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
-import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 
 type GeminiPart = {
   text?: string;
@@ -48,76 +48,49 @@ function buildImageParts(prompt: string, inputs: ImageInput[] = []) {
   ];
 }
 
-export async function imageAction({ context, request }: ActionFunctionArgs) {
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ message: 'Method not allowed.' }), {
-      status: 405,
-      headers: {
+function jsonResponse(payload: unknown, status = 200, responseHeaders?: Headers) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: withSupabaseAuthHeaders(
+      {
         'Content-Type': 'application/json',
       },
-    });
+      responseHeaders,
+    ),
+  });
+}
+
+async function imageAction({ context, request }: ActionFunctionArgs) {
+  if (request.method !== 'POST') {
+    return jsonResponse({ message: 'Method not allowed.' }, 405);
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const authHeader = request.headers.get('Authorization');
-  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
-
-  if (!accessToken) {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before generating images.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        statusText: 'Unauthorized',
-      },
-    );
-  }
+  let responseHeaders: Headers | undefined;
 
   try {
-    await verifySupabaseAccessToken(accessToken, serverEnv as any);
-  } catch {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before generating images.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        statusText: 'Unauthorized',
-      },
-    );
+    const auth = await requireAuth(request, context as any, {
+      message: 'Sign in before generating images.',
+    });
+    responseHeaders = auth.responseHeaders;
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
   }
 
   const googleKeyResolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
   logGoogleServerKeyResolution('api.image', googleKeyResolution);
 
   if (!googleKeyResolution.key) {
-    return new Response(
-      JSON.stringify({
-        message: 'Missing Google API key on the server. Configure GOOGLE_GENERATIVE_AI_API_KEY before generating images.',
-      }),
+    return jsonResponse(
       {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        message: 'Missing Google API key on the server. Configure GOOGLE_GENERATIVE_AI_API_KEY before generating images.',
       },
+      401,
+      responseHeaders,
     );
   }
 
@@ -131,36 +104,22 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   }>();
 
   if (!prompt?.trim()) {
-    return new Response(JSON.stringify({ message: 'Image prompt is required.' }), {
-      status: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    return jsonResponse({ message: 'Image prompt is required.' }, 400, responseHeaders);
   }
 
   if (operation === 'edit' && inputs.length === 0) {
-    return new Response(JSON.stringify({ message: 'Image edit actions require at least one input image.' }), {
-      status: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    return jsonResponse({ message: 'Image edit actions require at least one input image.' }, 400, responseHeaders);
   }
 
   const selectedModel = normalizeImageModel(model);
 
   if (!isSupportedGoogleImageModel(selectedModel)) {
-    return new Response(
-      JSON.stringify({
-        message: `Unsupported Google image model: ${selectedModel}`,
-      }),
+    return jsonResponse(
       {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        message: `Unsupported Google image model: ${selectedModel}`,
       },
+      400,
+      responseHeaders,
     );
   }
 
@@ -202,17 +161,13 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
   };
 
   if (!response.ok) {
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         message: result.error?.message || 'Google image generation request failed.',
         providerError: result.error?.message,
-      }),
-      {
-        status: response.status,
-        headers: {
-          'Content-Type': 'application/json',
-        },
       },
+      response.status,
+      responseHeaders,
     );
   }
 
@@ -224,33 +179,25 @@ export async function imageAction({ context, request }: ActionFunctionArgs) {
     const providerError =
       result.promptFeedback?.blockReason || result.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
 
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         message: providerError ? `The model did not return an image (${providerError}).` : 'The model did not return an image.',
         providerError,
-      }),
-      {
-        status: 502,
-        headers: {
-          'Content-Type': 'application/json',
-        },
       },
+      502,
+      responseHeaders,
     );
   }
 
-  return new Response(
-    JSON.stringify({
+  return jsonResponse(
+    {
       imageBase64: imagePart.inlineData.data,
       mimeType: imagePart.inlineData.mimeType || 'image/png',
       model: selectedModel,
       operation,
-    }),
-    {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
     },
+    200,
+    responseHeaders,
   );
 }
 

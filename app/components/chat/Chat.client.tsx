@@ -120,8 +120,7 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
-    const { getAccessToken, user } = useSupabaseAuth();
-    const [authAccessToken, setAuthAccessToken] = useState<string | null>(null);
+    const { user } = useSupabaseAuth();
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
@@ -192,33 +191,6 @@ export const ChatImpl = memo(
       setLocalGuestId(guestId);
     }, []);
 
-    useEffect(() => {
-      let cancelled = false;
-
-      if (!user) {
-        setAuthAccessToken(null);
-        return;
-      }
-
-      (async () => {
-        let token: string | null = null;
-
-        try {
-          token = await getAccessToken();
-        } catch (error) {
-          logger.warn('Failed to read auth access token for chat request headers', error);
-        }
-
-        if (!cancelled) {
-          setAuthAccessToken(token);
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [getAccessToken, user]);
-
     const {
       messages,
       isLoading,
@@ -235,7 +207,6 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
-      headers: authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : undefined,
       body: {
         apiKeys,
         files,

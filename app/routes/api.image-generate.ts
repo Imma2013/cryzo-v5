@@ -1,86 +1,63 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { generateGoogleImage } from '~/lib/.server/images/google-image-generation';
-import { getServerEnv } from '~/lib/server-env';
-import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
-import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
+import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { getServerEnv } from '~/lib/server-env';
 
 type GenerateImageRequest = Parameters<typeof generateGoogleImage>[0] & {
   prompt?: string;
 };
 
-function badRequest(message: string, status = 400) {
-  return new Response(JSON.stringify({ error: true, message }), {
+function jsonResponse(payload: unknown, status = 400, responseHeaders?: Headers) {
+  return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: withSupabaseAuthHeaders(
+      {
+        'Content-Type': 'application/json',
+      },
+      responseHeaders,
+    ),
   });
 }
 
 export async function action({ context, request }: ActionFunctionArgs) {
   if (request.method !== 'POST') {
-    return badRequest('Method not allowed', 405);
+    return jsonResponse({ error: true, message: 'Method not allowed' }, 405);
   }
 
   const serverEnv = getServerEnv(context as any) as Record<string, string>;
-  const authHeader = request.headers.get('Authorization');
-  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
-
-  if (!accessToken) {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before generating images.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        statusText: 'Unauthorized',
-      },
-    );
-  }
+  let responseHeaders: Headers | undefined;
 
   try {
-    await verifySupabaseAccessToken(accessToken, serverEnv as any);
-  } catch {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before generating images.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        statusText: 'Unauthorized',
-      },
-    );
+    const auth = await requireAuth(request, context as any, {
+      message: 'Sign in before generating images.',
+    });
+    responseHeaders = auth.responseHeaders;
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
   }
 
   const googleKeyResolution = resolveGoogleServerApiKeyForRuntime(serverEnv);
   logGoogleServerKeyResolution('api.image-generate', googleKeyResolution);
 
   if (!googleKeyResolution.key) {
-    return badRequest('Missing Google API key on the server. Set GOOGLE_GENERATIVE_AI_API_KEY first.', 401);
+    return jsonResponse(
+      { error: true, message: 'Missing Google API key on the server. Set GOOGLE_GENERATIVE_AI_API_KEY first.' },
+      401,
+      responseHeaders,
+    );
   }
 
   const body = (await request.json()) as GenerateImageRequest;
   const prompt = body.prompt?.trim();
 
   if (!prompt) {
-    return badRequest('Prompt is required.');
+    return jsonResponse({ error: true, message: 'Prompt is required.' }, 400, responseHeaders);
   }
 
   try {
@@ -93,8 +70,8 @@ export async function action({ context, request }: ActionFunctionArgs) {
       references: body.references,
     });
 
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         ok: true,
         images: result.images.map((image) => ({
           mimeType: image.mimeType,
@@ -103,14 +80,18 @@ export async function action({ context, request }: ActionFunctionArgs) {
         })),
         text: result.text,
         model: result.model,
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
       },
+      200,
+      responseHeaders,
     );
   } catch (error) {
-    return badRequest(error instanceof Error ? error.message : 'Nano Banana image generation failed.', 502);
+    return jsonResponse(
+      {
+        error: true,
+        message: error instanceof Error ? error.message : 'Nano Banana image generation failed.',
+      },
+      502,
+      responseHeaders,
+    );
   }
 }

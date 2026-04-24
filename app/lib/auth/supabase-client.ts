@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 function readEnvValue(value: string | undefined) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -18,7 +19,7 @@ export function getSupabaseAuthClient() {
   }
 
   if (!supabaseClient) {
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+    supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
