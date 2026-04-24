@@ -5,6 +5,148 @@ export interface DesignPromptReference {
   slug: string;
   relativePath: string;
   excerpt: string;
+  markdown?: string;
+  source?: 'canonical' | 'fallback';
+}
+
+export interface CompiledDesignReferenceBrief {
+  slug: string;
+  relativePath: string;
+  source: 'canonical' | 'fallback';
+  identity: string;
+  signatureMarkers: string[];
+  mustKeep: string[];
+  mustAvoid: string[];
+  sectionArchetypes: string[];
+  failConditions: string[];
+}
+
+function parseMarkdownSections(markdown: string) {
+  const normalized = markdown.replace(/\r\n/g, '\n').trim();
+  const sections = new Map<string, string>();
+  let currentHeading = '__root__';
+  let buffer: string[] = [];
+
+  const flush = () => {
+    sections.set(currentHeading, buffer.join('\n').trim());
+    buffer = [];
+  };
+
+  for (const line of normalized.split('\n')) {
+    const headingMatch = line.match(/^##\s+(.+)$/);
+
+    if (headingMatch) {
+      flush();
+      currentHeading = headingMatch[1].trim().toLowerCase();
+      continue;
+    }
+
+    buffer.push(line);
+  }
+
+  flush();
+
+  return sections;
+}
+
+function getSectionBulletLines(content: string | undefined, limit: number) {
+  if (!content) {
+    return [];
+  }
+
+  return content
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.slice(2).trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function getSectionParagraph(content: string | undefined) {
+  if (!content) {
+    return '';
+  }
+
+  return content
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => !!line && !line.startsWith('- '))
+    ?.trim() ?? '';
+}
+
+function buildFallbackBrief(reference: DesignPromptReference): CompiledDesignReferenceBrief {
+  return {
+    slug: reference.slug,
+    relativePath: reference.relativePath,
+    source: reference.source ?? 'fallback',
+    identity: reference.excerpt.trim(),
+    signatureMarkers: [],
+    mustKeep: [],
+    mustAvoid: [],
+    sectionArchetypes: [],
+    failConditions: [],
+  };
+}
+
+export function compileDesignReferenceBrief(reference: DesignPromptReference): CompiledDesignReferenceBrief {
+  const markdown = reference.markdown?.trim();
+
+  if (!markdown) {
+    return buildFallbackBrief(reference);
+  }
+
+  const sections = parseMarkdownSections(markdown);
+  const identity = getSectionParagraph(sections.get('identity')) || reference.excerpt.trim();
+  const signatureMarkers = getSectionBulletLines(sections.get('signature markers'), 5);
+  const mustKeep = getSectionBulletLines(sections.get('must keep'), 4);
+  const mustAvoid = getSectionBulletLines(sections.get('must avoid'), 4);
+  const sectionArchetypes = getSectionBulletLines(sections.get('section archetypes'), 4);
+  const failConditions = getSectionBulletLines(sections.get('anti-drift fail conditions'), 4);
+
+  return {
+    slug: reference.slug,
+    relativePath: reference.relativePath,
+    source: reference.source ?? 'canonical',
+    identity,
+    signatureMarkers,
+    mustKeep,
+    mustAvoid,
+    sectionArchetypes,
+    failConditions,
+  };
+}
+
+function formatOptionalBulletSection(title: string, items: string[]) {
+  if (items.length === 0) {
+    return '';
+  }
+
+  return stripIndents`
+    ${title}
+    ${items.map((item) => `- ${item}`).join('\n')}
+  `;
+}
+
+export function buildCompiledReferenceBlock(reference: DesignPromptReference) {
+  const brief = compileDesignReferenceBrief(reference);
+
+  return stripIndents`
+    <design_execution_brief slug="${brief.slug}" path="${brief.relativePath}" source="${brief.source}">
+      Identity:
+      - ${brief.identity}
+
+      ${formatOptionalBulletSection('Signature markers:', brief.signatureMarkers)}
+
+      ${formatOptionalBulletSection('Must keep:', brief.mustKeep)}
+
+      ${formatOptionalBulletSection('Must avoid:', brief.mustAvoid)}
+
+      ${formatOptionalBulletSection('Section archetypes:', brief.sectionArchetypes)}
+
+      ${formatOptionalBulletSection('Anti-drift fail conditions:', brief.failConditions)}
+    </design_execution_brief>
+  `;
 }
 
 function hasOverrides(designScheme?: DesignScheme) {
@@ -123,15 +265,13 @@ export function buildCanonicalDesignPreamble(options: {
       The final result should look recognizably native to the selected reference family even if the content and brand are original.
     </design_reference_library>
 
-    ${selectedReferences
-      .map(
-        (reference) => stripIndents`
-          <selected_design_reference slug="${reference.slug}" path="${reference.relativePath}">
-          ${reference.excerpt}
-          </selected_design_reference>
-        `,
-      )
-      .join('\n\n')}
+    <design_reference_delivery>
+      The selected reference must be followed through the compact execution briefs below.
+      Do not treat the reference docs as optional inspiration or raw markdown to paraphrase away.
+      Use the compiled brief as the direct implementation brief for the build.
+    </design_reference_delivery>
+
+    ${selectedReferences.map((reference) => buildCompiledReferenceBlock(reference)).join('\n\n')}
 
     ${
       hasCryzoReference

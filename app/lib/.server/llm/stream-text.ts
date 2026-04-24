@@ -19,15 +19,17 @@ import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
 import {
   CANONICAL_DESIGN_LIBRARY_PATH,
+  type DesignReferenceDoc,
   getDesignReferenceLibrary,
   routeDesignReferences,
 } from '~/lib/.server/design-system';
-import { buildCanonicalDesignPreamble } from '~/lib/common/prompts/design-guidance';
+import { buildCanonicalDesignPreamble, buildCompiledReferenceBlock } from '~/lib/common/prompts/design-guidance';
 import type { GoogleToolCallMetadataAnnotation } from '~/types/context';
 import { summarizeGoogleHistoryForDiagnostics } from './google-tool-runtime';
 import { getComposioTools } from './composio';
 import { getBuildWithToolsSystemPrompt, getExternalToolSystemPrompt, resolveAssistantMode } from './external-tool-mode';
 import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
+import { buildDesignAuditSystemPrompt, buildDesignAuditUserPrompt, parseBuildDesignAudit } from './design-audit';
 
 export type Messages = Message[];
 
@@ -121,14 +123,13 @@ function createSinglePartObjectStream<T>(parts: T[]) {
   });
 }
 
-export async function createGoogleGenerateFallbackResult({
-  streamParams,
+export function createGenerateTextCompatResult({
+  result,
   onFinish,
 }: {
-  streamParams: Parameters<typeof generateText>[0];
+  result: Awaited<ReturnType<typeof generateText>>;
   onFinish?: StreamingOptions['onFinish'];
 }) {
-  const result = await generateText(streamParams);
   const finishReason = result.finishReason ?? 'stop';
   const usage = {
     completionTokens: result.usage.completionTokens,
@@ -217,6 +218,90 @@ export async function createGoogleGenerateFallbackResult({
     usage: Promise.resolve(usage),
     warnings: Promise.resolve(result.warnings),
   } as any;
+}
+
+async function createGenerateTextCompatResultFromParams({
+  streamParams,
+  onFinish,
+}: {
+  streamParams: Parameters<typeof generateText>[0];
+  onFinish?: StreamingOptions['onFinish'];
+}) {
+  const result = await generateText(streamParams);
+
+  return createGenerateTextCompatResult({
+    result,
+    onFinish,
+  });
+}
+
+export async function createGoogleGenerateFallbackResult({
+  streamParams,
+  onFinish,
+}: {
+  streamParams: Parameters<typeof generateText>[0];
+  onFinish?: StreamingOptions['onFinish'];
+}) {
+  return createGenerateTextCompatResultFromParams({
+    streamParams,
+    onFinish,
+  });
+}
+
+function compactGeneratedDraft(text: string, maxLength = 16000) {
+  return text.trim().slice(0, maxLength);
+}
+
+function appendRetryAuditBlock(systemPrompt: string, critique: string[]) {
+  if (critique.length === 0) {
+    return systemPrompt;
+  }
+
+  return `${systemPrompt}
+
+<design_audit_retry>
+The previous draft drifted away from the selected reference and must be corrected before returning.
+Fix these issues in the next draft:
+${critique.map((item) => `- ${item}`).join('\n')}
+Do not return the same generic structure again. Rebuild the output so it feels unmistakably aligned with the selected reference.
+</design_audit_retry>`;
+}
+
+async function auditBuildDraft({
+  generatedText,
+  compiledReferenceBrief,
+  primaryReference,
+  userPrompt,
+  model,
+  isReasoning,
+}: {
+  generatedText: string;
+  compiledReferenceBrief: string;
+  primaryReference: DesignReferenceDoc;
+  userPrompt: string;
+  model: Parameters<typeof generateText>[0]['model'];
+  isReasoning: boolean;
+}) {
+  const auditPrompt = buildDesignAuditUserPrompt({
+    generatedText: compactGeneratedDraft(generatedText),
+    compiledReferenceBrief,
+    primarySlug: primaryReference.slug,
+    userPrompt,
+  });
+
+  const auditResult = await generateText({
+    model,
+    system: buildDesignAuditSystemPrompt(),
+    messages: [
+      {
+        role: 'user',
+        content: auditPrompt,
+      },
+    ],
+    ...(isReasoning ? { maxCompletionTokens: 1024, temperature: 1 } : { maxTokens: 1024, temperature: 0 }),
+  });
+
+  return parseBuildDesignAudit(auditResult.text);
 }
 
 export function getGoogleProviderOptions(
@@ -623,6 +708,22 @@ export async function streamText(props: {
   const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
   const latestUserPrompt = getAuthorPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
+  const designReferenceLibrary =
+    assistantMode === 'build' || assistantMode === 'build-with-tools' ? getDesignReferenceLibrary() : [];
+  const designRouting =
+    assistantMode === 'build' || assistantMode === 'build-with-tools'
+      ? routeDesignReferences(latestUserPrompt, 1)
+      : undefined;
+  const selectedPrimaryReference = designRouting?.primary;
+  const compiledReferenceBrief = selectedPrimaryReference
+    ? buildCompiledReferenceBlock({
+        slug: selectedPrimaryReference.slug,
+        relativePath: selectedPrimaryReference.relativePath,
+        excerpt: selectedPrimaryReference.excerpt,
+        markdown: selectedPrimaryReference.markdown,
+        source: selectedPrimaryReference.source,
+      })
+    : '';
 
   // Use model-specific limits directly - no artificial cap needed
   const safeMaxTokens = dynamicMaxTokens;
@@ -637,6 +738,7 @@ export async function streamText(props: {
       allowedHtmlElements: allowedHTMLElements,
       modificationTagName: MODIFICATIONS_TAG_NAME,
       designScheme,
+      canonicalDesignActive: Boolean(selectedPrimaryReference),
       supabase: {
         isConnected: options?.supabaseConnection?.isConnected || false,
         hasSelectedProject: options?.supabaseConnection?.hasSelectedProject || false,
@@ -645,19 +747,20 @@ export async function streamText(props: {
     }) ?? getSystemPrompt();
 
   if (assistantMode === 'build' || assistantMode === 'build-with-tools') {
-    const designReferenceLibrary = getDesignReferenceLibrary();
-    const designRouting = routeDesignReferences(latestUserPrompt, 1);
+    const selectionSource = designRouting?.selectionSource;
     const canonicalDesignPreamble = buildCanonicalDesignPreamble({
       libraryPath: designReferenceLibrary.length > 0 ? CANONICAL_DESIGN_LIBRARY_PATH : undefined,
       availableReferences: designReferenceLibrary.map((reference) => reference.slug),
-      selectedReferences: [designRouting.primary]
+      selectedReferences: [selectedPrimaryReference]
         .filter((reference): reference is NonNullable<typeof reference> => !!reference)
         .map((reference) => ({
           slug: reference.slug,
           relativePath: reference.relativePath,
           excerpt: reference.excerpt,
+          markdown: reference.markdown,
+          source: reference.source,
         })),
-      selectionSource: designRouting.selectionSource,
+      selectionSource,
       designScheme,
     });
 
@@ -668,7 +771,7 @@ export async function streamText(props: {
     }
 
     logger.info(
-      `Design prompt diagnostics: mode=${assistantMode} primary=${designRouting.primary?.slug ?? 'none'} source=${designRouting.selectionSource ?? 'unknown'} hiddenFilteredPromptLength=${latestUserPrompt.length} preambleInjected=${canonicalDesignPreamble ? 'yes' : 'no'}`,
+      `Design prompt diagnostics: mode=${assistantMode} primary=${selectedPrimaryReference?.slug ?? 'none'} source=${selectionSource ?? 'unknown'} hiddenFilteredPromptLength=${latestUserPrompt.length} preambleInjected=${canonicalDesignPreamble ? 'yes' : 'no'} compiledBrief=${compiledReferenceBrief ? 'yes' : 'no'}`,
     );
   }
 
@@ -906,19 +1009,71 @@ export async function streamText(props: {
     ),
   );
 
+  if (assistantMode === 'build') {
+    const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
+      onFinish?: StreamingOptions['onFinish'];
+    };
+
+    const firstDraft = await generateText(nonStreamingStreamParams);
+    let finalDraft = firstDraft;
+    let auditVerdict = 'skipped';
+    let auditRetryCount = 0;
+    let auditDegraded = false;
+
+    if (selectedPrimaryReference && compiledReferenceBrief && firstDraft.text?.trim()) {
+      try {
+        const audit = await auditBuildDraft({
+          generatedText: firstDraft.text,
+          compiledReferenceBrief,
+          primaryReference: selectedPrimaryReference,
+          userPrompt: latestUserPrompt,
+          model: nonStreamingStreamParams.model,
+          isReasoning,
+        });
+
+        if (audit) {
+          auditVerdict = audit.verdict;
+
+          if (audit.verdict === 'retry' && audit.critique.length > 0) {
+            auditRetryCount = 1;
+            finalDraft = await generateText({
+              ...nonStreamingStreamParams,
+              system: appendRetryAuditBlock(String(nonStreamingStreamParams.system), audit.critique),
+            });
+          }
+        } else {
+          auditVerdict = 'degraded';
+          auditDegraded = true;
+        }
+      } catch (error) {
+        auditVerdict = 'degraded';
+        auditDegraded = true;
+        logger.warn(`Build design audit degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
+      }
+    }
+
+    logger.info(
+      `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
+    );
+
+    return createGenerateTextCompatResult({
+      result: finalDraft,
+      onFinish,
+    });
+  }
+
   if (provider.name === 'Google') {
     logger.warn(
       'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
     );
 
-    const { onFinish, ...nonStreamingOptions } = filteredOptions;
+    const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
+      onFinish?: StreamingOptions['onFinish'];
+    };
 
-    return createGoogleGenerateFallbackResult({
+    return createGenerateTextCompatResultFromParams({
       onFinish,
-      streamParams: {
-        ...streamParams,
-        ...nonStreamingOptions,
-      },
+      streamParams: nonStreamingStreamParams,
     });
   }
 
