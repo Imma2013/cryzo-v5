@@ -88,6 +88,16 @@ export function buildCanonicalDesignPreamble(options: {
       If the prompt is broad or ambiguous, still commit to this locked primary reference instead of drifting into generic premium output.
     </design_primary_lock>
 
+    <design_reference_fidelity>
+      The selected primary reference is a binding visual blueprint, not a loose inspiration board.
+      Preserve its signature markers, must-keep traits, must-avoid traits, section archetypes, and anti-drift rules.
+      The primary reference must control page balance, layout DNA, typography aggression or restraint, palette dominance, imagery treatment, section rhythm, and interaction tone.
+      Do not normalize an editorial, weird, asymmetrical, or poster-like reference into a safer startup layout.
+      Do not replace reference-native chapters with a generic hero/features/testimonials/footer stack unless the selected reference itself is truly that restrained.
+      Treat reference drift as a failed draft that should be mentally reworked before answering.
+      If a reference depends on tension, asymmetry, awkward-beautiful composition, hard color fields, or confrontational type, preserve those traits instead of tidying them away.
+    </design_reference_fidelity>
+
     ${
       selectionSource === 'fallback'
         ? stripIndents`
@@ -105,10 +115,12 @@ export function buildCanonicalDesignPreamble(options: {
       Available references: ${availableReferences.join(', ')}
       Use the first selected reference as the only primary visual system for build output unless the user explicitly asks for mixing.
       Primary reference controls composition, hero direction, typography attitude, palette behavior, CTA styling, and motion language.
+      Primary reference also controls section archetypes, page balance, acceptable weirdness, and the overall intensity of the visual voice.
       Supporting references may refine spacing, polish, grid logic, or restraint only when they remain subordinate to the primary.
       If a primary reference is selected, enforce it in the final output instead of summarizing it as an optional suggestion.
       Do not describe the output as Apple-inspired, Stripe-inspired, Ferrari-inspired, or similar unless that exact reference is the selected primary or the user explicitly requested it.
       If the primary reference conflicts with generic premium instincts from the base prompt, follow the primary reference and ignore the generic premium instinct.
+      The final result should look recognizably native to the selected reference family even if the content and brand are original.
     </design_reference_library>
 
     ${selectedReferences
@@ -317,14 +329,16 @@ export function buildCanonicalDesignPreamble(options: {
             Cryzo 10 is the loud playful editorial-agency lane extracted from Bark Studio.
             It is not a generic creative-agency landing page, not a pet ecommerce site, not a cute lifestyle brand, and not a tidy startup homepage.
             Do not replace the weirdness with polite corporate copy, tasteful balancing, neutral SaaS structure, or generic design-studio minimalism.
-            Cryzo 10 should feel like a camp fashion poster for a design studio built around surreal dog photography, oversized condensed display type, cheeky brand copy, and candy-color contrast.
+            Cryzo 10 should feel like a camp fashion poster for a design studio built around surreal dog photography, oversized condensed display type, cheeky brand copy, and hard color-field contrast.
             Prioritize:
+            - poster-like vertical chaptering with hard breaks between sections
             - a full-bleed dog-fashion or similarly weird editorial hero image
             - giant acid-yellow condensed display typography with aggressive scale
-            - pink as a real field color, not a tiny accent
+            - pink, powder blue, off-white, and black used as real fields, not tiny accents
             - serif counterpoint used as glamorous interruption rather than the dominant voice
             - poster-like chapter sections instead of normal feature-card or testimonial-grid patterns
             - sparse support copy with playful, slightly absurd brand language
+            - awkward-beautiful spacing and asymmetry instead of over-optimized balance
             - restrained 3D-first depth through layered image planes, parallax, and typographic depth rather than a literal hero object
             Do not collapse Cryzo 10 into:
             - a normal creative-agency site
@@ -337,7 +351,9 @@ export function buildCanonicalDesignPreamble(options: {
             Treat the output as failed if any of the following are true:
             - the page reads like a generic agency or startup landing page
             - the loud yellow display type is missing or visually subordinate
+            - the hard field-color logic disappears and the page becomes tasteful-safe
             - the composition becomes neat, card-based, or conventionally balanced
+            - the section rhythm falls back to ordinary hero/features/footer pacing
             - the imagery loses its surreal fashion-editorial attitude and starts reading like pet ecommerce or stock lifestyle content
             - 3D treatment becomes the main spectacle instead of supporting the photography and graphic type
           </cryzo_10_fail_conditions>

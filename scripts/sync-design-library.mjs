@@ -30,6 +30,36 @@ const SPECIAL_BLUEPRINTS = {
       'dark SaaS gradients',
       'automotive or racing language',
     ],
+    signatureMarkers: [
+      'Layout DNA: keynote-like staging with one dominant product moment per viewport and almost no competing noise.',
+      'Scale behavior: giant calm product photography and oversized but quiet headline scale instead of layered marketing clutter.',
+      'Palette dominance: bright, near-monochrome surfaces with sparse accent color and immaculate tonal restraint.',
+      'Type tension: clean sans hierarchy with no decorative distortion, no loud editorial collision, and extreme copy compression.',
+      'Imagery treatment: hero product renders or photographs feel museum-lit, floating, and obsessively polished.',
+      'Spacing discipline: huge breathing room, careful margin cadence, and obvious confidence in what is omitted.',
+      'Interaction tone: subtle reveal, scroll polish, and hardware-centric micro-motion instead of playful motion spectacle.',
+    ],
+    mustKeep: [
+      'Keep the page anchored to one hero product or one dominant device family at a time.',
+      'Keep the chrome nearly silent so the product absorbs most of the visual attention.',
+      'Keep the composition restrained enough that every extra card or badge feels suspicious.',
+    ],
+    mustAvoid: [
+      'Do not inject busy feature-card grids just to make the page feel complete.',
+      'Do not drift into developer-platform darkness, generic startup gradients, or editorial chaos.',
+      'Do not let runtime overrides overpower the near-silent Apple restraint.',
+    ],
+    sectionArchetypes: [
+      'Hero keynote frame with one product image and one dominant statement.',
+      'Focused product detail bands or capability callouts with careful hierarchy.',
+      'Cinematic product gallery or finish/color story section.',
+      'Quiet purchase, compare, or learn-more close instead of a noisy CTA wall.',
+    ],
+    failConditions: [
+      'the page reads like a generic SaaS landing page rather than a product keynote',
+      'multiple competing cards or illustrations overpower the hero device',
+      'the palette becomes loud, dark, or trend-driven without prompt justification',
+    ],
   },
   'stripe': {
     title: 'Stripe',
@@ -52,6 +82,31 @@ const SPECIAL_BLUEPRINTS = {
       'playful consumer-app styling',
       'luxury automotive drama',
     ],
+    signatureMarkers: [
+      'Layout DNA: modular product-story chapters with strong explanatory rhythm and calm fintech confidence.',
+      'Scale behavior: editorial headline moments balanced by dense but orderly supporting product information.',
+      'Palette dominance: mostly controlled neutrals with restrained gradient or accent-color punctuation.',
+      'Type tension: polished sans-serif hierarchy with smart code-adjacent contrast rather than loud fashion-editorial moves.',
+      'Imagery treatment: diagrams, product frames, and payment surfaces are crisp, technical, and trustworthy.',
+      'Spacing discipline: modular spacing that feels systematic rather than airy-for-airiness sake.',
+      'Interaction tone: precise, polished, and infrastructural rather than playful or dreamy.',
+    ],
+    mustKeep: [
+      'Keep the product explanation structured enough that the system feels real and technically grounded.',
+      'Keep trust, legitimacy, and payment-flow clarity dominant over hype.',
+      'Keep diagrams, product bands, and modular sections cleaner than a generic startup site.',
+    ],
+    mustAvoid: [
+      'Do not turn Stripe into a moody AI brand world or editorial luxury magazine.',
+      'Do not let decorative gradients replace product clarity.',
+      'Do not flatten everything into one hero plus generic three-column features.',
+    ],
+    sectionArchetypes: [
+      'Trust-heavy product hero with headline, subcopy, and precise CTA structure.',
+      'Modular platform or workflow explainer sections.',
+      'Infrastructure, API, or payments network proof bands.',
+      'Credibility close with ecosystem, metrics, or enterprise trust signals.',
+    ],
   },
   'vercel': {
     title: 'Vercel',
@@ -73,6 +128,31 @@ const SPECIAL_BLUEPRINTS = {
       'consumer-marketplace energy',
       'overillustrated hero sections',
       'soft generic startup cards',
+    ],
+    signatureMarkers: [
+      'Layout DNA: severe minimal technical framing with product surfaces doing most of the persuasion.',
+      'Scale behavior: bold but controlled headlines, strong terminal or dashboard frames, and no theatrical over-scaling.',
+      'Palette dominance: black, white, graphite, and restrained gradient haze rather than saturated brand fields.',
+      'Type tension: sharp contemporary sans hierarchy with disciplined contrast and no decorative editorial collision.',
+      'Imagery treatment: code, deploy flows, or product screenshots feel crisp, exact, and modern.',
+      'Spacing discipline: exact spacing and hard alignment rather than expressive asymmetry.',
+      'Interaction tone: fast, structural, and product-native with subtle motion only.',
+    ],
+    mustKeep: [
+      'Keep the system restrained enough that it feels like a premium developer platform, not a lifestyle brand.',
+      'Keep product surfaces and technical legitimacy more important than decorative storytelling.',
+      'Keep the page crisp, sparse, and exact.',
+    ],
+    mustAvoid: [
+      'Do not inject playful consumer color logic or editorial weirdness unless the prompt explicitly asks for it.',
+      'Do not let the layout drift into card soup or generic SaaS marketing softness.',
+      'Do not turn Vercel into Cryzo-loudness.',
+    ],
+    sectionArchetypes: [
+      'Minimal technical hero with deploy or product framing.',
+      'Platform capability bands centered on product outcomes.',
+      'Workflow or ecosystem proof section.',
+      'Sparse close with technical CTA and product confidence.',
     ],
   },
   'notion': {
@@ -448,6 +528,40 @@ const SPECIAL_BLUEPRINTS = {
       'luxury automotive drama',
       'generic pet-store templates',
     ],
+    signatureMarkers: [
+      'Layout DNA: poster-like vertical chapters with hard section breaks, oversized headline slabs, and deliberately unruly composition.',
+      'Scale behavior: acidic giant typography should bully the viewport and compete with the imagery instead of politely sitting beside it.',
+      'Palette dominance: hard color-field logic with sour yellow, powder blue, pink, black, and off-white used as confrontational blocks rather than tasteful accents.',
+      'Type tension: condensed uppercase punches collide with expressive serif interruptions and occasional awkward line breaks.',
+      'Imagery treatment: fashion-editorial dog photography or surreal pet portraits should feel art-directed, cropped hard, and slightly absurd.',
+      'Spacing discipline: embrace tension, compression, and strange breathing rhythms rather than balanced premium neatness.',
+      'Interaction tone: camp, art-directed, cheeky, and culturally self-aware instead of polished startup friendliness.',
+    ],
+    mustKeep: [
+      'Keep Cryzo 10 weird, poster-first, and art-directed enough that it cannot be mistaken for premium pet ecommerce.',
+      'Keep at least one loud typographic moment and at least one confrontational color-field moment.',
+      'Keep the dog or pet imagery feeling like editorial casting, not stock lifestyle content.',
+      'Keep the section rhythm feeling like manifesto chapters instead of hero/features/testimonials/footer.',
+    ],
+    mustAvoid: [
+      'Do not tidy the composition into a normal centered hero with balanced cards.',
+      'Do not soften the palette into tasteful beige-neutral premium branding.',
+      'Do not replace fashion-editorial pet imagery with cute consumer pet-shop visuals.',
+      'Do not flatten the type into one safe sans-serif system with predictable line lengths.',
+    ],
+    sectionArchetypes: [
+      'Poster hero with giant headline, hard color field, and one surreal pet-fashion image.',
+      'Manifesto or attitude chapter using sparse copy and confrontational scale shifts.',
+      'Collection, drop, or styling section framed like a fashion spread rather than a store grid.',
+      'Editorial story or culture chapter with asymmetric imagery and serif interruption.',
+      'Commanding CTA close that still feels like a poster panel, not a generic footer CTA.',
+    ],
+    failConditions: [
+      'the page becomes a tidy premium pet startup instead of an art-directed editorial poster system',
+      'the loud yellow / hard field-color logic disappears and the page turns tasteful-safe',
+      'the composition resolves into a generic hero plus feature cards plus testimonials cadence',
+      'the imagery feels like stock pet ecommerce photography instead of weird fashion-editorial casting',
+    ],
   },
 };
 
@@ -507,6 +621,198 @@ function toBulletList(values, fallback) {
   return safeItems.map((item) => `- ${item}`).join('\n');
 }
 
+function dedupe(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function inferFamilyLabel(slug, metadata) {
+  return metadata.family || (slug.startsWith('cryzo-') ? 'cryzo' : 'external');
+}
+
+function deriveScaleBehavior(metadata) {
+  if (metadata.supportsEditorial) {
+    return 'Use at least one oversized moment that sets the emotional scale before explanatory content arrives.';
+  }
+
+  if (metadata.supportsMinimalShowcase) {
+    return 'Keep scale controlled and deliberate so one product frame or one precise headline leads the page.';
+  }
+
+  return 'Use hierarchy with obvious focal moments instead of evenly weighted generic sections.';
+}
+
+function derivePaletteBehavior(metadata) {
+  if ((metadata.styleKeywords || []).includes('playful')) {
+    return 'Palette dominance should use one or two assertive brand colors as intentional fields rather than generic accent sprinkles.';
+  }
+
+  if ((metadata.styleKeywords || []).includes('minimal')) {
+    return 'Palette dominance should stay restrained, tonal, and disciplined, with accent color used sparingly.';
+  }
+
+  if ((metadata.styleKeywords || []).includes('luxury')) {
+    return 'Palette dominance should feel rich and selective, leaning on premium contrast rather than rainbow variety.';
+  }
+
+  return 'Palette dominance should clearly follow the selected reference category rather than a default purple-on-dark fallback.';
+}
+
+function deriveTypeTension(metadata) {
+  if (metadata.supportsEditorial) {
+    return 'Typography should create visible tension through contrast, chapter rhythm, and scale changes rather than staying uniformly polite.';
+  }
+
+  if (metadata.supportsMinimalShowcase) {
+    return 'Typography should feel exact and restrained, with minimal decorative flourish.';
+  }
+
+  return 'Typography should reflect the selected domain and visual attitude instead of using generic startup-safe hierarchy.';
+}
+
+function deriveImageryTreatment(slug, metadata) {
+  if ((metadata.categories || []).includes('automotive')) {
+    return 'Imagery should be vehicle-led, cropped with intent, and treated as the page’s emotional anchor instead of a supporting thumbnail.';
+  }
+
+  if ((metadata.categories || []).includes('travel')) {
+    return 'Imagery should be destination-led and atmospheric, carrying mood and aspiration rather than acting as generic filler.';
+  }
+
+  if ((metadata.categories || []).includes('hardware')) {
+    return 'Imagery should center the product object and make the hardware feel tangible, premium, and hero-worthy.';
+  }
+
+  if (slug === 'cryzo-10' || (metadata.keywords || []).some((keyword) => keyword.includes('pet') || keyword.includes('dog'))) {
+    return 'Imagery should feel character-led, art-directed, and specific to the selected pet-fashion or pet-brand tone.';
+  }
+
+  if ((metadata.categories || []).includes('developer') || (metadata.categories || []).includes('database')) {
+    return 'Imagery should privilege product surfaces, code-adjacent UI, diagrams, or technical framing over lifestyle stock scenes.';
+  }
+
+  return "Imagery should behave like part of the design system's DNA, not a last-minute decorative filler layer.";
+}
+
+function deriveInteractionTone(metadata) {
+  if ((metadata.categories || []).includes('developer') || (metadata.categories || []).includes('database')) {
+    return 'Interaction tone should feel precise, fast, and product-native rather than playful for its own sake.';
+  }
+
+  if (metadata.supportsEditorial) {
+    return 'Interaction tone should reinforce chapter transitions, reveals, and editorial pacing instead of defaulting to generic app microinteractions.';
+  }
+
+  return 'Interaction tone should stay faithful to the selected reference and avoid interchangeable startup motion language.';
+}
+
+function deriveSignatureMarkers(slug, metadata, blueprint) {
+  const styleKeywords = joinPhrases(metadata.styleKeywords || []) || blueprint.title;
+
+  return dedupe([
+    `Layout DNA: build around ${styleKeywords} composition logic native to ${blueprint.title}, not a generic marketing template.`,
+    `Scale behavior: ${deriveScaleBehavior(metadata)}`,
+    `Palette dominance: ${derivePaletteBehavior(metadata)}`,
+    `Type tension: ${deriveTypeTension(metadata)}`,
+    `Imagery treatment: ${deriveImageryTreatment(slug, metadata)}`,
+    metadata.supportsEditorial
+      ? 'Spacing discipline: let sections breathe or collide like editorial chapters instead of evenly repeating feature blocks.'
+      : 'Spacing discipline: keep spacing purposeful and category-correct instead of drifting into generic SaaS rhythm.',
+    `Interaction tone: ${deriveInteractionTone(metadata)}`,
+  ]);
+}
+
+function deriveMustKeep(metadata, blueprint) {
+  return dedupe([
+    'Keep the selected primary reference in charge of composition, type attitude, palette distribution, imagery framing, and section rhythm.',
+    metadata.supportsEditorial
+      ? 'Keep the section rhythm chaptered and reference-native rather than collapsing into hero/features/testimonials/footer.'
+      : 'Keep the layout native to the reference category rather than using a one-size-fits-all startup structure.',
+    blueprint.rules?.[0] || 'Keep the most recognizable behavior of the reference visibly present.',
+    blueprint.rules?.[1] || '',
+  ]);
+}
+
+function deriveMustAvoid(metadata, blueprint) {
+  return dedupe([
+    'Do not normalize the selected reference into a tidier generic startup homepage just because the prompt is broad.',
+    ...((blueprint.avoid || []).slice(0, 4)).map((item) => `Do not drift into ${item}.`),
+    metadata.supportsEditorial ? 'Do not flatten the page into balanced cards and polite spacing if the reference depends on tension.' : '',
+    'Do not let runtime overrides overpower the selected primary reference.',
+  ]);
+}
+
+function deriveSectionArchetypes(slug, metadata) {
+  if (slug === 'cryzo-10') {
+    return [
+      'Poster hero with confrontational type and one dominant art-directed pet image.',
+      'Manifesto or attitude chapter with sparse, high-tension copy.',
+      'Collection or culture spread that feels editorial rather than ecommerce-generic.',
+      'Commanding close that still behaves like a poster panel.',
+    ];
+  }
+
+  if ((metadata.categories || []).includes('automotive')) {
+    return [
+      'Image-led hero with one dominant vehicle or machine frame.',
+      'Story or performance chapter rather than a generic features grid.',
+      'Collection, gallery, or ownership section with curated product emphasis.',
+      'Booking, inquiry, or launch close with premium restraint.',
+    ];
+  }
+
+  if ((metadata.categories || []).includes('hardware')) {
+    return [
+      'Keynote-style hero focused on one product object.',
+      'Capability bands or product detail callouts.',
+      'Gallery, finish, or ecosystem story section.',
+      'Purchase, compare, or learn-more close.',
+    ];
+  }
+
+  if ((metadata.categories || []).includes('travel') || (metadata.categories || []).includes('hospitality')) {
+    return [
+      'Atmospheric destination hero.',
+      'Curated journey or collection chapter.',
+      'Trust, process, or concierge/service proof band.',
+      'Plan or book close with calm guidance.',
+    ];
+  }
+
+  if ((metadata.categories || []).includes('developer') || (metadata.categories || []).includes('database') || (metadata.categories || []).includes('infra')) {
+    return [
+      'Technical product hero.',
+      'Platform capability or workflow explainer band.',
+      'Proof, ecosystem, or integration chapter.',
+      'Focused product CTA close.',
+    ];
+  }
+
+  if (metadata.supportsEditorial) {
+    return [
+      'Scene-setting hero chapter.',
+      'Editorial story or manifesto section.',
+      'Collection, showcase, or narrative spread.',
+      'Closing chapter that preserves the reference tone.',
+    ];
+  }
+
+  return [
+    'Primary hero aligned to the selected reference.',
+    'Reference-native proof or capability section.',
+    'A supporting showcase or narrative section.',
+    'A close that still preserves the chosen system.',
+  ];
+}
+
+function deriveFailConditions(metadata, blueprint) {
+  return dedupe([
+    'the result could be mistaken for a generic AI-generated startup landing page',
+    metadata.supportsEditorial ? 'the section rhythm collapses into a neat hero/features/testimonials/footer template' : '',
+    metadata.supportsMinimalShowcase ? 'the composition becomes cluttered and loses the restraint expected from the reference' : '',
+    blueprint.avoid?.[0] ? `the output drifts into ${blueprint.avoid[0]}` : '',
+  ]);
+}
+
 function buildGenericBlueprint(slug, metadata) {
   const name = formatName(slug);
   const categories = joinPhrases(metadata.categories || []);
@@ -549,6 +855,12 @@ function createMarkdown(slug, metadata) {
     metadata.supportsEditorial ? 'Supports editorial pacing, chaptered storytelling, and image-first narrative rhythm.' : '',
     metadata.supportsMinimalShowcase ? 'Supports severe restraint and minimal product-showcase framing.' : '',
   ].filter(Boolean);
+  const signatureMarkers = dedupe(blueprint.signatureMarkers || deriveSignatureMarkers(slug, metadata, blueprint));
+  const mustKeep = dedupe(blueprint.mustKeep || deriveMustKeep(metadata, blueprint));
+  const mustAvoid = dedupe(blueprint.mustAvoid || deriveMustAvoid(metadata, blueprint));
+  const sectionArchetypes = dedupe(blueprint.sectionArchetypes || deriveSectionArchetypes(slug, metadata));
+  const failConditions = dedupe(blueprint.failConditions || deriveFailConditions(metadata, blueprint));
+  const familyLabel = inferFamilyLabel(slug, metadata);
 
   return `# ${blueprint.title}
 
@@ -558,11 +870,23 @@ ${blueprint.identity}
 ## Use When
 ${toBulletList(blueprint.useWhen, ['Use this reference when the prompt clearly aligns with this product, category, or house lane.'])}
 
+## Signature Markers
+${toBulletList(signatureMarkers, ['Treat this reference like a binding visual DNA system, not a generic moodboard.'])}
+
 ## Core Visual Rules
 ${toBulletList(blueprint.rules, ['Keep every major visual decision aligned with the selected reference.'])}
 
+## Must Keep
+${toBulletList(mustKeep, ['Keep the most recognizable behaviors of the selected reference clearly visible in the final result.'])}
+
+## Must Avoid
+${toBulletList(mustAvoid, ['Do not let the selected reference drift into generic template output.'])}
+
+## Section Archetypes
+${toBulletList(sectionArchetypes, ['Use reference-native sections instead of defaulting to a generic marketing stack.'])}
+
 ## Category Alignment
-- Family: ${metadata.family || (slug.startsWith('cryzo-') ? 'cryzo' : 'external')}
+- Family: ${familyLabel}
 - Categories: ${joinPhrases(metadata.categories || []) || 'not specified'}
 - Industries: ${joinPhrases(metadata.industries || []) || 'not specified'}
 - Product types: ${joinPhrases(metadata.productTypes || []) || 'not specified'}
@@ -577,11 +901,13 @@ ${toBulletList(
   ['Do not blend multiple primaries. Keep this reference dominant if it is selected.'],
 )}
 
-## Avoid
-${toBulletList(blueprint.avoid, ['Avoid unrelated brand drift and generic template output.'])}
+## Anti-Drift Fail Conditions
+${toBulletList(failConditions, ['Treat the result as failed if it drifts into unrelated brand territory or generic AI slop.'])}
 
 ## Prompting Note
 - If this reference is selected as the primary system, it controls composition, typography attitude, palette behavior, CTA styling, imagery direction, and motion language.
+- The selected reference must also control section rhythm, page balance, and the acceptable level of weirdness or restraint.
+- Use the signature markers, must-keep rules, must-avoid rules, and section archetypes as binding guardrails.
 - Do not describe the output as inspired by another brand unless that other brand was explicitly selected instead.
 - Treat this file as binding build guidance, not as an optional moodboard.
 `;

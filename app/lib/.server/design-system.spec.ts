@@ -88,11 +88,16 @@ describe('design system routing', () => {
 
   it('hydrates the canonical design library for every supported slug', () => {
     const diagnostics = getDesignLibraryDiagnostics();
+    const library = getDesignReferenceLibrary();
 
-    expect(getDesignReferenceLibrary().length).toBeGreaterThan(60);
+    expect(library.length).toBeGreaterThan(60);
     expect(diagnostics.canonicalCount).toBe(diagnostics.supportedSlugs.length);
     expect(diagnostics.fallbackCount).toBe(0);
     expect(diagnostics.missingCanonicalSlugs).toEqual([]);
+    expect(library.every((reference) => reference.markdown.includes('## Signature Markers'))).toBe(true);
+    expect(library.every((reference) => reference.markdown.includes('## Must Keep'))).toBe(true);
+    expect(library.every((reference) => reference.markdown.includes('## Must Avoid'))).toBe(true);
+    expect(library.every((reference) => reference.markdown.includes('## Section Archetypes'))).toBe(true);
   });
 
   it('auto-picks a best-fit primary for broad build prompts', () => {
@@ -101,5 +106,14 @@ describe('design system routing', () => {
     expect(result.primary).toBeDefined();
     expect(result.primary?.slug).toBeTruthy();
     expect(result.selectionSource).toBe('canonical');
+  });
+
+  it('preserves bark-derived cryzo 10 fidelity markers in the canonical library', () => {
+    const cryzo10 = getDesignReferenceLibrary().find((reference) => reference.slug === 'cryzo-10');
+
+    expect(cryzo10?.markdown).toContain('poster-like vertical chapters');
+    expect(cryzo10?.markdown).toContain('acidic giant typography');
+    expect(cryzo10?.markdown).toContain('fashion-editorial dog photography');
+    expect(cryzo10?.markdown).toContain('hard color-field logic');
   });
 });

@@ -51,6 +51,8 @@ describe('design guidance prompt helpers', () => {
     expect(result).toContain('Use editorial layouts.');
     expect(result).toContain('If an override conflicts with the selected design references, ignore the override');
     expect(result).toContain('LOCKED PRIMARY REFERENCE: vercel');
+    expect(result).toContain('binding visual blueprint');
+    expect(result).toContain('signature markers, must-keep traits, must-avoid traits, section archetypes');
   });
 
   it('forbids unrelated brand drift when a primary reference is selected', () => {
@@ -69,6 +71,7 @@ describe('design guidance prompt helpers', () => {
 
     expect(result).toContain('Do not describe the output as Apple-inspired, Stripe-inspired, Ferrari-inspired');
     expect(result).toContain('follow the primary reference and ignore the generic premium instinct');
+    expect(result).toContain('Do not normalize an editorial, weird, asymmetrical, or poster-like reference into a safer startup layout.');
   });
 
   it('labels degraded fallback mode explicitly', () => {
