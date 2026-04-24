@@ -29,7 +29,7 @@ import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import type { LlmErrorAlertType } from '~/types/actions';
 import type { GeneratedImageAssetData } from '~/types/context';
 import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource } from '~/lib/common/generated-image-manifest';
-import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
+import { useSupabaseAuth, getCurrentSupabaseAccessToken } from '~/lib/auth/supabase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
@@ -235,7 +235,14 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
-      headers: authAccessToken ? { Authorization: `Bearer ${authAccessToken}` } : undefined,
+      fetch: async (url, options) => {
+        const token = getCurrentSupabaseAccessToken();
+        const headers = new Headers((options?.headers as HeadersInit) ?? {});
+        if (token) {
+          headers.set("Authorization", `Bearer ${token}`);
+        }
+        return fetch(url, { ...options, headers });
+      },
       body: {
         apiKeys,
         files,
