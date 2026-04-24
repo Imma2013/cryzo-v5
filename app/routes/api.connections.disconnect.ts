@@ -1,5 +1,5 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
-import { createComposioClient } from '~/lib/.server/composio';
+import { createComposioClient, resolveComposioApiKey } from '~/lib/.server/composio';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { withSecurity } from '~/lib/security';
 
@@ -17,6 +17,12 @@ async function disconnectAction({ request, context }: ActionFunctionArgs) {
       return json({ error: 'connectedAccountId is required.' }, { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 400 });
     }
 
+    console.info('[api.connections.disconnect] deleting connected account', {
+      connectedAccountId,
+      hasApiKey: Boolean(resolveComposioApiKey(context)),
+      userId: auth.user.id,
+    });
+
     const composio = createComposioClient(context);
     await composio.connectedAccounts.delete(connectedAccountId);
 
@@ -30,7 +36,7 @@ async function disconnectAction({ request, context }: ActionFunctionArgs) {
 
     return json(
       {
-        error: error instanceof Error ? error.message : 'Failed to disconnect Composio app.',
+        error: error instanceof Error ? `Failed to disconnect app: ${error.message}` : 'Failed to disconnect app.',
       },
       { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 500 },
     );

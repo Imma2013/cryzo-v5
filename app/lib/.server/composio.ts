@@ -45,6 +45,10 @@ export function createComposioClientFromApiKey(apiKey: string): ComposioClient {
   return new Composio({ apiKey }) as any;
 }
 
+export function createComposioManagementClientFromApiKey(apiKey: string): ComposioClient {
+  return createComposioClientFromApiKey(apiKey);
+}
+
 export function createComposioToolClientFromApiKey(apiKey: string): ComposioToolClient {
   return new Composio({
     apiKey,
@@ -60,6 +64,16 @@ export function createComposioClient(context: RouteContext) {
   }
 
   return createComposioClientFromApiKey(apiKey);
+}
+
+export function createComposioManagementClient(context: RouteContext) {
+  const apiKey = resolveComposioApiKey(context);
+
+  if (!apiKey) {
+    throw new Error('Missing COMPOSIO_API_KEY on the server runtime. Add it to the Vercel environment variables before using Apps.');
+  }
+
+  return createComposioManagementClientFromApiKey(apiKey);
 }
 
 export function createComposioAgentClient(context: RouteContext) {
@@ -81,6 +95,15 @@ export async function createComposioSessionFromApiKey(
   return composio.create(userId, config);
 }
 
+export async function createComposioManagementSessionFromApiKey(
+  apiKey: string,
+  userId: string,
+  config?: Record<string, unknown>,
+): Promise<ComposioSession> {
+  const composio = createComposioManagementClientFromApiKey(apiKey);
+  return composio.create(userId, config);
+}
+
 export async function createComposioSession(
   context: RouteContext,
   userId: string,
@@ -93,6 +116,20 @@ export async function createComposioSession(
   }
 
   return createComposioSessionFromApiKey(apiKey, userId, config);
+}
+
+export async function createComposioManagementSession(
+  context: RouteContext,
+  userId: string,
+  config?: Record<string, unknown>,
+): Promise<ComposioSession> {
+  const apiKey = resolveComposioApiKey(context);
+
+  if (!apiKey) {
+    throw new Error('Missing COMPOSIO_API_KEY on the server runtime. Add it to the Vercel environment variables before using Apps.');
+  }
+
+  return createComposioManagementSessionFromApiKey(apiKey, userId, config);
 }
 
 export function extractComposioRedirectUrl(value: unknown): string | undefined {
@@ -114,9 +151,12 @@ export function extractComposioRedirectUrl(value: unknown): string | undefined {
   for (const key of [
     'redirectUrl',
     'redirect_url',
+    'redirectURI',
+    'redirectUri',
     'authUrl',
     'authUri',
     'authorizationUrl',
+    'authorizeUrl',
     'url',
     'link',
   ]) {

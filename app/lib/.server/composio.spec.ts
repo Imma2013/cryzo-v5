@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractComposioRedirectUrl, resolveComposioApiKeyFromEnv } from './composio';
+import {
+  createComposioManagementClientFromApiKey,
+  createComposioToolClientFromApiKey,
+  extractComposioRedirectUrl,
+  resolveComposioApiKeyFromEnv,
+} from './composio';
 
 describe('resolveComposioApiKeyFromEnv', () => {
   it('prefers explicit server env values and trims whitespace', () => {
@@ -37,5 +42,31 @@ describe('extractComposioRedirectUrl', () => {
         },
       }),
     ).toBe('https://platform.composio.dev/connect/gmail');
+  });
+
+  it('supports additional redirect URL key variants used by auth responses', () => {
+    expect(
+      extractComposioRedirectUrl({
+        response: {
+          data: {
+            redirectUri: 'https://platform.composio.dev/connect/slack',
+          },
+        },
+      }),
+    ).toBe('https://platform.composio.dev/connect/slack');
+  });
+});
+
+describe('Composio client construction', () => {
+  it('creates a plain management client that keeps the default provider for dashboard sessions', () => {
+    const client = createComposioManagementClientFromApiKey('test-key') as any;
+
+    expect(client.provider?.name).toBe('openai');
+  });
+
+  it('creates a tool client with the Vercel provider for session.tools()', () => {
+    const client = createComposioToolClientFromApiKey('test-key') as any;
+
+    expect(client.provider?.name).toBe('vercel');
   });
 });

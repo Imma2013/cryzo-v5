@@ -135,6 +135,10 @@ async function buildOfficialComposioTools({
   userPrompt?: string;
 }) {
   const inferredToolkits = inferToolkitSlugsFromPrompt(userPrompt);
+  console.info('[llm.composio] creating tool session', {
+    inferredToolkits,
+    userId,
+  });
   const session = await createComposioSessionFromApiKey(apiKey, userId, {
     manageConnections: true,
     ...(inferredToolkits.length > 0 ? { toolkits: inferredToolkits } : {}),
@@ -149,6 +153,12 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
   const hasIdentity = Boolean(composioUserId);
 
   if (disabledReason || !composioUserId) {
+    console.info('[llm.composio] tools unavailable', {
+      disabledReason: disabledReason || 'missing_identity',
+      hasIdentity,
+      providerName: options.providerName,
+    });
+
     return {
       configured: disabledReason !== 'disabled' && disabledReason !== 'missing_api_key',
       hasIdentity,

@@ -4,14 +4,15 @@ import type { AppToolkit } from '~/components/apps/AppsDashboard';
 
 const composioState = vi.hoisted(() => ({
   createComposioClient: vi.fn(),
-  createComposioSession: vi.fn(),
+  createComposioManagementSession: vi.fn(),
   requireAuth: vi.fn(),
 }));
 
 vi.mock('~/lib/.server/composio', () => ({
   createComposioClient: composioState.createComposioClient,
-  createComposioSession: composioState.createComposioSession,
+  createComposioManagementSession: composioState.createComposioManagementSession,
   extractComposioRedirectUrl: vi.fn(),
+  resolveComposioApiKey: vi.fn().mockReturnValue('test-key'),
 }));
 
 vi.mock('~/lib/auth/require-auth.server', async () => {
@@ -31,7 +32,7 @@ type ConnectionsPayload = {
 
 afterEach(() => {
   composioState.createComposioClient.mockReset();
-  composioState.createComposioSession.mockReset();
+  composioState.createComposioManagementSession.mockReset();
   composioState.requireAuth.mockReset();
 });
 
@@ -41,7 +42,7 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioSession.mockResolvedValue({
+    composioState.createComposioManagementSession.mockResolvedValue({
       toolkits: vi.fn().mockResolvedValue({
         items: [
           {
@@ -106,7 +107,7 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioSession.mockResolvedValue({
+    composioState.createComposioManagementSession.mockResolvedValue({
       toolkits: vi.fn().mockResolvedValue({}),
     });
 
@@ -127,7 +128,7 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioSession.mockResolvedValue({
+    composioState.createComposioManagementSession.mockResolvedValue({
       toolkits: vi.fn().mockResolvedValue({
         items: [
           {
@@ -161,7 +162,7 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioSession.mockRejectedValue(new Error('Composio exploded'));
+    composioState.createComposioManagementSession.mockRejectedValue(new Error('Composio exploded'));
 
     const response = await loader({
       request: new Request('https://bolt.local/api/connections'),
@@ -171,7 +172,45 @@ describe('/api/connections loader', () => {
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
-      error: 'Composio exploded',
+      error: 'Failed to load app connections: Composio exploded',
+    });
+  });
+
+  it('supports alternate toolkit connection shapes from Composio responses', async () => {
+    composioState.requireAuth.mockResolvedValue({
+      responseHeaders: new Headers(),
+      user: { id: 'user_123' },
+    });
+    composioState.createComposioManagementSession.mockResolvedValue({
+      toolkits: vi.fn().mockResolvedValue({
+        data: {
+          items: [
+            {
+              slug: 'github',
+              name: 'GitHub',
+              logoUrl: 'https://logos.composio.dev/api/github',
+              connectedAccounts: [{ id: 'ca_456' }],
+            },
+          ],
+        },
+      }),
+    });
+
+    const response = await loader({
+      request: new Request('https://bolt.local/api/connections'),
+      context: {} as never,
+      params: {},
+    } as never);
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as ConnectionsPayload;
+    expect(payload.toolkits.find((toolkit: any) => toolkit.name === 'GitHub')).toEqual({
+      slug: 'github',
+      name: 'GitHub',
+      logo: 'https://bolt.local/api/connections/logo?slug=github',
+      isAvailable: true,
+      isConnected: true,
+      connectedAccountId: 'ca_456',
     });
   });
 });

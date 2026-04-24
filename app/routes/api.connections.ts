@@ -7,8 +7,9 @@ import {
   normalizeAppConnectorKey,
 } from '~/components/apps/apps.constants';
 import {
-  createComposioSession,
+  createComposioManagementSession,
   extractComposioRedirectUrl,
+  resolveComposioApiKey,
 } from '~/lib/.server/composio';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { withSecurity } from '~/lib/security';
@@ -24,8 +25,105 @@ function requiresAuthentication(toolkit: { noAuth?: boolean; isNoAuth?: boolean 
   return toolkit.noAuth !== true && toolkit.isNoAuth !== true;
 }
 
+function getToolkitSlug(toolkit: any) {
+  return typeof toolkit?.slug === 'string'
+    ? toolkit.slug
+    : typeof toolkit?.name === 'string'
+      ? normalizeAppConnectorKey(toolkit.name)
+      : undefined;
+}
+
 export function getToolkitLogo(toolkit: { logo?: string; meta?: { logo?: string } }) {
-  return toolkit.meta?.logo ?? toolkit.logo;
+  return toolkit.meta?.logo ?? (toolkit as any)?.logoUrl ?? toolkit.logo;
+}
+
+function extractConnectedAccountId(toolkit: any): string | undefined {
+  const directCandidates = [
+    toolkit?.connection?.connectedAccount?.id,
+    toolkit?.connection?.connectedAccountId,
+    toolkit?.connectedAccount?.id,
+    toolkit?.connected_account?.id,
+    toolkit?.connectedAccountId,
+  ];
+
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      return candidate;
+    }
+  }
+
+  const groupedCandidates = [
+    toolkit?.connection?.connectedAccounts,
+    toolkit?.connectedAccounts,
+    toolkit?.connected_accounts,
+  ];
+
+  for (const group of groupedCandidates) {
+    if (!Array.isArray(group)) {
+      continue;
+    }
+
+    const account = group.find((item) => typeof item?.id === 'string');
+
+    if (account?.id) {
+      return account.id;
+    }
+  }
+
+  return undefined;
+}
+
+function isToolkitConnected(toolkit: any) {
+  if (toolkit?.connection?.isActive === true || toolkit?.isConnected === true) {
+    return true;
+  }
+
+  return Boolean(extractConnectedAccountId(toolkit));
+}
+
+function getToolkitItems(toolkitsResponse: any) {
+  if (Array.isArray(toolkitsResponse)) {
+    return toolkitsResponse;
+  }
+
+  const candidates = [
+    toolkitsResponse?.items,
+    toolkitsResponse?.toolkits,
+    toolkitsResponse?.data?.items,
+    toolkitsResponse?.data?.toolkits,
+    toolkitsResponse?.response?.data?.items,
+    toolkitsResponse?.response?.data?.toolkits,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+}
+
+function buildConnectionsErrorMessage(error: unknown, phase: 'env' | 'toolkits' | 'authorize' | 'disconnect') {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+
+  if (message.includes('Missing COMPOSIO_API_KEY')) {
+    return 'Missing COMPOSIO_API_KEY on the server runtime. Add it to the Vercel environment variables before using Apps.';
+  }
+
+  if (phase === 'authorize' && message) {
+    return `Failed to start app connection: ${message}`;
+  }
+
+  if (phase === 'disconnect' && message) {
+    return `Failed to disconnect app: ${message}`;
+  }
+
+  if (phase === 'toolkits' && message) {
+    return `Failed to load app connections: ${message}`;
+  }
+
+  return message || 'Failed to load Composio connections.';
 }
 
 function buildApprovedToolkitCatalog(
@@ -73,20 +171,30 @@ async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
     });
     authHeaders = auth.responseHeaders;
     const userId = auth.user.id;
-    const session = await createComposioSession(context, userId, {
+    const hasApiKey = Boolean(resolveComposioApiKey(context));
+
+    console.info('[api.connections] creating management session', {
+      hasApiKey,
+      userId,
+    });
+
+    const session = await createComposioManagementSession(context, userId, {
       manageConnections: true,
     });
     const toolkitsResponse = await session.toolkits({
       limit: 200,
     });
-    const toolkitItems = Array.isArray(toolkitsResponse?.items) ? toolkitsResponse.items : [];
+    const toolkitItems = getToolkitItems(toolkitsResponse);
     const activeAccountsByToolkitSlug = new Map<string, string>(
       toolkitItems
-        .map((toolkit: any) =>
-          toolkit?.connection?.isActive && toolkit?.connection?.connectedAccount?.id
-            ? ([toolkit.slug, toolkit.connection.connectedAccount.id] as const)
-            : null,
-        )
+        .map((toolkit: any) => {
+          const slug = getToolkitSlug(toolkit);
+          const connectedAccountId = extractConnectedAccountId(toolkit);
+
+          return slug && isToolkitConnected(toolkit) && connectedAccountId
+            ? ([slug, connectedAccountId] as const)
+            : null;
+        })
         .filter((entry: readonly [string, string] | null): entry is readonly [string, string] => Boolean(entry)),
     );
 
@@ -104,7 +212,7 @@ async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
 
     return json(
       {
-        error: error instanceof Error ? error.message : 'Failed to load Composio connections.',
+        error: buildConnectionsErrorMessage(error, 'toolkits'),
       },
       { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 500 },
     );
@@ -126,7 +234,7 @@ async function connectionsAction({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Toolkit is required.' }, { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 400 });
     }
 
-    const session = await createComposioSession(context, userId, {
+    const session = await createComposioManagementSession(context, userId, {
       manageConnections: true,
     });
     const origin = new URL(request.url).origin;
@@ -153,7 +261,7 @@ async function connectionsAction({ request, context }: ActionFunctionArgs) {
 
     return json(
       {
-        error: error instanceof Error ? error.message : 'Failed to create Composio connection.',
+        error: buildConnectionsErrorMessage(error, 'authorize'),
       },
       { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 500 },
     );
