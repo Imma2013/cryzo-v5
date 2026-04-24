@@ -4,13 +4,24 @@ import type { AppToolkit } from '~/components/apps/AppsDashboard';
 
 const composioState = vi.hoisted(() => ({
   createComposioClient: vi.fn(),
+  createComposioConnectionRequest: vi.fn(),
+  requireAuth: vi.fn(),
 }));
 
 vi.mock('~/lib/.server/composio', () => ({
   createComposioClient: composioState.createComposioClient,
+  createComposioConnectionRequest: composioState.createComposioConnectionRequest,
   extractComposioRedirectUrl: vi.fn(),
-  resolveComposioManagedAuthConfigId: vi.fn(),
 }));
+
+vi.mock('~/lib/auth/require-auth.server', async () => {
+  const actual = await vi.importActual<typeof import('~/lib/auth/require-auth.server')>('~/lib/auth/require-auth.server');
+
+  return {
+    ...actual,
+    requireAuth: composioState.requireAuth,
+  };
+});
 
 import { buildApprovedToolkitCatalog, buildToolkitLogoProxyUrl, getCollectionItems, getToolkitLogo, loader } from '~/routes/api.connections';
 
@@ -20,10 +31,16 @@ type ConnectionsPayload = {
 
 afterEach(() => {
   composioState.createComposioClient.mockReset();
+  composioState.createComposioConnectionRequest.mockReset();
+  composioState.requireAuth.mockReset();
 });
 
 describe('/api/connections loader', () => {
   it('maps auth-required approved toolkits from array responses into the curated catalog', async () => {
+    composioState.requireAuth.mockResolvedValue({
+      responseHeaders: new Headers(),
+      user: { id: 'user_123' },
+    });
     composioState.createComposioClient.mockReturnValue({
       toolkits: {
         get: vi.fn().mockResolvedValue([
@@ -66,9 +83,6 @@ describe('/api/connections loader', () => {
     });
 
     const request = new Request('https://bolt.local/api/connections', {
-      headers: {
-        'x-composio-user-id': 'user_123',
-      },
     });
 
     const response = await loader({
@@ -100,6 +114,10 @@ describe('/api/connections loader', () => {
   });
 
   it('returns an empty toolkit list when Composio omits toolkit items', async () => {
+    composioState.requireAuth.mockResolvedValue({
+      responseHeaders: new Headers(),
+      user: { id: 'user_123' },
+    });
     composioState.createComposioClient.mockReturnValue({
       toolkits: {
         get: vi.fn().mockResolvedValue({}),
@@ -112,9 +130,7 @@ describe('/api/connections loader', () => {
     });
 
     const response = await loader({
-      request: new Request('https://bolt.local/api/connections', {
-        headers: { 'x-composio-user-id': 'user_123' },
-      }),
+      request: new Request('https://bolt.local/api/connections'),
       context: {} as never,
       params: {},
     } as never);
@@ -126,6 +142,10 @@ describe('/api/connections loader', () => {
   });
 
   it('treats missing connected account items as disconnected toolkits', async () => {
+    composioState.requireAuth.mockResolvedValue({
+      responseHeaders: new Headers(),
+      user: { id: 'user_123' },
+    });
     composioState.createComposioClient.mockReturnValue({
       toolkits: {
         get: vi.fn().mockResolvedValue([
@@ -141,9 +161,7 @@ describe('/api/connections loader', () => {
     });
 
     const response = await loader({
-      request: new Request('https://bolt.local/api/connections', {
-        headers: { 'x-composio-user-id': 'user_123' },
-      }),
+      request: new Request('https://bolt.local/api/connections'),
       context: {} as never,
       params: {},
     } as never);
@@ -161,6 +179,10 @@ describe('/api/connections loader', () => {
   });
 
   it('returns a 500 json error when Composio throws', async () => {
+    composioState.requireAuth.mockResolvedValue({
+      responseHeaders: new Headers(),
+      user: { id: 'user_123' },
+    });
     composioState.createComposioClient.mockReturnValue({
       toolkits: {
         get: vi.fn().mockRejectedValue(new Error('Composio exploded')),
@@ -171,9 +193,7 @@ describe('/api/connections loader', () => {
     });
 
     const response = await loader({
-      request: new Request('https://bolt.local/api/connections', {
-        headers: { 'x-composio-user-id': 'user_123' },
-      }),
+      request: new Request('https://bolt.local/api/connections'),
       context: {} as never,
       params: {},
     } as never);

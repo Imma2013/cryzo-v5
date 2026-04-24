@@ -31,7 +31,6 @@ import type { GeneratedImageAssetData } from '~/types/context';
 import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource } from '~/lib/common/generated-image-manifest';
 import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
-import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
 import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
 import { useSupabaseUserPreferences } from '~/lib/supabase/user-preferences.client';
@@ -122,8 +121,7 @@ export const ChatImpl = memo(
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
     const { user } = useSupabaseAuth();
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
-    const [localGuestId, setLocalGuestId] = useState<string | null>(null);
-    const composioUserId = user?.uid || localGuestId;
+    const composioUserId = user?.uid || null;
     const syncedPreferences = currentUserRecord?.llmPreferences;
     const shouldSyncSelection = Boolean(user) && isSyncAvailable;
     const activeProvider = provider ?? activeProviders[0] ?? DEFAULT_PROVIDER;
@@ -173,23 +171,6 @@ export const ChatImpl = memo(
         void saveLlmPreferences({ selectedModel: model });
       }
     }, [currentUserRecord, llmPreferencesReady, model, saveLlmPreferences, shouldSyncSelection, syncedPreferences?.selectedModel]);
-
-    useEffect(() => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-
-      const existingGuestId = localStorage.getItem(COMPOSIO_GUEST_ID_STORAGE_KEY);
-
-      if (existingGuestId) {
-        setLocalGuestId(existingGuestId);
-        return;
-      }
-
-      const guestId = `guest_${crypto.randomUUID()}`;
-      localStorage.setItem(COMPOSIO_GUEST_ID_STORAGE_KEY, guestId);
-      setLocalGuestId(guestId);
-    }, []);
 
     const {
       messages,

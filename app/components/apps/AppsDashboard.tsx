@@ -41,7 +41,7 @@ export function AppsDashboard({ userId, onRequireIdentity }: AppsDashboardProps)
 
   const fetchConnections = useCallback(async () => {
     if (!userId) {
-      setError('Apps are unavailable until a local identity is ready.');
+      setError('Apps are unavailable until you sign in.');
       setIsLoading(false);
       onRequireIdentity?.();
 
@@ -52,11 +52,7 @@ export function AppsDashboard({ userId, onRequireIdentity }: AppsDashboardProps)
     setError(null);
 
     try {
-      const response = await fetch('/api/connections', {
-        headers: {
-          'x-composio-user-id': userId,
-        },
-      });
+      const response = await fetch('/api/connections');
 
       const data = (await response.json()) as { error?: string; toolkits?: unknown };
 
@@ -94,7 +90,6 @@ export function AppsDashboard({ userId, onRequireIdentity }: AppsDashboardProps)
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-composio-user-id': userId,
         },
         body: JSON.stringify({ toolkit: slug }),
       });
@@ -132,7 +127,6 @@ export function AppsDashboard({ userId, onRequireIdentity }: AppsDashboardProps)
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-composio-user-id': userId,
         },
         body: JSON.stringify({ connectedAccountId }),
       });

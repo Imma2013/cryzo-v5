@@ -8,9 +8,10 @@ import {
 } from '~/components/apps/apps.constants';
 import {
   createComposioClient,
+  createComposioConnectionRequest,
   extractComposioRedirectUrl,
-  resolveComposioManagedAuthConfigId,
 } from '~/lib/.server/composio';
+import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { withSecurity } from '~/lib/security';
 
 export function buildToolkitLogoProxyUrl(request: Request, toolkitSlug: string) {
@@ -18,21 +19,6 @@ export function buildToolkitLogoProxyUrl(request: Request, toolkitSlug: string) 
   url.searchParams.set('slug', toolkitSlug);
 
   return url.toString();
-}
-
-function getComposioUserId(request: Request) {
-  const userId = request.headers.get('x-composio-user-id')?.trim();
-
-  if (!userId) {
-    throw new Response(JSON.stringify({ error: 'Missing Composio user identity.' }), {
-      status: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  }
-
-  return userId;
 }
 
 function requiresAuthentication(toolkit: { noAuth?: boolean }) {
@@ -100,8 +86,14 @@ function getCollectionItems<T>(value: unknown): T[] {
 }
 
 async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
+  let authHeaders: Headers | undefined;
+
   try {
-    const userId = getComposioUserId(request);
+    const auth = await requireAuth(request, context as any, {
+      message: 'Sign in before managing app connections.',
+    });
+    authHeaders = auth.responseHeaders;
+    const userId = auth.user.id;
     const composio = createComposioClient(context);
     const [toolkits, connectedAccounts] = await Promise.all([
       composio.toolkits.get({
@@ -123,6 +115,8 @@ async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
 
     return json({
       toolkits: buildApprovedToolkitCatalog(request, toolkitItems, activeAccountsByToolkitSlug),
+    }, {
+      headers: withSupabaseAuthHeaders(undefined, authHeaders),
     });
   } catch (error) {
     if (error instanceof Response) {
@@ -135,39 +129,42 @@ async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
       {
         error: error instanceof Error ? error.message : 'Failed to load Composio connections.',
       },
-      { status: 500 },
+      { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 500 },
     );
   }
 }
 
 async function connectionsAction({ request, context }: ActionFunctionArgs) {
+  let authHeaders: Headers | undefined;
+
   try {
-    const userId = getComposioUserId(request);
+    const auth = await requireAuth(request, context as any, {
+      message: 'Sign in before managing app connections.',
+    });
+    authHeaders = auth.responseHeaders;
+    const userId = auth.user.id;
     const { toolkit } = (await request.json()) as { toolkit?: string };
 
     if (!toolkit) {
-      return json({ error: 'Toolkit is required.' }, { status: 400 });
+      return json({ error: 'Toolkit is required.' }, { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 400 });
     }
 
     const composio = createComposioClient(context);
     const origin = new URL(request.url).origin;
     const callbackUrl = `${origin}/?${APPS_VIEW_QUERY_KEY}=${APPS_VIEW_QUERY_VALUE}`;
-    const authConfigId = await resolveComposioManagedAuthConfigId(composio, toolkit);
-
-    if (!authConfigId) {
-      return json({ error: `No enabled auth config found for toolkit "${toolkit}".` }, { status: 400 });
-    }
-
-    const connectionRequest = await composio.connectedAccounts.link(userId, authConfigId, {
+    const connectionRequest = await createComposioConnectionRequest(composio, userId, toolkit, {
       callbackUrl,
     });
     const redirectUrl = extractComposioRedirectUrl(connectionRequest);
 
     if (!redirectUrl) {
-      return json({ error: `Composio did not return a redirect URL for toolkit "${toolkit}".` }, { status: 502 });
+      return json(
+        { error: `Composio did not return a redirect URL for toolkit "${toolkit}".` },
+        { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 502 },
+      );
     }
 
-    return json({ redirectUrl });
+    return json({ redirectUrl }, { headers: withSupabaseAuthHeaders(undefined, authHeaders) });
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -179,7 +176,7 @@ async function connectionsAction({ request, context }: ActionFunctionArgs) {
       {
         error: error instanceof Error ? error.message : 'Failed to create Composio connection.',
       },
-      { status: 500 },
+      { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 500 },
     );
   }
 }

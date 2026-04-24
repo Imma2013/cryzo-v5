@@ -1,12 +1,24 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import {
-  __resetPendingComposioConfirmationsForTests,
-  getComposioTools,
-  shouldEnableComposioTools,
-} from './composio';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const composioState = vi.hoisted(() => ({
+  createComposioAgentClientFromApiKey: vi.fn(),
+  createComposioConnectionRequest: vi.fn(),
+}));
+
+vi.mock('~/lib/.server/composio', async () => {
+  const actual = await vi.importActual<typeof import('~/lib/.server/composio')>('~/lib/.server/composio');
+
+  return {
+    ...actual,
+    createComposioAgentClientFromApiKey: composioState.createComposioAgentClientFromApiKey,
+    createComposioConnectionRequest: composioState.createComposioConnectionRequest,
+  };
+});
+
+import { __resetPendingComposioConfirmationsForTests, getComposioTools, shouldEnableComposioTools } from './composio';
 
 describe('shouldEnableComposioTools', () => {
-  it('enables Composio for signed-in or guest identities on supported tool-capable providers with an API key', () => {
+  it('enables Composio for signed-in identities on supported tool-capable providers with an API key', () => {
     expect(
       shouldEnableComposioTools({
         env: { COMPOSIO_API_KEY: 'test-key' } as any,
@@ -37,14 +49,6 @@ describe('shouldEnableComposioTools', () => {
         providerName: 'Google',
         user: { isAuthenticated: false, composioUserId: 'guest_123', hasComposioIdentity: true },
       }),
-    ).toBe(true);
-
-    expect(
-      shouldEnableComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
-        providerName: 'Google',
-        user: { isAuthenticated: false },
-      }),
     ).toBe(false);
   });
 
@@ -59,15 +63,11 @@ describe('shouldEnableComposioTools', () => {
   });
 });
 
-describe('Composio wrappers', () => {
-  const originalComposioApiKey = process.env.COMPOSIO_API_KEY;
-
-  beforeEach(() => {
-    __resetPendingComposioConfirmationsForTests();
-  });
-
+describe('getComposioTools', () => {
   afterEach(() => {
-    process.env.COMPOSIO_API_KEY = originalComposioApiKey;
+    __resetPendingComposioConfirmationsForTests();
+    composioState.createComposioAgentClientFromApiKey.mockReset();
+    composioState.createComposioConnectionRequest.mockReset();
   });
 
   it('returns no tools when Composio is disabled', async () => {
@@ -103,20 +103,69 @@ describe('Composio wrappers', () => {
   });
 
   it('reports missing API key as a runtime blocker', async () => {
-    delete process.env.COMPOSIO_API_KEY;
+    const previousApiKey = process.env.COMPOSIO_API_KEY;
+    const previousViteApiKey = process.env.VITE_COMPOSIO_API_KEY;
 
-    await expect(
-      getComposioTools({
-        env: {} as any,
-        providerName: 'Google',
-        user: { isAuthenticated: false, composioUserId: 'guest_123' },
-      }),
-    ).resolves.toEqual({
-      configured: false,
-      hasIdentity: true,
-      resolvedUserId: 'guest_123',
-      status: 'missing_api_key',
-      tools: {},
+    delete process.env.COMPOSIO_API_KEY;
+    delete process.env.VITE_COMPOSIO_API_KEY;
+
+    try {
+      await expect(
+        getComposioTools({
+          env: {} as any,
+          providerName: 'Google',
+          user: { isAuthenticated: true, uid: 'user_123' },
+        }),
+      ).resolves.toEqual({
+        configured: false,
+        hasIdentity: true,
+        resolvedUserId: 'user_123',
+        status: 'missing_api_key',
+        tools: {},
+      });
+    } finally {
+      if (previousApiKey != null) {
+        process.env.COMPOSIO_API_KEY = previousApiKey;
+      }
+
+      if (previousViteApiKey != null) {
+        process.env.VITE_COMPOSIO_API_KEY = previousViteApiKey;
+      }
+    }
+  });
+
+  it('returns provider-wrapped tools for a signed-in user', async () => {
+    const wrapTools = vi.fn().mockReturnValue({
+      GMAIL_FETCH_EMAILS: { description: 'Fetch Gmail email' },
     });
+    composioState.createComposioAgentClientFromApiKey.mockReturnValue({
+      provider: { wrapTools },
+      tools: {
+        getRawComposioTools: vi.fn().mockResolvedValue([
+          {
+            description: 'Fetch Gmail email',
+            inputParameters: { properties: {}, type: 'object' },
+            name: 'Fetch Gmail email',
+            slug: 'GMAIL_FETCH_EMAILS',
+            toolkit: { name: 'Gmail', slug: 'gmail' },
+          },
+        ]),
+      },
+    });
+
+    const resolution = await getComposioTools({
+      env: { COMPOSIO_API_KEY: 'test-key' } as any,
+      providerName: 'Google',
+      requestOrigin: 'https://cryzo-v5-blue.vercel.app',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: 'read my gmail account',
+    });
+
+    expect(resolution.status).toBe('available');
+    expect(resolution.resolvedUserId).toBe('user_123');
+    expect(resolution.tools).toEqual({
+      GMAIL_FETCH_EMAILS: { description: 'Fetch Gmail email' },
+    });
+    expect(wrapTools).toHaveBeenCalledTimes(1);
   });
 });

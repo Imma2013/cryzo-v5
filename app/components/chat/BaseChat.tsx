@@ -10,7 +10,6 @@ import {
   APPS_RESTORE_STORAGE_KEY,
   APPS_VIEW_QUERY_KEY,
   APPS_VIEW_QUERY_VALUE,
-  COMPOSIO_GUEST_ID_STORAGE_KEY,
 } from '~/components/apps/apps.constants';
 import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { Menu } from '~/components/sidebar/Menu.client';
@@ -163,9 +162,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [activeMainView, setActiveMainView] = useState<'chat' | 'apps'>('chat');
-    const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const { user } = useSupabaseAuth();
-    const composioUserId = user?.uid || localGuestId;
+    const composioUserId = user?.uid || null;
     const selectedModelLabel = modelList.find((entry) => entry.name === model)?.label;
     const collapsedModelLabel = selectedModelLabel || model || provider?.name || 'Engine';
 
@@ -221,23 +219,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
         setRecognition(recognition);
       }
-    }, []);
-
-    useEffect(() => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-
-      const existingGuestId = localStorage.getItem(COMPOSIO_GUEST_ID_STORAGE_KEY);
-
-      if (existingGuestId) {
-        setLocalGuestId(existingGuestId);
-        return;
-      }
-
-      const guestId = `guest_${crypto.randomUUID()}`;
-      localStorage.setItem(COMPOSIO_GUEST_ID_STORAGE_KEY, guestId);
-      setLocalGuestId(guestId);
     }, []);
 
     useEffect(() => {

@@ -1,5 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveComposioManagedAuthConfigId } from './composio';
+import { resolveComposioApiKeyFromEnv, resolveComposioManagedAuthConfigId } from './composio';
+
+describe('resolveComposioApiKeyFromEnv', () => {
+  it('prefers explicit server env values and trims whitespace', () => {
+    expect(
+      resolveComposioApiKeyFromEnv(
+        { COMPOSIO_API_KEY: '  composio-server-key  ' },
+        { COMPOSIO_API_KEY: 'meta-key' },
+        { COMPOSIO_API_KEY: 'process-key' },
+      ),
+    ).toBe('composio-server-key');
+  });
+
+  it('falls back to process or VITE-prefixed values when needed', () => {
+    expect(resolveComposioApiKeyFromEnv({}, undefined, { COMPOSIO_API_KEY: 'process-key' })).toBe('process-key');
+    expect(resolveComposioApiKeyFromEnv({}, undefined, { VITE_COMPOSIO_API_KEY: 'vite-key' } as any)).toBe('vite-key');
+  });
+});
 
 describe('resolveComposioManagedAuthConfigId', () => {
   it('returns an enabled managed auth config id when one already exists', async () => {

@@ -1,7 +1,6 @@
 export const APPS_VIEW_QUERY_KEY = 'view';
 export const APPS_VIEW_QUERY_VALUE = 'apps';
 export const APPS_RESTORE_STORAGE_KEY = 'bolt_apps_restore';
-export const COMPOSIO_GUEST_ID_STORAGE_KEY = 'bolt_composio_guest_id';
 
 export const APPROVED_APP_CONNECTOR_NAMES = [
   'Stripe',
@@ -61,7 +60,7 @@ export const APPROVED_APP_CONNECTOR_NAMES = [
   'Pipedrive',
 ] as const;
 
-const APPROVED_APP_CONNECTOR_SLUGS = [
+export const APPROVED_APP_CONNECTOR_SLUGS = [
   'stripe',
   'salesforce',
   'slack',
