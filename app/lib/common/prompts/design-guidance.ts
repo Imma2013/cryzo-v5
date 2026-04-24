@@ -35,12 +35,14 @@ export function buildCanonicalDesignPreamble(options: {
   libraryPath?: string;
   availableReferences?: string[];
   selectedReferences?: DesignPromptReference[];
+  selectionSource?: 'canonical' | 'fallback';
   designScheme?: DesignScheme;
 }) {
-  const { libraryPath, availableReferences = [], selectedReferences = [], designScheme } = options;
+  const { libraryPath, availableReferences = [], selectedReferences = [], selectionSource, designScheme } = options;
   const overrideSummary = formatDesignSchemeOverrides(designScheme);
   const hasReferenceLibrary = !!libraryPath && availableReferences.length > 0 && selectedReferences.length > 0;
   const selectedSlugs = selectedReferences.map((reference) => reference.slug.toLowerCase());
+  const primaryReference = selectedReferences[0];
   const hasCryzoReference = selectedSlugs.some((slug) => slug.startsWith('cryzo-'));
   const hasCryzo2Reference = selectedSlugs.includes('cryzo-2');
   const hasCryzo4Reference = selectedSlugs.includes('cryzo-4');
@@ -71,7 +73,8 @@ export function buildCanonicalDesignPreamble(options: {
       Treat this library as the highest-priority default visual reference for build requests.
       Select the closest matching reference from the library and synthesize from it before falling back to generic bolt.diy aesthetics.
       Always evaluate the full reference library before choosing a design direction.
-      A valid build result must have a concrete primary reference from this library. Do not generate a generic design brief or generic landing page direction without first locking a primary reference.
+      A valid build result must have a concrete locked primary reference from this library. Do not generate a generic design brief or generic landing page direction without first locking a primary reference.
+      Use exactly one primary reference for build output. Do not blend multiple primary systems together.
       Do not repeatedly default to Ferrari, Vercel, or any other familiar premium reference unless the prompt clearly matches them better than the rest of the library.
       If a Cryzo reference is a strong or near-strong fit, prefer the best-fit Cryzo reference as the primary system.
       Do NOT default to generic AI-generated landing pages, stock SaaS dashboards, purple-on-dark palettes, or interchangeable hero sections unless the selected design reference explicitly supports them.
@@ -79,12 +82,30 @@ export function buildCanonicalDesignPreamble(options: {
       Every major visual decision must align with the chosen reference system first.
     </design_system_priority>
 
+    <design_primary_lock>
+      LOCKED PRIMARY REFERENCE: ${primaryReference?.slug ?? 'unresolved'}
+      Treat this selection as binding build direction, not as an optional inspiration cue.
+      If the prompt is broad or ambiguous, still commit to this locked primary reference instead of drifting into generic premium output.
+    </design_primary_lock>
+
+    ${
+      selectionSource === 'fallback'
+        ? stripIndents`
+          <design_reference_fallback_mode>
+            The selected primary reference is currently running in fallback mode because its canonical DESIGN.md file was unavailable at runtime.
+            Follow the selected slug as binding guidance anyway, but do not pretend this is a richer multi-reference library extract.
+            In fallback mode, it is even more important to avoid generic AI slop or unrelated brand drift.
+          </design_reference_fallback_mode>
+        `
+        : ''
+    }
+
     <design_reference_library>
       Path: ${libraryPath}
       Available references: ${availableReferences.join(', ')}
-      Use the first selected reference as primary. Use additional references only for compatible supporting ideas.
+      Use the first selected reference as the only primary visual system for build output unless the user explicitly asks for mixing.
       Primary reference controls composition, hero direction, typography attitude, palette behavior, CTA styling, and motion language.
-      Supporting references may refine spacing, polish, grid logic, or restraint, but must never overpower the primary.
+      Supporting references may refine spacing, polish, grid logic, or restraint only when they remain subordinate to the primary.
       If a primary reference is selected, enforce it in the final output instead of summarizing it as an optional suggestion.
       Do not describe the output as Apple-inspired, Stripe-inspired, Ferrari-inspired, or similar unless that exact reference is the selected primary or the user explicitly requested it.
       If the primary reference conflicts with generic premium instincts from the base prompt, follow the primary reference and ignore the generic premium instinct.

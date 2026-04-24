@@ -5,6 +5,7 @@ const designDocumentModules = import.meta.glob('../../../vendor/awesome-design-m
 }) as Record<string, string>;
 
 export const CANONICAL_DESIGN_LIBRARY_PATH = 'vendor/awesome-design-md/design-md';
+export type DesignReferenceSource = 'canonical' | 'fallback';
 
 type DesignCategory =
   | 'ai'
@@ -63,6 +64,7 @@ export interface DesignReferenceDoc {
   relativePath: string;
   markdown: string;
   excerpt: string;
+  source: DesignReferenceSource;
 }
 
 interface EnrichedDesignReferenceDoc extends DesignReferenceDoc {
@@ -194,7 +196,15 @@ const PRODUCT_TYPE_SIGNALS: Record<string, string[]> = {
   'travel-marketplace': ['travel marketplace', 'vacation booking'],
   'mobility-app': ['rideshare app', 'transport app', 'delivery app'],
   'observability-platform': ['error tracking platform', 'observability dashboard'],
-  'database-platform': ['database platform', 'developer database'],
+  'database-platform': [
+    'database platform',
+    'developer database',
+    'postgres backend platform',
+    'postgres backend',
+    'backend as a service',
+    'app backend infra',
+    'backend platform for app developers',
+  ],
   'automation-platform': ['workflow automation', 'integration platform'],
   'spatial-world': ['3d landing page', 'spatial experience', 'immersive world'],
   'pet-brand': [
@@ -939,6 +949,116 @@ function createExcerpt(markdown: string) {
     .trim();
 }
 
+function formatReferenceName(slug: string) {
+  if (slug === 'linear.app') {
+    return 'Linear';
+  }
+
+  if (slug === 'x.ai') {
+    return 'xAI';
+  }
+
+  if (slug === 'mistral.ai') {
+    return 'Mistral AI';
+  }
+
+  if (slug === 'opencode.ai') {
+    return 'OpenCode AI';
+  }
+
+  if (slug === 'together.ai') {
+    return 'Together AI';
+  }
+
+  return slug
+    .split(/[.-]+/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+const FALLBACK_REFERENCE_SUMMARIES: Record<string, string> = {
+  apple:
+    'Apple is the minimal consumer-hardware keynote lane. Use dominant product imagery, calm chrome, oversized hierarchy, and quiet premium restraint. Avoid dashboards, dark SaaS gradients, and automotive drift.',
+  stripe:
+    'Stripe is the developer-fintech infrastructure lane. Use structured explanation, precise hierarchy, modular product storytelling, and technical polish. Avoid generic AI gradients or lifestyle-led composition.',
+  vercel:
+    'Vercel is the minimal developer-platform lane. Use severe restraint, crisp spacing, sharp hierarchy, and product-led clarity. Avoid consumer softness and overillustrated hero sections.',
+  notion:
+    'Notion is the calm workspace-editorial lane. Use document rhythm, quiet utility, modular content blocks, and typography-led clarity. Avoid flashy gradients or loud marketing theatrics.',
+  figma:
+    'Figma is the playful collaborative-design-tool lane. Use modular product demos, bright clarity, creative energy, and collaborative surfaces. Avoid dry docs-site minimalism or corporate stiffness.',
+  airbnb:
+    'Airbnb is the warm travel-marketplace lane. Use destination-led imagery, inviting browsing, soft utility, and human-centered discovery. Avoid hard enterprise tone or developer-platform styling.',
+  sentry:
+    'Sentry is the technical observability lane. Use dark precision, issue framing, code-adjacent UI, and signal-rich hierarchy. Avoid friendly consumer softness or luxury editorial drift.',
+  warp:
+    'Warp is the premium terminal-tool lane. Use compact utility, technical sharpness, command surfaces, and workflow speed. Avoid consumer-marketplace patterns or oversized generic marketing.',
+  'linear.app':
+    'Linear is the premium product-work lane. Use surgical hierarchy, minimal surfaces, velocity-oriented product clarity, and compact sections. Avoid bubbly consumer styling or generic AI hero layouts.',
+  supabase:
+    'Supabase is the developer database-platform lane. Use open-source confidence, technical clarity, structured platform storytelling, and calm modern infra aesthetics. Avoid unrelated luxury or generic AI abstraction.',
+  'cryzo-1':
+    'Cryzo 1 is the cinematic festival-world lane. Use poster-scale typography, immersive atmosphere, lineup hierarchy, and event-world composition. Avoid plain conference-site grids.',
+  'cryzo-2':
+    'Cryzo 2 is the spatial 3D world lane. Use one dominant object, atmospheric depth, oversized editorial type, and true or convincingly simulated 3D presence. Avoid flat dark SaaS pages or car-launch drift.',
+  'cryzo-3':
+    'Cryzo 3 is the tactile furniture-showcase lane. Use curated showroom composition, warm-neutral luxury, object-led framing, and editorial pacing. Avoid generic ecommerce grids.',
+  'cryzo-4':
+    'Cryzo 4 is the restrained editorial automotive lane. Use dominant vehicle imagery, condensed display typography, muted premium contrast, and curated automotive storytelling. Avoid hypercar theatrics and AI-homepage drift.',
+  'cryzo-5':
+    'Cryzo 5 is the performance-machine manifesto lane. Use brutal type, cinematic speed, heat-toned accents, and machine reverence. Avoid tidy brochure patterns or normal feature-card marketing.',
+  'cryzo-6':
+    'Cryzo 6 is the concierge travel lane. Use destination atmosphere, elegant serif type, guided service clarity, and warm-luxury restraint. Avoid OTA booking-engine layouts or startup-card aesthetics.',
+  'cryzo-7':
+    'Cryzo 7 is the dining-nightlife lane. Use moody contrast, scene-first composition, refined editorial pacing, and premium hospitality drama. Avoid generic restaurant templates.',
+  'cryzo-8':
+    'Cryzo 8 is the books-editorial lane. Use contemplative rhythm, literary typography, chaptered sections, and atmospheric storytelling. Avoid generic content grids or SaaS product marketing.',
+  'cryzo-9':
+    'Cryzo 9 is the luxury-performance automotive lane. Use dominant machine imagery, cinematic framing, sharp contrast, and prestige-speed tension. Avoid dealership grids or developer-tool drift.',
+  'cryzo-10':
+    'Cryzo 10 is the playful-editorial pet lane. Use character-led composition, premium art direction, surprising typography, and styled commerce blocks. Avoid childish pet-store templates or sterile minimalism.',
+};
+
+function createFallbackDesignMarkdown(slug: string, metadata: Required<DesignReferenceMetadata>) {
+  const name = formatReferenceName(slug);
+  const specialSummary = FALLBACK_REFERENCE_SUMMARIES[slug];
+  const capabilities = [
+    metadata.supports3D ? 'Supports spatial or 3D-led composition.' : '',
+    metadata.supportsEditorial ? 'Supports editorial pacing and chaptered storytelling.' : '',
+    metadata.supportsMinimalShowcase ? 'Supports restrained product-showcase minimalism.' : '',
+  ].filter(Boolean);
+  const compatibleSupports = metadata.compatibleSupports.length > 0 ? metadata.compatibleSupports.join(', ') : 'none';
+  const negativeKeywords = metadata.negativeKeywords.length > 0 ? metadata.negativeKeywords.join(', ') : 'generic template output';
+
+  return `# ${name}
+
+## Identity
+${specialSummary ?? `${name} is a ${metadata.styleKeywords.join(', ') || 'category-correct'} reference system for ${metadata.productTypes.join(', ') || metadata.categories.join(', ') || 'its domain'}.`}
+
+## Routing Metadata
+- Family: ${metadata.family}
+- Categories: ${metadata.categories.join(', ') || 'not specified'}
+- Industries: ${metadata.industries.join(', ') || 'not specified'}
+- Product types: ${metadata.productTypes.join(', ') || 'not specified'}
+- Style keywords: ${metadata.styleKeywords.join(', ') || 'not specified'}
+
+## Capabilities
+${capabilities.length > 0 ? capabilities.map((capability) => `- ${capability}`).join('\n') : '- No special capability flags are defined.'}
+
+## Compatible Supports
+- ${compatibleSupports}
+
+## Avoid
+- ${negativeKeywords}
+- generic AI slop, default Bolt premium layouts, or unrelated brand drift
+
+## Fallback Note
+- This fallback profile was generated from routing metadata because the canonical DESIGN.md file for ${slug} was unavailable at runtime.
+- Treat the selected slug as binding guidance even in fallback mode.
+`;
+}
+
 function normalizeText(text: string) {
   return text
     .toLowerCase()
@@ -1046,26 +1166,50 @@ function getReferenceMetadata(slug: string): Required<DesignReferenceMetadata> {
   };
 }
 
-const designReferenceLibrary: EnrichedDesignReferenceDoc[] = Object.entries(designDocumentModules)
-  .map(([modulePath, markdown]) => {
+const canonicalDesignDocsBySlug = new Map(
+  Object.entries(designDocumentModules).map(([modulePath, markdown]) => {
     const segments = modulePath.split('/');
     const slug = segments[segments.length - 2];
+    return [slug, markdown.trim()] as const;
+  }),
+);
+
+const designReferenceLibrary: EnrichedDesignReferenceDoc[] = Array.from(
+  new Set([...Object.keys(REFERENCE_METADATA), ...canonicalDesignDocsBySlug.keys()]),
+)
+  .sort((left, right) => left.localeCompare(right))
+  .map((slug) => {
     const metadata = getReferenceMetadata(slug);
     const normalizedNames = Array.from(new Set([slug, ...metadata.aliases].map((value) => normalizeText(value))));
+    const canonicalMarkdown = canonicalDesignDocsBySlug.get(slug);
+    const source: DesignReferenceSource = canonicalMarkdown ? 'canonical' : 'fallback';
+    const markdown = canonicalMarkdown ?? createFallbackDesignMarkdown(slug, metadata);
 
     return {
       slug,
       relativePath: `${CANONICAL_DESIGN_LIBRARY_PATH}/${slug}/DESIGN.md`,
-      markdown: markdown.trim(),
+      markdown,
       excerpt: createExcerpt(markdown),
       metadata,
       normalizedNames,
+      source,
     };
-  })
-  .sort((left, right) => left.slug.localeCompare(right.slug));
+  });
 
 export function getDesignReferenceLibrary(): DesignReferenceDoc[] {
   return designReferenceLibrary;
+}
+
+export function getDesignLibraryDiagnostics() {
+  const canonical = designReferenceLibrary.filter((reference) => reference.source === 'canonical');
+  const fallback = designReferenceLibrary.filter((reference) => reference.source === 'fallback');
+
+  return {
+    canonicalCount: canonical.length,
+    fallbackCount: fallback.length,
+    supportedSlugs: designReferenceLibrary.map((reference) => reference.slug),
+    missingCanonicalSlugs: fallback.map((reference) => reference.slug),
+  };
 }
 
 interface RankedDesignReference {
@@ -1077,6 +1221,7 @@ interface RankedDesignReference {
 export interface DesignReferenceRoutingResult {
   primary: DesignReferenceDoc | undefined;
   supporting: DesignReferenceDoc[];
+  selectionSource?: DesignReferenceSource;
   matchedCategories: string[];
   matchedSignals: string[];
   ranked: Array<{
@@ -1201,6 +1346,10 @@ function scoreReference(reference: EnrichedDesignReferenceDoc, normalizedPrompt:
     score -= 28;
   }
 
+  if (promptCategories.has('database') && !reference.metadata.categories.includes('database')) {
+    score -= 36;
+  }
+
   if (industrySignals.has('docs') && !reference.metadata.industries.includes('docs')) {
     score -= 24;
   }
@@ -1223,6 +1372,10 @@ function scoreReference(reference: EnrichedDesignReferenceDoc, normalizedPrompt:
 
   if (industrySignals.has('space') && !reference.metadata.categories.includes('space')) {
     score -= 24;
+  }
+
+  if (productTypeSignals.has('database-platform') && !reference.metadata.productTypes.includes('database-platform')) {
+    score -= 40;
   }
 
   return { score, reasons };
@@ -1476,6 +1629,7 @@ export function routeDesignReferences(messageText: string, limit = 3): DesignRef
   return {
     primary: selected[0],
     supporting: selected.slice(1),
+    selectionSource: selected[0]?.source,
     matchedCategories: Array.from(promptCategories.keys()),
     matchedSignals: Array.from(new Set(matchedSignals)),
     ranked,

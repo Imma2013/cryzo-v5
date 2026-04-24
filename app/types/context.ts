@@ -11,6 +11,7 @@ export type ContextAnnotation =
   | {
       type: 'designRouting';
       primarySlug?: string;
+      selectionSource?: 'canonical' | 'fallback';
       supportingSlugs: string[];
       matchedCategories: string[];
       matchedSignals: string[];

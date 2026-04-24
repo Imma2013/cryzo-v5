@@ -48,7 +48,7 @@ describe('createGoogleGenerateFallbackResult', () => {
 
     const result = await createGoogleGenerateFallbackResult({
       onFinish,
-      streamParams: { model: 'google-model' },
+      streamParams: { model: {} as any },
     });
 
     const writes: string[] = [];
@@ -60,7 +60,7 @@ describe('createGoogleGenerateFallbackResult', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(mockedGenerateText).toHaveBeenCalledWith({ model: 'google-model' });
+    expect(mockedGenerateText).toHaveBeenCalledWith({ model: {} });
     expect(onFinish).toHaveBeenCalledTimes(1);
     expect(onFinish).toHaveBeenCalledWith(
       expect.objectContaining({

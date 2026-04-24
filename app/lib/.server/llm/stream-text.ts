@@ -125,7 +125,7 @@ export async function createGoogleGenerateFallbackResult({
   streamParams,
   onFinish,
 }: {
-  streamParams: Record<string, any>;
+  streamParams: Parameters<typeof generateText>[0];
   onFinish?: StreamingOptions['onFinish'];
 }) {
   const result = await generateText(streamParams);
@@ -646,17 +646,18 @@ export async function streamText(props: {
 
   if (assistantMode === 'build' || assistantMode === 'build-with-tools') {
     const designReferenceLibrary = getDesignReferenceLibrary();
-    const designRouting = routeDesignReferences(latestUserPrompt, 5);
+    const designRouting = routeDesignReferences(latestUserPrompt, 1);
     const canonicalDesignPreamble = buildCanonicalDesignPreamble({
       libraryPath: designReferenceLibrary.length > 0 ? CANONICAL_DESIGN_LIBRARY_PATH : undefined,
       availableReferences: designReferenceLibrary.map((reference) => reference.slug),
-      selectedReferences: [designRouting.primary, ...designRouting.supporting]
+      selectedReferences: [designRouting.primary]
         .filter((reference): reference is NonNullable<typeof reference> => !!reference)
         .map((reference) => ({
-        slug: reference.slug,
-        relativePath: reference.relativePath,
-        excerpt: reference.excerpt,
-      })),
+          slug: reference.slug,
+          relativePath: reference.relativePath,
+          excerpt: reference.excerpt,
+        })),
+      selectionSource: designRouting.selectionSource,
       designScheme,
     });
 
@@ -667,7 +668,7 @@ export async function streamText(props: {
     }
 
     logger.info(
-      `Design prompt diagnostics: mode=${assistantMode} primary=${designRouting.primary?.slug ?? 'none'} hiddenFilteredPromptLength=${latestUserPrompt.length} preambleInjected=${canonicalDesignPreamble ? 'yes' : 'no'}`,
+      `Design prompt diagnostics: mode=${assistantMode} primary=${designRouting.primary?.slug ?? 'none'} source=${designRouting.selectionSource ?? 'unknown'} hiddenFilteredPromptLength=${latestUserPrompt.length} preambleInjected=${canonicalDesignPreamble ? 'yes' : 'no'}`,
     );
   }
 

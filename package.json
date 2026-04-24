@@ -28,6 +28,7 @@
     "typecheck": "tsc",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
+    "sync:design-library": "node scripts/sync-design-library.mjs",
     "postinstall": "node scripts/patch-google-thought-signatures.cjs",
     "prepare": "husky",
     "clean": "node scripts/clean.js",

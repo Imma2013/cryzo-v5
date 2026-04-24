@@ -177,7 +177,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           .trim();
 
         if (chatMode === 'build' && fullUserPrompt) {
-          const designRouting = routeDesignReferences(fullUserPrompt, 5);
+          const designRouting = routeDesignReferences(fullUserPrompt, 1);
 
           dataStream.writeData({
             type: 'progress',
@@ -190,6 +190,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           dataStream.writeMessageAnnotation({
             type: 'designRouting',
             primarySlug: designRouting.primary?.slug,
+            selectionSource: designRouting.selectionSource,
             supportingSlugs: designRouting.supporting.map((reference) => reference.slug),
             matchedCategories: designRouting.matchedCategories,
             matchedSignals: designRouting.matchedSignals,
@@ -201,7 +202,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             label: 'design-routing',
             status: 'complete',
             order: progressCounter++,
-            message: `Selected design: ${designRouting.primary?.slug ?? 'none'}`,
+            message: `Selected design: ${designRouting.primary?.slug ?? 'none'}${designRouting.selectionSource === 'fallback' ? ' (fallback)' : ''}`,
           } satisfies ProgressAnnotation);
         }
 
@@ -424,7 +425,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         });
 
         logger.info(
-          `Build diagnostics: primary=${fullUserPrompt ? routeDesignReferences(fullUserPrompt, 1).primary?.slug ?? 'none' : 'none'} hiddenBootstrap=${processedMessages.filter((message) => isHiddenMessage(message as any)).length}`,
+          `Build diagnostics: primary=${fullUserPrompt ? routeDesignReferences(fullUserPrompt, 1).primary?.slug ?? 'none' : 'none'} source=${fullUserPrompt ? routeDesignReferences(fullUserPrompt, 1).selectionSource ?? 'unknown' : 'unknown'} hiddenBootstrap=${processedMessages.filter((message) => isHiddenMessage(message as any)).length}`,
         );
 
         (async () => {

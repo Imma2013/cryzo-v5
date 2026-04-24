@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { routeDesignReferences } from './design-system';
+import { getDesignLibraryDiagnostics, getDesignReferenceLibrary, routeDesignReferences } from './design-system';
 
 describe('design system routing', () => {
   const expectPrimary = (prompt: string, slug: string) => {
@@ -84,5 +84,22 @@ describe('design system routing', () => {
 
   it('hard-locks to a single primary design reference', () => {
     expect(routeDesignReferences('make me a dog website').supporting).toEqual([]);
+  });
+
+  it('hydrates the canonical design library for every supported slug', () => {
+    const diagnostics = getDesignLibraryDiagnostics();
+
+    expect(getDesignReferenceLibrary().length).toBeGreaterThan(60);
+    expect(diagnostics.canonicalCount).toBe(diagnostics.supportedSlugs.length);
+    expect(diagnostics.fallbackCount).toBe(0);
+    expect(diagnostics.missingCanonicalSlugs).toEqual([]);
+  });
+
+  it('auto-picks a best-fit primary for broad build prompts', () => {
+    const result = routeDesignReferences('build me a premium website for a modern startup');
+
+    expect(result.primary).toBeDefined();
+    expect(result.primary?.slug).toBeTruthy();
+    expect(result.selectionSource).toBe('canonical');
   });
 });

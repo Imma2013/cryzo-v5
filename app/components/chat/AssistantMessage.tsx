@@ -119,6 +119,14 @@ export const AssistantMessage = memo(
                             {designRouting.primarySlug ?? 'none'}
                           </code>
                         </div>
+                        {designRouting.selectionSource && (
+                          <div>
+                            Source:{' '}
+                            <code className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md">
+                              {designRouting.selectionSource}
+                            </code>
+                          </div>
+                        )}
                         {designRouting.supportingSlugs.length > 0 && (
                           <div className="flex flex-wrap gap-2">
                             <span>Supporting:</span>
