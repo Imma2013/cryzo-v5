@@ -69,6 +69,18 @@ describe('getExternalToolSystemPrompt', () => {
     expect(resolutionFailurePrompt).toContain('temporarily unavailable');
     expect(resolutionFailurePrompt).toContain('runtime problem');
   });
+
+  it('forbids generic connect prose when a real tool path is available', () => {
+    const prompt = getExternalToolSystemPrompt({
+      composioConfigured: true,
+      hasComposioIdentity: true,
+      toolsAvailable: true,
+    });
+
+    expect(prompt).toContain('must start by using a Composio tool');
+    expect(prompt).toContain('Do not invent auth links');
+    expect(prompt).toContain('Do not tell the user to connect the app in the Apps tab unless the tool runtime is unavailable');
+  });
 });
 
 describe('getBuildWithToolsSystemPrompt', () => {

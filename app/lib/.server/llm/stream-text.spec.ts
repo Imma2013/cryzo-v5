@@ -1,6 +1,11 @@
 import type { ToolSet } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { buildAssistantSystemPrompt, buildGoogleCoreMessages, getGoogleProviderOptions } from './stream-text';
+import {
+  buildAssistantSystemPrompt,
+  buildGoogleCoreMessages,
+  getAssistantToolRuntimeSettings,
+  getGoogleProviderOptions,
+} from './stream-text';
 
 describe('getGoogleProviderOptions', () => {
   it('forces includeThoughts while preserving existing Google options', () => {
@@ -184,5 +189,60 @@ describe('buildAssistantSystemPrompt', () => {
 
     expect(prompt).toContain('temporarily unavailable');
     expect(prompt).toContain('session.tools() failed');
+  });
+
+  it('forces real tool usage before fallback for external-tool requests with tools available', () => {
+    const prompt = buildAssistantSystemPrompt({
+      assistantMode: 'external-tool',
+      systemPrompt: 'base builder prompt',
+      composioConfigured: true,
+      hasComposioIdentity: true,
+      toolsAvailable: true,
+    });
+
+    expect(prompt).toContain('must start by using a Composio tool');
+    expect(prompt).toContain('Do not invent auth links');
+    expect(prompt).toContain('If tools are available, call a Composio tool before any fallback explanation');
+  });
+});
+
+describe('getAssistantToolRuntimeSettings', () => {
+  it('requires a tool call and enables multi-step execution for pure external-tool requests', () => {
+    expect(
+      getAssistantToolRuntimeSettings({
+        assistantMode: 'external-tool',
+        toolsAvailable: true,
+      }),
+    ).toEqual({
+      maxSteps: 10,
+      toolChoice: 'required',
+    });
+  });
+
+  it('enables multi-step execution without forcing tool choice for mixed builder requests', () => {
+    expect(
+      getAssistantToolRuntimeSettings({
+        assistantMode: 'build-with-tools',
+        toolsAvailable: true,
+      }),
+    ).toEqual({
+      maxSteps: 8,
+    });
+  });
+
+  it('leaves normal build and discuss flows unchanged', () => {
+    expect(
+      getAssistantToolRuntimeSettings({
+        assistantMode: 'build',
+        toolsAvailable: true,
+      }),
+    ).toEqual({});
+
+    expect(
+      getAssistantToolRuntimeSettings({
+        assistantMode: 'external-tool',
+        toolsAvailable: false,
+      }),
+    ).toEqual({});
   });
 });

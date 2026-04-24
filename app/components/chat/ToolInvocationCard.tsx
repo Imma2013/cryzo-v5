@@ -10,7 +10,7 @@ function extractResult(invocation: any) {
   return invocation?.result ?? invocation?.output ?? invocation?.toolResult ?? invocation?.output?.result;
 }
 
-function extractUrl(value: unknown): string | undefined {
+export function extractToolInvocationUrl(value: unknown): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -25,7 +25,18 @@ function extractUrl(value: unknown): string | undefined {
 
   const record = value as Record<string, unknown>;
 
-  for (const key of ['authUrl', 'redirectUrl', 'redirect_url', 'authorizationUrl', 'url', 'link']) {
+  for (const key of [
+    'authUrl',
+    'authUri',
+    'redirectUrl',
+    'redirect_url',
+    'redirectUri',
+    'redirectURI',
+    'authorizationUrl',
+    'authorizeUrl',
+    'url',
+    'link',
+  ]) {
     const candidate = record[key];
 
     if (typeof candidate === 'string' && /^https?:\/\//.test(candidate)) {
@@ -34,7 +45,7 @@ function extractUrl(value: unknown): string | undefined {
   }
 
   for (const nestedKey of ['data', 'result', 'response', 'connectionRequest', 'connection']) {
-    const nestedUrl = extractUrl(record[nestedKey]);
+    const nestedUrl = extractToolInvocationUrl(record[nestedKey]);
 
     if (nestedUrl) {
       return nestedUrl;
@@ -89,7 +100,7 @@ export function ToolInvocationCard({ append, invocation }: ToolInvocationCardPro
   const toolName = invocation?.toolName || 'tool';
   const pending = isPending(invocation) && result == null;
   const status = result?.status;
-  const authUrl = extractUrl(result);
+  const authUrl = extractToolInvocationUrl(result);
   const displayStatus = getDisplayStatus(invocation, result, authUrl);
   const confirmationToken =
     typeof result?.confirmationToken === 'string' ? result.confirmationToken : undefined;

@@ -553,6 +553,33 @@ ${getBuildWithToolsSystemPrompt({
   return systemPrompt;
 }
 
+export function getAssistantToolRuntimeSettings({
+  assistantMode,
+  toolsAvailable,
+}: {
+  assistantMode: 'build' | 'discuss' | 'external-tool' | 'build-with-tools';
+  toolsAvailable: boolean;
+}) {
+  if (!toolsAvailable) {
+    return {};
+  }
+
+  if (assistantMode === 'external-tool') {
+    return {
+      maxSteps: 10,
+      toolChoice: 'required' as const,
+    };
+  }
+
+  if (assistantMode === 'build-with-tools') {
+    return {
+      maxSteps: 8,
+    };
+  }
+
+  return {};
+}
+
 export function buildGoogleCoreMessages(
   messages: Omit<Message, 'id'>[],
   tools: StreamingOptions['tools'],
@@ -1073,6 +1100,7 @@ export async function streamText(props: {
         tools: {},
       };
   const composioTools = composioToolResolution.tools;
+  const composioToolCount = Object.keys(composioTools).length;
   logger.info(
     'Composio resolution',
     JSON.stringify({
@@ -1082,14 +1110,37 @@ export async function streamText(props: {
       provider: provider.name,
       resolvedUserId: composioToolResolution.resolvedUserId,
       status: composioToolResolution.status,
-      toolCount: Object.keys(composioTools).length,
+      toolCount: composioToolCount,
     }),
   );
+
+  if ((assistantMode === 'external-tool' || assistantMode === 'build-with-tools') && shouldInjectComposioTools) {
+    if (!composioToolResolution.configured || composioToolCount === 0) {
+      logger.warn(
+        'Composio chat tools unavailable for tool-intent request',
+        JSON.stringify({
+          assistantMode,
+          configured: composioToolResolution.configured,
+          errorMessage: composioToolResolution.errorMessage,
+          hasIdentity: composioToolResolution.hasIdentity,
+          provider: provider.name,
+          resolvedUserId: composioToolResolution.resolvedUserId,
+          status: composioToolResolution.status,
+          toolCount: composioToolCount,
+        }),
+      );
+    }
+  }
+
   const tools = {
     ...(filteredOptions.tools || {}),
     ...composioTools,
   };
   const hasTools = Object.keys(tools).length > 0;
+  const assistantToolRuntimeSettings = getAssistantToolRuntimeSettings({
+    assistantMode,
+    toolsAvailable: composioToolCount > 0,
+  });
   const providerOptions =
     provider.name === 'Google' && hasTools
       ? getGoogleProviderOptions(filteredOptions.providerOptions)
@@ -1138,6 +1189,56 @@ export async function streamText(props: {
   const historyMessages =
     provider.name === 'Google' ? buildGoogleCoreMessages(processedMessages, tools) : processedMessages;
 
+  const { onFinish: userOnFinish, onStepFinish: userOnStepFinish, ...restFilteredOptions } = filteredOptions as typeof filteredOptions & {
+    onFinish?: StreamingOptions['onFinish'];
+    onStepFinish?: ((step: any) => void | Promise<void>) | undefined;
+  };
+  let usedToolCall = false;
+
+  const instrumentedOnStepFinish = async (step: any) => {
+    const toolCalls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
+
+    if ((assistantMode === 'external-tool' || assistantMode === 'build-with-tools') && toolCalls.length > 0) {
+      usedToolCall = true;
+      logger.info(
+        'Composio tool step finished',
+        JSON.stringify({
+          assistantMode,
+          finishReason: step?.finishReason,
+          toolCallCount: toolCalls.length,
+          toolNames: toolCalls.map((toolCall: any) => toolCall?.toolName).filter(Boolean),
+        }),
+      );
+    }
+
+    if (typeof userOnStepFinish === 'function') {
+      await userOnStepFinish(step);
+    }
+  };
+
+  const instrumentedOnFinish = async (event: any) => {
+    if (
+      assistantMode === 'external-tool' &&
+      composioToolCount > 0 &&
+      !usedToolCall
+    ) {
+      logger.warn(
+        'Composio tools were available but the model did not invoke them',
+        JSON.stringify({
+          assistantMode,
+          provider: provider.name,
+          resolvedUserId: composioToolResolution.resolvedUserId,
+          status: composioToolResolution.status,
+          toolCount: composioToolCount,
+        }),
+      );
+    }
+
+    if (typeof userOnFinish === 'function') {
+      await userOnFinish(event);
+    }
+  };
+
   if (provider.name === 'Google' && hasTools) {
     logger.info(
       'Google reconstructed tool-call diagnostics',
@@ -1168,7 +1269,10 @@ export async function streamText(props: {
       provider.name === 'Google'
         ? (historyMessages as CoreMessage[])
         : convertToCoreMessages(historyMessages as any, { tools }),
-    ...filteredOptions,
+    ...restFilteredOptions,
+    ...assistantToolRuntimeSettings,
+    onFinish: instrumentedOnFinish,
+    onStepFinish: instrumentedOnStepFinish,
     providerOptions,
     tools,
 

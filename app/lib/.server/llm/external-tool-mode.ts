@@ -29,14 +29,14 @@ export function shouldUseGoogleRuntimeForAssistantMode(assistantMode: AssistantM
 
 export function getExternalToolSystemPrompt(context: ExternalToolPromptContext) {
   const availabilityInstruction = context.toolsAvailable
-    ? 'Composio tools are available for this request. Use them to discover the right app action, request auth when needed, and summarize results after execution.'
+    ? 'Composio tools are available for this request. You must start by using a Composio tool, then either render the real auth/connect result or summarize the real tool result. Do not answer with generic fallback prose before the tool path runs.'
     : context.toolResolutionError
       ? `Composio tool discovery failed for this request. Tell the user app access is temporarily unavailable and report the runtime problem instead of pretending they only need to sign in. Error: ${context.toolResolutionError}`
       : !context.hasComposioIdentity
       ? 'No connected-app identity is available right now. Tell the user to open the Apps tab to connect the required app, or sign in if they want a persistent account across devices.'
       : !context.composioConfigured
         ? 'Composio tools are not configured for this environment. Tell the user that app access is not available right now and ask them to connect or enable integrations instead of offering to build UI.'
-        : 'No Composio tools are currently available for this request even though a connected-app identity exists. Tell the user to reconnect the required app in the Apps tab and retry.';
+        : 'No Composio tools are currently available for this request even though a connected-app identity exists. Tell the user that app access is temporarily unavailable for this turn, and only mention reconnecting the app when the tool runtime indicates an auth/connect state.';
 
   return `You are an external-app assistant for personal app actions such as Gmail, Slack, Notion, Calendar, and GitHub operations.
 
@@ -49,10 +49,14 @@ Non-negotiable rules:
 - Do not propose building a dashboard, website, mockup, prototype, or UI unless the user separately asks for that.
 - Do not switch into product-design, implementation, or app-builder behavior.
 - Do not describe how you would build a Gmail, Slack, Notion, or calendar app as an alternative.
+- Do not tell the user to connect the app in the Apps tab unless the tool runtime is unavailable or a real auth/connect result is returned.
+- Do not invent auth links, dashboard URLs, or generic Composio copy.
+- If tools are available, call a Composio tool before any fallback explanation.
+- If a tool returns an auth or redirect URL, surface that real URL and tell the user to use it.
 - If access is unavailable, give a short explanation and direct the user to connect the app in the Apps tab or use the auth link when available.
 - Keep responses concise and action-oriented.
 - For write actions, respect confirmation requirements before executing them.
-- When tools are available, try the relevant tool before claiming you do not have access or before answering from memory.
+- When tools are available, do not answer from memory and do not claim you lack access until after the tool path has been attempted.
 
 Current tool state:
 - ${availabilityInstruction}`;
@@ -60,7 +64,7 @@ Current tool state:
 
 export function getBuildWithToolsSystemPrompt(context: ExternalToolPromptContext) {
   const availabilityInstruction = context.toolsAvailable
-    ? 'Connected-app tools are available. Use them only for the explicit real app action or personal data request inside the broader builder task.'
+    ? 'Connected-app tools are available. Use them only for the explicit real app action or personal data request inside the broader builder task, and actually call the tool before falling back to generic connect guidance.'
     : context.toolResolutionError
       ? `Connected-app tool discovery failed at runtime. Do not pretend to use external apps on this turn. Briefly explain the app-access failure and continue the builder task. Error: ${context.toolResolutionError}`
       : !context.hasComposioIdentity
@@ -79,6 +83,7 @@ Rules for mixed builder-plus-app requests:
 5. Keep generated website/app output separate from personal connected-app actions.
 6. Respect confirmation requirements before any write action.
 7. When connected-app tools are available, actually try the relevant tool instead of answering generically about needing access.
+8. Do not invent auth links or generic Composio instructions; only show real auth/connect results returned by the tool runtime.
 
 Current tool state:
 - ${availabilityInstruction}`;
