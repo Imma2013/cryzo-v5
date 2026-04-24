@@ -1,4 +1,11 @@
-import { convertToCoreMessages, streamText as _streamText, type CoreMessage, type Message } from 'ai';
+import {
+  convertToCoreMessages,
+  formatDataStreamPart,
+  generateText,
+  streamText as _streamText,
+  type CoreMessage,
+  type Message,
+} from 'ai';
 import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel, type FileMap } from './constants';
 import { getSystemPrompt } from '~/lib/common/prompts/prompts';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, WORK_DIR } from '~/utils/constants';
@@ -86,6 +93,130 @@ function sanitizeText(text: string): string {
   sanitized = sanitized.replace(/<boltAction type="file" filePath="package-lock\.json">[\s\S]*?<\/boltAction>/g, '');
 
   return sanitized.trim();
+}
+
+function createEncodedTextStream(text: string) {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (text.length > 0) {
+        controller.enqueue(encoder.encode(text));
+      }
+
+      controller.close();
+    },
+  });
+}
+
+function createSinglePartObjectStream<T>(parts: T[]) {
+  return new ReadableStream<T>({
+    start(controller) {
+      for (const part of parts) {
+        controller.enqueue(part);
+      }
+
+      controller.close();
+    },
+  });
+}
+
+export async function createGoogleGenerateFallbackResult({
+  streamParams,
+  onFinish,
+}: {
+  streamParams: Record<string, any>;
+  onFinish?: StreamingOptions['onFinish'];
+}) {
+  const result = await generateText(streamParams);
+  const finishReason = result.finishReason ?? 'stop';
+  const usage = {
+    completionTokens: result.usage.completionTokens,
+    promptTokens: result.usage.promptTokens,
+    totalTokens:
+      result.usage.totalTokens ?? (result.usage.promptTokens || 0) + (result.usage.completionTokens || 0),
+  };
+  const messageId = 'msg-google-compat';
+  let finishTriggered = false;
+
+  const runOnFinish = async () => {
+    if (finishTriggered || !onFinish) {
+      return;
+    }
+
+    finishTriggered = true;
+    await onFinish({
+      finishReason,
+      text: result.text,
+      usage,
+    } as any);
+  };
+
+  return {
+    experimental_providerMetadata: Promise.resolve(result.providerMetadata),
+    files: Promise.resolve(result.files),
+    finishReason: Promise.resolve(finishReason),
+    fullStream: createSinglePartObjectStream<any>([
+      ...(result.text
+        ? [
+            {
+              textDelta: result.text,
+              type: 'text-delta',
+            },
+          ]
+        : []),
+      {
+        finishReason,
+        providerMetadata: result.providerMetadata,
+        response: result.response,
+        type: 'finish',
+        usage,
+      },
+    ]),
+    mergeIntoDataStream(writer: {
+      write: (chunk: string) => void;
+    }) {
+      writer.write(formatDataStreamPart('start_step', { messageId }));
+
+      if (result.text) {
+        writer.write(formatDataStreamPart('text', result.text));
+      }
+
+      writer.write(
+        formatDataStreamPart('finish_step', {
+          finishReason,
+          isContinued: false,
+          usage: {
+            completionTokens: usage.completionTokens,
+            promptTokens: usage.promptTokens,
+          },
+        }),
+      );
+      writer.write(
+        formatDataStreamPart('finish_message', {
+          finishReason,
+          usage: {
+            completionTokens: usage.completionTokens,
+            promptTokens: usage.promptTokens,
+          },
+        }),
+      );
+
+      void runOnFinish();
+    },
+    providerMetadata: Promise.resolve(result.providerMetadata),
+    reasoning: Promise.resolve(result.reasoning),
+    request: Promise.resolve(result.request),
+    response: Promise.resolve(result.response),
+    sources: Promise.resolve(result.sources),
+    steps: Promise.resolve(result.steps),
+    text: Promise.resolve(result.text),
+    textStream: createEncodedTextStream(result.text),
+    toolCalls: Promise.resolve(result.toolCalls),
+    toolResults: Promise.resolve(result.toolResults),
+    usage: Promise.resolve(usage),
+    warnings: Promise.resolve(result.warnings),
+  } as any;
 }
 
 export function getGoogleProviderOptions(
@@ -773,6 +904,22 @@ export async function streamText(props: {
       2,
     ),
   );
+
+  if (provider.name === 'Google') {
+    logger.warn(
+      'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
+    );
+
+    const { onFinish, ...nonStreamingOptions } = filteredOptions;
+
+    return createGoogleGenerateFallbackResult({
+      onFinish,
+      streamParams: {
+        ...streamParams,
+        ...nonStreamingOptions,
+      },
+    });
+  }
 
   return await _streamText(streamParams);
 }
