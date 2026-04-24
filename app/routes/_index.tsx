@@ -1,15 +1,32 @@
-import { json, type MetaFunction } from '@remix-run/cloudflare';
+import { json, redirect, type LoaderFunctionArgs, type MetaFunction } from '@remix-run/cloudflare';
 import { ClientOnly } from 'remix-utils/client-only';
 import { BaseChat } from '~/components/chat/BaseChat';
 import { Chat } from '~/components/chat/Chat.client';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
+import { hasAuthCallbackQueryParams } from '~/lib/auth/auth-callback';
+import { sanitizeRelativeRedirectPath } from '~/lib/auth/redirect-path';
 
 export const meta: MetaFunction = () => {
   return [{ title: 'Bolt' }, { name: 'description', content: 'Talk with Bolt, an AI assistant from StackBlitz' }];
 };
 
-export const loader = () => json({});
+export const loader = ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+
+  if (hasAuthCallbackQueryParams(url)) {
+    const callbackParams = new URLSearchParams(url.searchParams);
+
+    if (!callbackParams.has('next')) {
+      const currentPath = `${url.pathname}${url.search}${url.hash}`;
+      callbackParams.set('next', sanitizeRelativeRedirectPath(currentPath, '/'));
+    }
+
+    return redirect(`/auth/callback?${callbackParams.toString()}`);
+  }
+
+  return json({});
+};
 
 /**
  * Landing page component for Bolt
