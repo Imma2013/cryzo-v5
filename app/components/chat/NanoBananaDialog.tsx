@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { Dialog, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { Button } from '~/components/ui/Button';
 import type { GoogleImageModelInfo } from '~/lib/llm/google-catalog';
-import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '3:2', '2:3'] as const;
 
@@ -39,7 +38,6 @@ export function NanoBananaDialog({
   onOpenChange,
   open,
 }: NanoBananaDialogProps) {
-  const { getAccessToken } = useSupabaseAuth();
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [imageModels, setImageModels] = useState<GoogleImageModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -107,16 +105,9 @@ export function NanoBananaDialog({
     setPending(true);
 
     try {
-      const token = await getAccessToken();
-
-      if (!token) {
-        throw new Error('Sign in before generating images.');
-      }
-
       const response = await fetch('/api/image-generate', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

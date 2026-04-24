@@ -15,8 +15,8 @@ import type { DesignScheme } from '~/types/design-scheme';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
+import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { getServerEnv } from '~/lib/server-env';
-import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
 import {
   isGoogleProvider,
   logGoogleServerKeyResolution,
@@ -39,47 +39,45 @@ function isHiddenMessage(message: { role: string; annotations?: unknown[] }) {
 async function chatAction({ context, request }: ActionFunctionArgs) {
   const requestOrigin = new URL(request.url).origin;
   const serverEnv = getServerEnv(context as any);
-  const authHeader = request.headers.get('Authorization');
-  const accessToken = getBearerTokenFromAuthorizationHeader(authHeader);
-
-  if (!accessToken) {
-    return new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before sending chat requests.',
-        provider: 'Cryzo',
-        statusCode: 401,
-      }),
-      {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-        statusText: 'Unauthorized',
-      },
-    );
-  }
-
-  let verifiedAuth: Awaited<ReturnType<typeof verifySupabaseAccessToken>>;
-
+  let authHeaders: Headers | undefined;
+  let authenticatedUser: {
+    email?: string;
+    image?: string;
+    name?: string;
+    uid: string;
+  };
   try {
-    verifiedAuth = await verifySupabaseAccessToken(accessToken, serverEnv);
-  } catch (error) {
-    logger.warn('Auth token verification failed for /api/chat', error);
+    const auth = await requireAuth(request, context as any, {
+      message: 'Sign in before sending chat requests.',
+    });
+    authHeaders = auth.responseHeaders;
+    const metadata = (auth.user.user_metadata ?? {}) as Record<string, unknown>;
 
+    authenticatedUser = {
+      uid: auth.user.id,
+      email: auth.user.email ?? undefined,
+      image:
+        (typeof metadata.avatar_url === 'string' ? metadata.avatar_url : undefined) ??
+        (typeof metadata.picture === 'string' ? metadata.picture : undefined),
+      name:
+        (typeof metadata.full_name === 'string' ? metadata.full_name : undefined) ??
+        (typeof metadata.name === 'string' ? metadata.name : undefined),
+    };
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    logger.warn('Auth validation failed for /api/chat', error);
     return new Response(
       JSON.stringify({
         error: true,
-        errorType: 'auth_required',
-        isRetryable: false,
-        message: 'Sign in before sending chat requests.',
-        provider: 'Cryzo',
-        statusCode: 401,
+        message: 'Authentication validation failed.',
+        statusCode: 500,
       }),
       {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-        statusText: 'Unauthorized',
+        status: 500,
+        headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
       },
     );
   }
@@ -120,12 +118,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
   const user = {
     ...requestUser,
-    composioUserId: verifiedAuth.uid,
-    email: verifiedAuth.email || requestUser?.email,
+    composioUserId: authenticatedUser.uid,
+    email: authenticatedUser.email || requestUser?.email,
     hasComposioIdentity: true,
     isAuthenticated: true,
     isSignedIn: true,
-    uid: verifiedAuth.uid,
+    uid: authenticatedUser.uid,
   };
 
   const cookieHeader = request.headers.get('Cookie');
@@ -155,7 +153,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     if (setupPayload) {
       return new Response(JSON.stringify(setupPayload), {
         status: setupPayload.statusCode,
-        headers: { 'Content-Type': 'application/json' },
+        headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
         statusText: 'Service Unavailable',
       });
     }
@@ -549,14 +547,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     return new Response(dataStream, {
       status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Text-Encoding': 'chunked',
-      },
+      headers: withSupabaseAuthHeaders(
+        {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          Connection: 'keep-alive',
+          'Cache-Control': 'no-cache',
+          'Text-Encoding': 'chunked',
+        },
+        authHeaders,
+      ),
     });
   } catch (error: any) {
+    if (error instanceof Response) {
+      return error;
+    }
+
     logger.error(error);
 
     const errorResponse = {
@@ -587,7 +592,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         return new Response(JSON.stringify(setupResponse), {
           status: setupResponse.statusCode,
-          headers: { 'Content-Type': 'application/json' },
+          headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
           statusText: 'Service Unavailable',
         });
       }
@@ -601,7 +606,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         }),
         {
           status: 401,
-          headers: { 'Content-Type': 'application/json' },
+          headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
           statusText: 'Unauthorized',
         },
       );
@@ -609,7 +614,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     return new Response(JSON.stringify(errorResponse), {
       status: errorResponse.statusCode,
-      headers: { 'Content-Type': 'application/json' },
+      headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
       statusText: 'Error',
     });
   }

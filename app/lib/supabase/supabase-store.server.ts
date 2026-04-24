@@ -1,7 +1,5 @@
 import type { Message } from 'ai';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-type ServerEnv = Record<string, string | undefined>;
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface SupabaseLlmPreferences {
   providerSettings?: Record<string, unknown>;
@@ -50,37 +48,6 @@ type UserChatRow = {
   snapshot_json: unknown | null;
   timestamp: string;
 };
-
-function readServerEnvValue(value: string | undefined) {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function getSupabaseClient(serverEnv: ServerEnv, accessToken: string) {
-  const supabaseUrl = readServerEnvValue(serverEnv.SUPABASE_URL) ?? readServerEnvValue(serverEnv.VITE_SUPABASE_URL);
-  const supabaseAnonKey =
-    readServerEnvValue(serverEnv.SUPABASE_ANON_KEY) ?? readServerEnvValue(serverEnv.VITE_SUPABASE_ANON_KEY);
-
-  if (!supabaseUrl) {
-    throw new Error('Missing SUPABASE_URL or VITE_SUPABASE_URL.');
-  }
-
-  if (!supabaseAnonKey) {
-    throw new Error('Missing SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY.');
-  }
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  });
-}
 
 function parseMessages(value: unknown): Message[] {
   if (Array.isArray(value)) {
@@ -156,11 +123,9 @@ async function getCurrentProfileRow(supabase: SupabaseClient, uid: string): Prom
 }
 
 export async function listCurrentUserChats(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
 ): Promise<SupabaseChatRecord[]> {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const { data, error } = await supabase
     .from('user_chats')
     .select('route_id, description, messages_json, metadata, snapshot_json, timestamp, last_updated_at')
@@ -175,20 +140,17 @@ export async function listCurrentUserChats(
 }
 
 export async function getCurrentUserChatByRouteId(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   routeId: string,
 ): Promise<SupabaseChatRecord | null> {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const row = await getCurrentChatRow(supabase, userId, routeId);
   return row ? normalizeChatRecord(row) : null;
 }
 
 export async function upsertCurrentUserChat(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   payload: {
     routeId: string;
     description?: string;
@@ -198,7 +160,6 @@ export async function upsertCurrentUserChat(
     timestamp: string;
   },
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const existing = await getCurrentChatRow(supabase, userId, payload.routeId);
@@ -247,13 +208,11 @@ export async function upsertCurrentUserChat(
 }
 
 export async function updateCurrentUserChatDescription(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   routeId: string,
   description: string,
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const now = Date.now();
   const { error } = await supabase
     .from('user_chats')
@@ -271,12 +230,10 @@ export async function updateCurrentUserChatDescription(
 }
 
 export async function deleteCurrentUserChat(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   routeId: string,
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const { error } = await supabase.from('user_chats').delete().eq('user_id', userId).eq('route_id', routeId);
 
   if (error) {
@@ -285,13 +242,11 @@ export async function deleteCurrentUserChat(
 }
 
 export async function duplicateCurrentUserChat(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   routeId: string,
   nextRouteId: string,
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const source = await getCurrentChatRow(supabase, userId, routeId);
 
   if (!source) {
@@ -323,14 +278,12 @@ export async function duplicateCurrentUserChat(
 }
 
 export async function forkCurrentUserChat(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   routeId: string,
   nextRouteId: string,
   messageId: string,
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const source = await getCurrentChatRow(supabase, userId, routeId);
 
   if (!source) {
@@ -370,16 +323,14 @@ export async function forkCurrentUserChat(
 }
 
 export async function upsertCurrentUserProfile(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   payload: {
     email?: string;
     image?: string;
     name?: string;
   },
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const now = Date.now();
   const updatedAt = new Date(now).toISOString();
   const existing = await getCurrentProfileRow(supabase, userId);
@@ -416,11 +367,9 @@ export async function upsertCurrentUserProfile(
 }
 
 export async function getCurrentUserRecord(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
 ): Promise<SupabaseUserRecord | null> {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const profile = await getCurrentProfileRow(supabase, userId);
 
   if (!profile) {
@@ -437,12 +386,10 @@ export async function getCurrentUserRecord(
 }
 
 export async function upsertCurrentUserLlmPreferences(
-  serverEnv: ServerEnv,
+  supabase: SupabaseClient,
   userId: string,
-  accessToken: string,
   payload: SupabaseLlmPreferences,
 ) {
-  const supabase = getSupabaseClient(serverEnv, accessToken);
   const now = Date.now();
   const updatedAt = new Date(now).toISOString();
   const existing = await getCurrentProfileRow(supabase, userId);

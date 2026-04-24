@@ -1,74 +1,49 @@
 import { type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
-import { getBearerTokenFromAuthorizationHeader, verifySupabaseAccessToken } from '~/lib/auth/supabase-server';
+import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import {
   getCurrentUserRecord,
   upsertCurrentUserLlmPreferences,
   upsertCurrentUserProfile,
   type SupabaseLlmPreferences,
 } from '~/lib/supabase/supabase-store.server';
-import { getServerEnv } from '~/lib/server-env';
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(payload: unknown, status = 200, responseHeaders?: Headers) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: withSupabaseAuthHeaders(
+      {
+        'Content-Type': 'application/json',
+      },
+      responseHeaders,
+    ),
   });
 }
 
-async function requireSupabaseAuth(request: Request, serverEnv: Record<string, string | undefined>) {
-  const token = getBearerTokenFromAuthorizationHeader(request.headers.get('Authorization'));
-
-  if (!token) {
-    throw new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        message: 'Authentication required.',
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-  }
-
-  try {
-    const verified = await verifySupabaseAccessToken(token, serverEnv as any);
-    return { accessToken: token, verified };
-  } catch {
-    throw new Response(
-      JSON.stringify({
-        error: true,
-        errorType: 'auth_required',
-        message: 'Authentication required.',
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-  }
-}
-
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const serverEnv = getServerEnv(context as any);
+  let responseHeaders: Headers | undefined;
 
   try {
-    const { verified, accessToken } = await requireSupabaseAuth(request, serverEnv);
-    const current = await getCurrentUserRecord(serverEnv, verified.uid, accessToken);
+    const auth = await requireAuth(request, context as any);
+    responseHeaders = auth.responseHeaders;
+    const current = await getCurrentUserRecord(auth.supabase, auth.user.id);
+    const metadata = (auth.user.user_metadata ?? {}) as Record<string, unknown>;
 
-    return jsonResponse({
-      user: current ?? {
-        uid: verified.uid,
-        email: verified.email,
+    return jsonResponse(
+      {
+        user: current ?? {
+          uid: auth.user.id,
+          email: auth.user.email ?? undefined,
+          image:
+            (typeof metadata.avatar_url === 'string' ? metadata.avatar_url : undefined) ??
+            (typeof metadata.picture === 'string' ? metadata.picture : undefined),
+          name:
+            (typeof metadata.full_name === 'string' ? metadata.full_name : undefined) ??
+            (typeof metadata.name === 'string' ? metadata.name : undefined),
+        },
       },
-    });
+      200,
+      responseHeaders,
+    );
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -80,6 +55,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
         message: error instanceof Error ? error.message : 'Failed to load preferences.',
       },
       500,
+      responseHeaders,
     );
   }
 }
@@ -98,24 +74,32 @@ export async function action({ context, request }: ActionFunctionArgs) {
     return jsonResponse({ error: true, message: 'Method not allowed.' }, 405);
   }
 
-  const serverEnv = getServerEnv(context as any);
+  let responseHeaders: Headers | undefined;
 
   try {
-    const { verified, accessToken } = await requireSupabaseAuth(request, serverEnv);
+    const auth = await requireAuth(request, context as any);
+    responseHeaders = auth.responseHeaders;
     const body = (await request.json()) as UserPreferencesRequest;
+    const metadata = (auth.user.user_metadata ?? {}) as Record<string, unknown>;
 
-    await upsertCurrentUserProfile(serverEnv, verified.uid, accessToken, {
-      email: body.profile?.email ?? verified.email,
-      image: body.profile?.image ?? verified.image,
-      name: body.profile?.name ?? verified.name,
+    await upsertCurrentUserProfile(auth.supabase, auth.user.id, {
+      email: body.profile?.email ?? auth.user.email ?? undefined,
+      image:
+        body.profile?.image ??
+        (typeof metadata.avatar_url === 'string' ? metadata.avatar_url : undefined) ??
+        (typeof metadata.picture === 'string' ? metadata.picture : undefined),
+      name:
+        body.profile?.name ??
+        (typeof metadata.full_name === 'string' ? metadata.full_name : undefined) ??
+        (typeof metadata.name === 'string' ? metadata.name : undefined),
     });
 
     if (body.llmPreferences) {
-      await upsertCurrentUserLlmPreferences(serverEnv, verified.uid, accessToken, body.llmPreferences);
+      await upsertCurrentUserLlmPreferences(auth.supabase, auth.user.id, body.llmPreferences);
     }
 
-    const current = await getCurrentUserRecord(serverEnv, verified.uid, accessToken);
-    return jsonResponse({ ok: true, user: current });
+    const current = await getCurrentUserRecord(auth.supabase, auth.user.id);
+    return jsonResponse({ ok: true, user: current }, 200, responseHeaders);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -127,6 +111,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
         message: error instanceof Error ? error.message : 'Failed to update preferences.',
       },
       500,
+      responseHeaders,
     );
   }
 }

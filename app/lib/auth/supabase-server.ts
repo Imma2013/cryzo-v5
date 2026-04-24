@@ -1,27 +1,7 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { parseCookies } from '~/lib/api/cookies';
 import type { ServerEnv } from '~/lib/server-env';
-
-export type VerifiedSupabaseAuth = {
-  claims: Record<string, unknown>;
-  email?: string;
-  image?: string;
-  name?: string;
-  uid: string;
-};
-
-export function getBearerTokenFromAuthorizationHeader(header: string | null) {
-  if (!header) {
-    return null;
-  }
-
-  const [scheme, token] = header.split(' ');
-
-  if (scheme !== 'Bearer' || !token) {
-    return null;
-  }
-
-  return token.trim();
-}
 
 function readServerEnvValue(value: string | undefined) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -44,58 +24,121 @@ function getSupabaseServerConfig(serverEnv?: ServerEnv) {
   return { anonKey, url };
 }
 
-const supabaseAuthClientByUrl = new Map<string, SupabaseClient>();
+function serializeCookie(name: string, value: string, options: CookieOptions = {}) {
+  const encodedName = encodeURIComponent(name);
+  const encodedValue = encodeURIComponent(value);
+  const segments = [`${encodedName}=${encodedValue}`];
 
-function getSupabaseAuthClient(serverEnv?: ServerEnv) {
-  const { anonKey, url } = getSupabaseServerConfig(serverEnv);
-  const existing = supabaseAuthClientByUrl.get(url);
-
-  if (existing) {
-    return existing;
+  if (typeof options.maxAge === 'number') {
+    segments.push(`Max-Age=${Math.floor(options.maxAge)}`);
   }
 
-  const client = createClient(url, anonKey, {
+  if (options.domain) {
+    segments.push(`Domain=${options.domain}`);
+  }
+
+  if (options.path) {
+    segments.push(`Path=${options.path}`);
+  }
+
+  if (options.expires) {
+    segments.push(`Expires=${options.expires.toUTCString()}`);
+  }
+
+  if (options.httpOnly) {
+    segments.push('HttpOnly');
+  }
+
+  if (options.secure) {
+    segments.push('Secure');
+  }
+
+  if (options.sameSite) {
+    const sameSiteValue =
+      typeof options.sameSite === 'string' ? options.sameSite : options.sameSite === true ? 'Strict' : undefined;
+
+    if (sameSiteValue) {
+      segments.push(`SameSite=${sameSiteValue.charAt(0).toUpperCase()}${sameSiteValue.slice(1).toLowerCase()}`);
+    }
+  }
+
+  if (options.priority) {
+    segments.push(`Priority=${options.priority}`);
+  }
+
+  if (options.partitioned) {
+    segments.push('Partitioned');
+  }
+
+  return segments.join('; ');
+}
+
+function appendResponseHeaders(target: Headers, headers: Record<string, string>) {
+  for (const [key, value] of Object.entries(headers)) {
+    target.set(key, value);
+  }
+}
+
+export function mergeResponseHeaders(headersInit?: HeadersInit, responseHeaders?: Headers) {
+  const merged = new Headers(headersInit);
+
+  if (!responseHeaders) {
+    return merged;
+  }
+
+  const maybeGetSetCookie = (responseHeaders as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  const hasGetSetCookie = typeof maybeGetSetCookie === 'function';
+
+  if (hasGetSetCookie) {
+    for (const cookieValue of maybeGetSetCookie.call(responseHeaders)) {
+      merged.append('Set-Cookie', cookieValue);
+    }
+  }
+
+  for (const [key, value] of responseHeaders.entries()) {
+    if (hasGetSetCookie && key.toLowerCase() === 'set-cookie') {
+      continue;
+    }
+
+    if (key.toLowerCase() === 'set-cookie') {
+      merged.append(key, value);
+      continue;
+    }
+
+    merged.set(key, value);
+  }
+
+  return merged;
+}
+
+export type ServerSupabaseClientResult = {
+  responseHeaders: Headers;
+  supabase: SupabaseClient;
+};
+
+export function createServerSupabaseClient(request: Request, serverEnv?: ServerEnv): ServerSupabaseClientResult {
+  const { anonKey, url } = getSupabaseServerConfig(serverEnv);
+  const responseHeaders = new Headers();
+  const requestCookies = parseCookies(request.headers.get('Cookie'));
+  const supabase = createServerClient(url, anonKey, {
     auth: {
       autoRefreshToken: false,
+      detectSessionInUrl: false,
       persistSession: false,
+    },
+    cookies: {
+      getAll() {
+        return Object.entries(requestCookies).map(([name, value]) => ({ name, value }));
+      },
+      setAll(cookiesToSet, headers) {
+        for (const cookie of cookiesToSet) {
+          responseHeaders.append('Set-Cookie', serializeCookie(cookie.name, cookie.value, cookie.options));
+        }
+
+        appendResponseHeaders(responseHeaders, headers);
+      },
     },
   });
 
-  supabaseAuthClientByUrl.set(url, client);
-  return client;
-}
-
-export async function verifySupabaseAccessToken(token: string, serverEnv?: ServerEnv): Promise<VerifiedSupabaseAuth> {
-  const authClient = getSupabaseAuthClient(serverEnv);
-  const {
-    data: { user },
-    error,
-  } = await authClient.auth.getUser(token);
-
-  if (error || !user) {
-    throw new Error('Invalid authentication token.');
-  }
-
-  const uid = typeof user.id === 'string' ? user.id : undefined;
-
-  if (!uid) {
-    throw new Error('Invalid authentication token.');
-  }
-
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
-
-  return {
-    claims: {
-      app_metadata: user.app_metadata ?? {},
-      user_metadata: metadata,
-    },
-    email: user.email ?? undefined,
-    image:
-      (typeof metadata.avatar_url === 'string' ? metadata.avatar_url : undefined) ??
-      (typeof metadata.picture === 'string' ? metadata.picture : undefined),
-    name:
-      (typeof metadata.full_name === 'string' ? metadata.full_name : undefined) ??
-      (typeof metadata.name === 'string' ? metadata.name : undefined),
-    uid,
-  };
+  return { supabase, responseHeaders };
 }

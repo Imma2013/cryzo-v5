@@ -36,21 +36,14 @@ const SupabaseUserPreferencesContext = createContext<SupabaseUserPreferencesCont
 );
 
 function SupabaseUserPreferencesProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken, isLoading, user } = useSupabaseAuth();
+  const { isLoading, user } = useSupabaseAuth();
   const [currentUserRecord, setCurrentUserRecord] = useState<SupabaseUserRecord | null | undefined>(undefined);
 
   const saveLlmPreferences = useCallback(
     async (payload: LlmPreferencesPayload) => {
-      const token = await getAccessToken();
-
-      if (!token) {
-        throw new Error('Sign in before saving model preferences.');
-      }
-
       const response = await fetch('/api/user-preferences', {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -77,7 +70,7 @@ function SupabaseUserPreferencesProvider({ children }: { children: ReactNode }) 
 
       setCurrentUserRecord(result.user ?? null);
     },
-    [getAccessToken, user],
+    [user],
   );
 
   useEffect(() => {
@@ -98,20 +91,8 @@ function SupabaseUserPreferencesProvider({ children }: { children: ReactNode }) 
 
     (async () => {
       try {
-        const token = await getAccessToken();
-
-        if (!token) {
-          if (!cancelled) {
-            setCurrentUserRecord(null);
-          }
-          return;
-        }
-
         const response = await fetch('/api/user-preferences', {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         });
 
         const result = (await response.json()) as { message?: string; user?: SupabaseUserRecord };
@@ -141,7 +122,7 @@ function SupabaseUserPreferencesProvider({ children }: { children: ReactNode }) 
     return () => {
       cancelled = true;
     };
-  }, [getAccessToken, isLoading, user]);
+  }, [isLoading, user]);
 
   const value = useMemo<SupabaseUserPreferencesContextValue>(
     () => ({

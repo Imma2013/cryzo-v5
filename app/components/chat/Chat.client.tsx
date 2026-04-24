@@ -29,7 +29,7 @@ import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import type { LlmErrorAlertType } from '~/types/actions';
 import type { GeneratedImageAssetData } from '~/types/context';
 import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource } from '~/lib/common/generated-image-manifest';
-import { useSupabaseAuth, getCurrentSupabaseAccessToken } from '~/lib/auth/supabase-auth';
+import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { COMPOSIO_GUEST_ID_STORAGE_KEY } from '~/components/apps/apps.constants';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
@@ -120,8 +120,7 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const appliedGeneratedImageAssetIds = useRef(new Set<string>());
-    const { getAccessToken, user } = useSupabaseAuth();
-    const [authAccessToken, setAuthAccessToken] = useState<string | null>(null);
+    const { user } = useSupabaseAuth();
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
     const [localGuestId, setLocalGuestId] = useState<string | null>(null);
     const composioUserId = user?.uid || localGuestId;
@@ -192,33 +191,6 @@ export const ChatImpl = memo(
       setLocalGuestId(guestId);
     }, []);
 
-    useEffect(() => {
-      let cancelled = false;
-
-      if (!user) {
-        setAuthAccessToken(null);
-        return;
-      }
-
-      (async () => {
-        let token: string | null = null;
-
-        try {
-          token = await getAccessToken();
-        } catch (error) {
-          logger.warn('Failed to read auth access token for chat request headers', error);
-        }
-
-        if (!cancelled) {
-          setAuthAccessToken(token);
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [getAccessToken, user]);
-
     const {
       messages,
       isLoading,
@@ -235,14 +207,6 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
-      fetch: async (url, options) => {
-        const token = getCurrentSupabaseAccessToken();
-        const headers = new Headers((options?.headers as HeadersInit) ?? {});
-        if (token) {
-          headers.set("Authorization", `Bearer ${token}`);
-        }
-        return fetch(url, { ...options, headers });
-      },
       body: {
         apiKeys,
         files,
@@ -512,10 +476,6 @@ export const ChatImpl = memo(
         return;
       }
 
-      if (isLoading) {
-        return;
-      }
-
       if (!user) {
         setLlmErrorAlert({
           type: 'error',
@@ -527,20 +487,8 @@ export const ChatImpl = memo(
         return;
       }
 
-      const token = await getAccessToken();
-
-      if (!token) {
-        setLlmErrorAlert({
-          type: 'error',
-          title: 'Sign-In Required',
-          description: 'Sign in before sending chat requests.',
-          provider: 'Cryzo',
-          errorType: 'auth_required',
-        });
-        return;
-      }
-
       if (isLoading) {
+        abort();
         return;
       }
 

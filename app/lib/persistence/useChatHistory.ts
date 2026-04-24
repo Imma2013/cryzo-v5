@@ -111,7 +111,7 @@ export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
-  const { getAccessToken, isLoading: isAuthLoading, user } = useSupabaseAuth();
+  const { isLoading: isAuthLoading, user } = useSupabaseAuth();
   const [listChats, setListChats] = useState<SupabaseChatRecord[] | undefined>(undefined);
   const [currentChat, setCurrentChat] = useState<SupabaseChatRecord | null | undefined>(undefined);
 
@@ -119,19 +119,6 @@ export function useChatHistory() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
-
-  const getAuthHeaders = useCallback(async () => {
-    const token = await getAccessToken();
-
-    if (!token) {
-      throw new Error('Sign in before accessing chats.');
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  }, [getAccessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,10 +137,8 @@ export function useChatHistory() {
       }
 
       try {
-        const headers = await getAuthHeaders();
         const listResponse = await fetch('/api/chats', {
           method: 'GET',
-          headers,
         });
         const listPayload = (await listResponse.json()) as { chats?: SupabaseChatRecord[]; message?: string };
 
@@ -166,7 +151,6 @@ export function useChatHistory() {
         if (mixedId) {
           const currentResponse = await fetch(`/api/chats?routeId=${encodeURIComponent(mixedId)}`, {
             method: 'GET',
-            headers,
           });
           const currentPayload = (await currentResponse.json()) as { chat?: SupabaseChatRecord | null; message?: string };
 
@@ -199,7 +183,7 @@ export function useChatHistory() {
     return () => {
       cancelled = true;
     };
-  }, [getAuthHeaders, isAuthLoading, mixedId, user]);
+  }, [isAuthLoading, mixedId, user]);
 
   const chatList = useMemo<ChatHistoryItem[]>(
     () => {
@@ -348,10 +332,11 @@ ${value.content}
 
   const updateStoredChat = useCallback(
     async (routeId: string, messages: Message[], metadata?: IChatMetadata, nextDescription?: string, snapshot?: Snapshot) => {
-      const headers = await getAuthHeaders();
       const response = await fetch('/api/chats', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           operation: 'upsert',
           description: nextDescription,
@@ -375,15 +360,16 @@ ${value.content}
       setCurrentChat((existing) => (existing?.routeId === routeId ? payload.chat! : existing));
       setListChats((existing) => mergeChatRecord(existing, payload.chat!));
     },
-    [chatList, currentChat, getAuthHeaders],
+    [chatList, currentChat],
   );
 
   const updateChatDescription = useCallback(
     async (routeId: string, nextDescription: string) => {
-      const headers = await getAuthHeaders();
       const response = await fetch('/api/chats', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           operation: 'updateDescription',
           routeId,
@@ -403,7 +389,7 @@ ${value.content}
         (existing || []).map((chat) => (chat.routeId === routeId ? { ...chat, description: nextDescription } : chat)),
       );
     },
-    [getAuthHeaders],
+    [],
   );
 
   const restoreSnapshot = useCallback(async (_id: string, snapshot?: Snapshot) => {
@@ -516,10 +502,11 @@ ${value.content}
       }
 
       try {
-        const headers = await getAuthHeaders();
         const response = await fetch('/api/chats', {
           method: 'POST',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             operation: 'duplicate',
             nextRouteId: createRouteId(sourceId),
@@ -541,10 +528,11 @@ ${value.content}
       }
     },
     deleteChat: async (id: string) => {
-      const headers = await getAuthHeaders();
       const response = await fetch('/api/chats', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           operation: 'delete',
           routeId: id,
@@ -565,10 +553,11 @@ ${value.content}
         throw new Error('Chat not found');
       }
 
-      const headers = await getAuthHeaders();
       const response = await fetch('/api/chats', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           operation: 'fork',
           messageId,
@@ -593,10 +582,11 @@ ${value.content}
 
       try {
         const routeId = createRouteId(nextDescription);
-        const headers = await getAuthHeaders();
         const response = await fetch('/api/chats', {
           method: 'POST',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             operation: 'upsert',
             description: nextDescription,

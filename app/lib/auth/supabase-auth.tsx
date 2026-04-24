@@ -19,15 +19,8 @@ export async function waitForSupabaseAuthReady() {
   return await waitForAuthClientReady();
 }
 
-let currentAccessToken: string | null = null;
-
-export function getCurrentSupabaseAccessToken() {
-  return currentAccessToken;
-}
-
 interface SupabaseAuthContextValue {
   error: string | null;
-  getAccessToken: (forceRefresh?: boolean) => Promise<string | null>;
   isConfigured: boolean;
   isLoading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -41,7 +34,6 @@ const SupabaseAuthContext = createContext<SupabaseAuthContextValue | null>(null)
 
 const fallbackSupabaseAuthContextValue: SupabaseAuthContextValue = {
   error: null,
-  getAccessToken: async () => null,
   isConfigured: isSupabaseConfigured,
   isLoading: false,
   signInWithEmail: async () => {
@@ -57,12 +49,30 @@ const fallbackSupabaseAuthContextValue: SupabaseAuthContextValue = {
   user: null,
 };
 
+function normalizeAuthUser(rawUser: any): AuthUser | null {
+  if (!rawUser?.id) {
+    return null;
+  }
+
+  return {
+    displayName:
+      (rawUser.user_metadata?.full_name as string | undefined) ??
+      (rawUser.user_metadata?.name as string | undefined) ??
+      undefined,
+    email: rawUser.email ?? undefined,
+    photoURL:
+      (rawUser.user_metadata?.avatar_url as string | undefined) ??
+      (rawUser.user_metadata?.picture as string | undefined) ??
+      undefined,
+    uid: rawUser.id,
+  };
+}
+
 function normalizeAuthError(error: unknown) {
   return getSupabaseAuthErrorMessage(error);
 }
 
 function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [isAuthStateLoading, setIsAuthStateLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
@@ -79,8 +89,6 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
 
         if (!supabase) {
           if (!cancelled) {
-            currentAccessToken = null;
-            setAuthToken(null);
             setError(null);
             setUser(null);
             setIsAuthStateLoading(false);
@@ -93,68 +101,23 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
         } = await supabase.auth.getSession();
 
         if (!cancelled) {
-          const initialUser = session?.user ?? null;
-          const initialToken = session?.access_token ?? null;
-          currentAccessToken = initialToken;
-          setAuthToken(initialToken);
-          setUser(
-            initialUser
-              ? {
-                  displayName:
-                    (initialUser.user_metadata?.full_name as string | undefined) ??
-                    (initialUser.user_metadata?.name as string | undefined) ??
-                    undefined,
-                  email: initialUser.email ?? undefined,
-                  photoURL:
-                    (initialUser.user_metadata?.avatar_url as string | undefined) ??
-                    (initialUser.user_metadata?.picture as string | undefined) ??
-                    undefined,
-                  uid: initialUser.id,
-                }
-              : null,
-          );
+          setUser(normalizeAuthUser(session?.user));
           setIsAuthStateLoading(false);
         }
 
         const { data: authListener } = supabase.auth.onAuthStateChange((_event: unknown, nextSession: any) => {
-          const nextUser = nextSession?.user ?? null;
-          const nextToken = nextSession?.access_token ?? null;
-
-          if (!nextUser) {
-            if (!cancelled) {
-              currentAccessToken = null;
-              setAuthToken(null);
-              setUser(null);
-              setIsAuthStateLoading(false);
-            }
+          if (cancelled) {
             return;
           }
 
-          if (!cancelled) {
-            currentAccessToken = nextToken;
-            setAuthToken(nextToken);
-            setError(null);
-            setUser({
-              displayName:
-                (nextUser.user_metadata?.full_name as string | undefined) ??
-                (nextUser.user_metadata?.name as string | undefined) ??
-                undefined,
-              email: nextUser.email ?? undefined,
-              photoURL:
-                (nextUser.user_metadata?.avatar_url as string | undefined) ??
-                (nextUser.user_metadata?.picture as string | undefined) ??
-                undefined,
-              uid: nextUser.id,
-            });
-            setIsAuthStateLoading(false);
-          }
+          setError(null);
+          setUser(normalizeAuthUser(nextSession?.user));
+          setIsAuthStateLoading(false);
         });
 
         unsubscribe = () => authListener.subscription.unsubscribe();
       } catch (authBootstrapError) {
         if (!cancelled) {
-          currentAccessToken = null;
-          setAuthToken(null);
           setError(normalizeAuthError(authBootstrapError));
           setUser(null);
           setIsAuthStateLoading(false);
@@ -171,7 +134,7 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!authToken) {
+    if (!user) {
       setIsProfileLoading(false);
       return () => {
         cancelled = true;
@@ -184,9 +147,6 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
       try {
         const response = await fetch('/api/user-preferences', {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
         });
         const payload = (await response.json()) as {
           errorType?: string;
@@ -234,58 +194,52 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authToken]);
+  }, [user?.uid]);
 
-  const signInWithEmail = useCallback(
-    async (email: string, password: string) => {
-      setError(null);
-      await waitForAuthClientReady();
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    setError(null);
+    await waitForAuthClientReady();
 
-      const supabase = getSupabaseAuthClient();
+    const supabase = getSupabaseAuthClient();
 
-      if (!supabase) {
-        throw new Error('Supabase auth is not configured.');
-      }
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured.');
+    }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
 
-      if (error) {
-        throw error;
-      }
-    },
-    [],
-  );
+    if (error) {
+      throw error;
+    }
+  }, []);
 
-  const signUpWithEmail = useCallback(
-    async (name: string, email: string, password: string) => {
-      setError(null);
-      const normalizedEmail = email.trim().toLowerCase();
-      await waitForAuthClientReady();
+  const signUpWithEmail = useCallback(async (name: string, email: string, password: string) => {
+    setError(null);
+    const normalizedEmail = email.trim().toLowerCase();
+    await waitForAuthClientReady();
 
-      const supabase = getSupabaseAuthClient();
+    const supabase = getSupabaseAuthClient();
 
-      if (!supabase) {
-        throw new Error('Supabase auth is not configured.');
-      }
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured.');
+    }
 
-      const trimmedName = name.trim();
-      const { error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: {
-          data: trimmedName ? { name: trimmedName } : undefined,
-        },
-      });
+    const trimmedName = name.trim();
+    const { error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: trimmedName ? { name: trimmedName } : undefined,
+      },
+    });
 
-      if (error) {
-        throw error;
-      }
-    },
-    [],
-  );
+    if (error) {
+      throw error;
+    }
+  }, []);
 
   const signInWithGoogle = useCallback(async (nextPath?: string) => {
     setError(null);
@@ -314,8 +268,6 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     const supabase = getSupabaseAuthClient();
 
     if (!supabase) {
-      currentAccessToken = null;
-      setAuthToken(null);
       setUser(null);
       return;
     }
@@ -327,46 +279,11 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const getAccessToken = useCallback(
-    async (forceRefresh?: boolean) => {
-      if (!isSupabaseConfigured) {
-        currentAccessToken = null;
-        return null;
-      }
-
-      await waitForAuthClientReady();
-      const supabase = getSupabaseAuthClient();
-
-      if (!supabase) {
-        currentAccessToken = null;
-        return null;
-      }
-
-      if (forceRefresh) {
-        const { error } = await supabase.auth.refreshSession();
-
-        if (error) {
-          throw error;
-        }
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token ?? null;
-      currentAccessToken = token;
-      setAuthToken(token);
-      return token;
-    },
-    [setAuthToken],
-  );
-
   const value = useMemo<SupabaseAuthContextValue>(
     () => ({
       error,
-      getAccessToken,
       isConfigured: true,
-      isLoading: isAuthStateLoading || (Boolean(authToken) && isProfileLoading),
+      isLoading: isAuthStateLoading || (Boolean(user) && isProfileLoading),
       signInWithEmail: async (email, password) => {
         try {
           await signInWithEmail(email, password);
@@ -405,7 +322,7 @@ function SupabaseAuthProviderConfigured({ children }: { children: ReactNode }) {
       },
       user,
     }),
-    [authToken, error, getAccessToken, isAuthStateLoading, isProfileLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
+    [error, isAuthStateLoading, isProfileLoading, signInWithEmail, signInWithGoogle, signOutUser, signUpWithEmail, user],
   );
 
   return <SupabaseAuthContext.Provider value={value}>{children}</SupabaseAuthContext.Provider>;
