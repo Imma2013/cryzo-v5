@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseCookies } from '~/lib/api/cookies';
-import type { ServerEnv } from '~/lib/server-env';
+import { getServerEnvDiagnostics, type ServerEnv } from '~/lib/server-env';
 
 function readServerEnvValue(value: string | undefined) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -14,14 +14,35 @@ function getSupabaseServerConfig(serverEnv?: ServerEnv) {
     readServerEnvValue(serverEnv?.SUPABASE_ANON_KEY) ?? readServerEnvValue(serverEnv?.VITE_SUPABASE_ANON_KEY);
 
   if (!url) {
+    logMissingSupabaseServerConfig('SUPABASE_URL', serverEnv);
     throw new Error('Missing SUPABASE_URL or VITE_SUPABASE_URL on the server.');
   }
 
   if (!anonKey) {
+    logMissingSupabaseServerConfig('SUPABASE_ANON_KEY', serverEnv);
     throw new Error('Missing SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY on the server.');
   }
 
   return { anonKey, url };
+}
+
+function logMissingSupabaseServerConfig(
+  missingKey: 'SUPABASE_ANON_KEY' | 'SUPABASE_URL',
+  serverEnv?: ServerEnv,
+) {
+  const diagnostics = getServerEnvDiagnostics(serverEnv);
+
+  console.error('Supabase server configuration is missing required env keys.', {
+    keys: diagnostics?.keys ?? {
+      SUPABASE_ANON_KEY: Boolean(serverEnv?.SUPABASE_ANON_KEY),
+      SUPABASE_URL: Boolean(serverEnv?.SUPABASE_URL),
+      VITE_SUPABASE_ANON_KEY: Boolean(serverEnv?.VITE_SUPABASE_ANON_KEY),
+      VITE_SUPABASE_URL: Boolean(serverEnv?.VITE_SUPABASE_URL),
+    },
+    missingKey,
+    sourceKeys: diagnostics?.sourceKeys,
+    sources: diagnostics?.sources,
+  });
 }
 
 function serializeCookie(name: string, value: string, options: CookieOptions = {}) {

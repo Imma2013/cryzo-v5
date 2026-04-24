@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getServerEnv, normalizeServerEnvValue } from './server-env';
+import { getServerEnv, getServerEnvDiagnostics, normalizeServerEnvValue } from './server-env';
 
 describe('normalizeServerEnvValue', () => {
   it('trims trailing whitespace from environment values', () => {
@@ -26,6 +26,19 @@ describe('getServerEnv', () => {
     expect(env.EMPTY_VALUE).toBeUndefined();
   });
 
+  it('falls back to server-side import.meta env values', () => {
+    const env = getServerEnv(undefined, {
+      metaEnv: {
+        VITE_SUPABASE_ANON_KEY: 'anon-key-from-meta\r\n',
+        VITE_SUPABASE_URL: 'https://meta.supabase.co\r\n',
+      },
+      processEnv: {},
+    });
+
+    expect(env.VITE_SUPABASE_URL).toBe('https://meta.supabase.co');
+    expect(env.VITE_SUPABASE_ANON_KEY).toBe('anon-key-from-meta');
+  });
+
   it('normalizes top-level runtime environment values', () => {
     const env = getServerEnv({
       env: {
@@ -36,5 +49,87 @@ describe('getServerEnv', () => {
 
     expect(env.GOOGLE_GENERATIVE_AI_API_KEY).toBe('AIzaTopLevelKey123');
     expect(env.EMPTY_VALUE).toBeUndefined();
+  });
+
+  it('applies precedence cloudflare/context over process over meta env', () => {
+    const env = getServerEnv(
+      {
+        cloudflare: {
+          env: {
+            VITE_SUPABASE_URL: 'https://cloudflare.supabase.co',
+          },
+        },
+        env: {
+          VITE_SUPABASE_URL: 'https://context.supabase.co',
+        },
+      },
+      {
+        metaEnv: {
+          VITE_SUPABASE_URL: 'https://meta.supabase.co',
+        },
+        processEnv: {
+          VITE_SUPABASE_URL: 'https://process.supabase.co',
+        },
+      },
+    );
+
+    expect(env.VITE_SUPABASE_URL).toBe('https://cloudflare.supabase.co');
+  });
+
+  it('tracks sanitized diagnostics for source presence and discovered keys', () => {
+    const env = getServerEnv(
+      {
+        env: {
+          SUPABASE_URL: 'https://context.supabase.co',
+        },
+      },
+      {
+        metaEnv: {
+          VITE_SUPABASE_ANON_KEY: 'meta-anon-key',
+        },
+        processEnv: {},
+      },
+    );
+
+    expect(getServerEnvDiagnostics(env)).toEqual({
+      keys: {
+        SUPABASE_ANON_KEY: false,
+        SUPABASE_URL: true,
+        VITE_SUPABASE_ANON_KEY: true,
+        VITE_SUPABASE_URL: false,
+      },
+      sourceKeys: {
+        cloudflare: {
+          SUPABASE_ANON_KEY: false,
+          SUPABASE_URL: false,
+          VITE_SUPABASE_ANON_KEY: false,
+          VITE_SUPABASE_URL: false,
+        },
+        context: {
+          SUPABASE_ANON_KEY: false,
+          SUPABASE_URL: true,
+          VITE_SUPABASE_ANON_KEY: false,
+          VITE_SUPABASE_URL: false,
+        },
+        meta: {
+          SUPABASE_ANON_KEY: false,
+          SUPABASE_URL: false,
+          VITE_SUPABASE_ANON_KEY: true,
+          VITE_SUPABASE_URL: false,
+        },
+        process: {
+          SUPABASE_ANON_KEY: false,
+          SUPABASE_URL: false,
+          VITE_SUPABASE_ANON_KEY: false,
+          VITE_SUPABASE_URL: false,
+        },
+      },
+      sources: {
+        cloudflare: false,
+        context: true,
+        meta: true,
+        process: false,
+      },
+    });
   });
 });
