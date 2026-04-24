@@ -18,6 +18,11 @@ describe('sanitizeRelativeRedirectPath', () => {
     expect(sanitizeRelativeRedirectPath('/auth/callback')).toBe('/');
     expect(sanitizeRelativeRedirectPath('/auth/callback?next=%2Fchat')).toBe('/');
   });
+
+  it('strips auth callback params from next paths', () => {
+    expect(sanitizeRelativeRedirectPath('/?code=abc123&state=xyz')).toBe('/');
+    expect(sanitizeRelativeRedirectPath('/chat?tab=settings&code=abc123&state=xyz')).toBe('/chat?tab=settings');
+  });
 });
 
 describe('buildGoogleAuthRedirectTo', () => {
@@ -26,5 +31,15 @@ describe('buildGoogleAuthRedirectTo', () => {
 
     expect(redirectTo).toContain('/auth/callback?');
     expect(redirectTo).toContain('next=%2Fchat%2Fabc%3Ffoo%3Dbar%23hash');
+  });
+
+  it('does not forward stale auth callback params from the current location', () => {
+    window.history.replaceState({}, '', '/?code=stale-code&state=abc');
+
+    const redirectTo = buildGoogleAuthRedirectTo();
+
+    expect(redirectTo).toContain('/auth/callback?');
+    expect(redirectTo).toContain('next=%2F');
+    expect(redirectTo).not.toContain('code%3Dstale-code');
   });
 });
