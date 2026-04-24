@@ -4,13 +4,13 @@ import type { AppToolkit } from '~/components/apps/AppsDashboard';
 
 const composioState = vi.hoisted(() => ({
   createComposioClient: vi.fn(),
-  createComposioConnectionRequest: vi.fn(),
+  createComposioSession: vi.fn(),
   requireAuth: vi.fn(),
 }));
 
 vi.mock('~/lib/.server/composio', () => ({
   createComposioClient: composioState.createComposioClient,
-  createComposioConnectionRequest: composioState.createComposioConnectionRequest,
+  createComposioSession: composioState.createComposioSession,
   extractComposioRedirectUrl: vi.fn(),
 }));
 
@@ -23,7 +23,7 @@ vi.mock('~/lib/auth/require-auth.server', async () => {
   };
 });
 
-import { buildApprovedToolkitCatalog, buildToolkitLogoProxyUrl, getCollectionItems, getToolkitLogo, loader } from '~/routes/api.connections';
+import { buildApprovedToolkitCatalog, buildToolkitLogoProxyUrl, getToolkitLogo, loader } from '~/routes/api.connections';
 
 type ConnectionsPayload = {
   toolkits: AppToolkit[];
@@ -31,7 +31,7 @@ type ConnectionsPayload = {
 
 afterEach(() => {
   composioState.createComposioClient.mockReset();
-  composioState.createComposioConnectionRequest.mockReset();
+  composioState.createComposioSession.mockReset();
   composioState.requireAuth.mockReset();
 });
 
@@ -41,45 +41,33 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioClient.mockReturnValue({
-      toolkits: {
-        get: vi.fn().mockResolvedValue([
+    composioState.createComposioSession.mockResolvedValue({
+      toolkits: vi.fn().mockResolvedValue({
+        items: [
           {
             slug: 'github',
             name: 'GitHub',
-            meta: {
-              logo: 'https://logos.composio.dev/api/github',
+            logo: 'https://logos.composio.dev/api/github',
+            connection: {
+              connectedAccount: {
+                id: 'ca_123',
+              },
+              isActive: true,
             },
           },
           {
             slug: 'slack',
             name: 'Slack',
-            noAuth: true,
-            meta: {
-              logo: 'https://logos.composio.dev/api/slack',
-            },
+            isNoAuth: true,
+            logo: 'https://logos.composio.dev/api/slack',
           },
           {
             slug: 'asana',
             name: 'Asana',
-            meta: {
-              logo: 'https://logos.composio.dev/api/asana',
-            },
+            logo: 'https://logos.composio.dev/api/asana',
           },
-        ]),
-      },
-      connectedAccounts: {
-        list: vi.fn().mockResolvedValue({
-          items: [
-            {
-              id: 'ca_123',
-              toolkit: {
-                slug: 'github',
-              },
-            },
-          ],
-        }),
-      },
+        ],
+      }),
     });
 
     const request = new Request('https://bolt.local/api/connections', {
@@ -118,15 +106,8 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioClient.mockReturnValue({
-      toolkits: {
-        get: vi.fn().mockResolvedValue({}),
-      },
-      connectedAccounts: {
-        list: vi.fn().mockResolvedValue({
-          items: [],
-        }),
-      },
+    composioState.createComposioSession.mockResolvedValue({
+      toolkits: vi.fn().mockResolvedValue({}),
     });
 
     const response = await loader({
@@ -146,18 +127,15 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioClient.mockReturnValue({
-      toolkits: {
-        get: vi.fn().mockResolvedValue([
+    composioState.createComposioSession.mockResolvedValue({
+      toolkits: vi.fn().mockResolvedValue({
+        items: [
           {
             slug: 'github',
             name: 'GitHub',
           },
-        ]),
-      },
-      connectedAccounts: {
-        list: vi.fn().mockResolvedValue({}),
-      },
+        ],
+      }),
     });
 
     const response = await loader({
@@ -183,14 +161,7 @@ describe('/api/connections loader', () => {
       responseHeaders: new Headers(),
       user: { id: 'user_123' },
     });
-    composioState.createComposioClient.mockReturnValue({
-      toolkits: {
-        get: vi.fn().mockRejectedValue(new Error('Composio exploded')),
-      },
-      connectedAccounts: {
-        list: vi.fn(),
-      },
-    });
+    composioState.createComposioSession.mockRejectedValue(new Error('Composio exploded'));
 
     const response = await loader({
       request: new Request('https://bolt.local/api/connections'),
@@ -238,15 +209,6 @@ describe('connections helpers', () => {
       isConnected: false,
       connectedAccountId: undefined,
     });
-  });
-
-  it('extracts collection items safely', () => {
-    expect(getCollectionItems([{ id: '0' }])).toEqual([{ id: '0' }]);
-    expect(getCollectionItems({ items: [{ id: '1' }] })).toEqual([{ id: '1' }]);
-    expect(getCollectionItems({ data: [{ id: '2' }] })).toEqual([{ id: '2' }]);
-    expect(getCollectionItems({ results: [{ id: '3' }] })).toEqual([{ id: '3' }]);
-    expect(getCollectionItems({ items: null })).toEqual([]);
-    expect(getCollectionItems(null)).toEqual([]);
   });
 
   it('prefers meta.logo and falls back to top-level logo', () => {

@@ -12,12 +12,6 @@ interface Performance {
   };
 }
 
-declare module '@composio/vercel' {
-  export class VercelProvider {
-    constructor();
-  }
-}
-
 declare module 'react-dom/server.browser' {
   export * from 'react-dom/server';
 }

@@ -7,8 +7,7 @@ import {
   normalizeAppConnectorKey,
 } from '~/components/apps/apps.constants';
 import {
-  createComposioClient,
-  createComposioConnectionRequest,
+  createComposioSession,
   extractComposioRedirectUrl,
 } from '~/lib/.server/composio';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
@@ -21,8 +20,8 @@ export function buildToolkitLogoProxyUrl(request: Request, toolkitSlug: string) 
   return url.toString();
 }
 
-function requiresAuthentication(toolkit: { noAuth?: boolean }) {
-  return toolkit.noAuth !== true;
+function requiresAuthentication(toolkit: { noAuth?: boolean; isNoAuth?: boolean }) {
+  return toolkit.noAuth !== true && toolkit.isNoAuth !== true;
 }
 
 export function getToolkitLogo(toolkit: { logo?: string; meta?: { logo?: string } }) {
@@ -65,26 +64,6 @@ function buildApprovedToolkitCatalog(
   });
 }
 
-function getCollectionItems<T>(value: unknown): T[] {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-
-  if (!value || typeof value !== 'object') {
-    return [];
-  }
-
-  for (const key of ['items', 'data', 'results', 'toolkits']) {
-    const items = (value as Record<string, unknown>)[key];
-
-    if (Array.isArray(items)) {
-      return items as T[];
-    }
-  }
-
-  return [];
-}
-
 async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
   let authHeaders: Headers | undefined;
 
@@ -94,23 +73,21 @@ async function connectionsLoader({ request, context }: LoaderFunctionArgs) {
     });
     authHeaders = auth.responseHeaders;
     const userId = auth.user.id;
-    const composio = createComposioClient(context);
-    const [toolkits, connectedAccounts] = await Promise.all([
-      composio.toolkits.get({
-        limit: 200,
-      }),
-      composio.connectedAccounts.list({
-        userIds: [userId],
-        statuses: ['ACTIVE'],
-      }),
-    ]);
-    const toolkitItems = getCollectionItems<any>(toolkits);
-    const connectedAccountItems = getCollectionItems<any>(connectedAccounts);
-
-    const activeAccountsByToolkitSlug = new Map(
-      connectedAccountItems
-        .map((account: any) => [account.toolkit.slug, account.id] as const)
-        .filter(([toolkitSlug]: readonly [string, string]) => Boolean(toolkitSlug)),
+    const session = await createComposioSession(context, userId, {
+      manageConnections: true,
+    });
+    const toolkitsResponse = await session.toolkits({
+      limit: 200,
+    });
+    const toolkitItems = Array.isArray(toolkitsResponse?.items) ? toolkitsResponse.items : [];
+    const activeAccountsByToolkitSlug = new Map<string, string>(
+      toolkitItems
+        .map((toolkit: any) =>
+          toolkit?.connection?.isActive && toolkit?.connection?.connectedAccount?.id
+            ? ([toolkit.slug, toolkit.connection.connectedAccount.id] as const)
+            : null,
+        )
+        .filter((entry: readonly [string, string] | null): entry is readonly [string, string] => Boolean(entry)),
     );
 
     return json({
@@ -149,10 +126,12 @@ async function connectionsAction({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Toolkit is required.' }, { headers: withSupabaseAuthHeaders(undefined, authHeaders), status: 400 });
     }
 
-    const composio = createComposioClient(context);
+    const session = await createComposioSession(context, userId, {
+      manageConnections: true,
+    });
     const origin = new URL(request.url).origin;
     const callbackUrl = `${origin}/?${APPS_VIEW_QUERY_KEY}=${APPS_VIEW_QUERY_VALUE}`;
-    const connectionRequest = await createComposioConnectionRequest(composio, userId, toolkit, {
+    const connectionRequest = await session.authorize(toolkit, {
       callbackUrl,
     });
     const redirectUrl = extractComposioRedirectUrl(connectionRequest);
@@ -191,4 +170,4 @@ export const action = withSecurity(connectionsAction, {
   allowedMethods: ['POST'],
 });
 
-export { buildApprovedToolkitCatalog, getCollectionItems };
+export { buildApprovedToolkitCatalog };

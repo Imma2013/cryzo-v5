@@ -1,12 +1,6 @@
-import type { Tool as ComposioTool } from '@composio/core';
-import { APPROVED_APP_CONNECTOR_SLUGS, APPS_VIEW_QUERY_KEY, APPS_VIEW_QUERY_VALUE, isApprovedAppToolkit } from '~/components/apps/apps.constants';
 import {
-  createComposioAgentClientFromApiKey,
-  createComposioConnectionRequest,
-  extractComposioRedirectUrl,
-  isComposioAuthError,
+  createComposioSessionFromApiKey,
   resolveComposioApiKeyFromEnv,
-  type ComposioAgentClient,
 } from '~/lib/.server/composio';
 
 type ComposioUserContext = {
@@ -24,16 +18,6 @@ type ComposioToolRuntimeOptions = {
   requestOrigin?: string;
   user?: ComposioUserContext;
   userPrompt?: string;
-};
-
-type ComposioToolkitRef = {
-  logo?: string;
-  name?: string;
-  slug?: string;
-};
-
-type ApprovedComposioTool = ComposioTool & {
-  toolkit?: ComposioToolkitRef;
 };
 
 export type ComposioToolResolution = {
@@ -64,10 +48,10 @@ const TOOL_CAPABLE_PROVIDERS = new Set([
   'XAI',
 ]);
 
-const TOOL_LIMIT = 12;
-
 function getComposioEnabled(env: ComposioToolRuntimeOptions['env']) {
-  const raw = (env as Record<string, string | undefined> | undefined)?.FEATURE_COMPOSIO_TOOLS ?? process.env.FEATURE_COMPOSIO_TOOLS;
+  const raw =
+    (env as Record<string, string | undefined> | undefined)?.FEATURE_COMPOSIO_TOOLS ??
+    process.env.FEATURE_COMPOSIO_TOOLS;
 
   if (raw == null || raw === '') {
     return true;
@@ -123,132 +107,40 @@ function inferToolkitSlugsFromPrompt(userPrompt?: string) {
     return [];
   }
 
-  return APPROVED_APP_CONNECTOR_SLUGS.filter((toolkitSlug) => normalizedPrompt.includes(toolkitSlug));
-}
-
-async function getRelevantRawTools(composio: ComposioAgentClient, userPrompt?: string) {
-  const inferredToolkits = inferToolkitSlugsFromPrompt(userPrompt);
-  const normalizedPrompt = userPrompt?.trim();
-  const searchFilters = normalizedPrompt
-    ? {
-        limit: TOOL_LIMIT,
-        search: normalizedPrompt,
-        toolkits: inferredToolkits.length > 0 ? inferredToolkits : [...APPROVED_APP_CONNECTOR_SLUGS],
-      }
-    : {
-        limit: TOOL_LIMIT,
-        toolkits: inferredToolkits.length > 0 ? inferredToolkits : [...APPROVED_APP_CONNECTOR_SLUGS],
-      };
-  let rawTools = (await composio.tools.getRawComposioTools(searchFilters)) as ApprovedComposioTool[];
-
-  if (rawTools.length === 0 && normalizedPrompt && inferredToolkits.length > 0) {
-    rawTools = (await composio.tools.getRawComposioTools({
-      limit: TOOL_LIMIT,
-      search: normalizedPrompt,
-      toolkits: [...APPROVED_APP_CONNECTOR_SLUGS],
-    })) as ApprovedComposioTool[];
-  }
-
-  if (rawTools.length === 0 && inferredToolkits.length > 0) {
-    rawTools = (await composio.tools.getRawComposioTools({
-      limit: TOOL_LIMIT,
-      toolkits: inferredToolkits,
-    })) as ApprovedComposioTool[];
-  }
-
-  return rawTools.filter((tool: ApprovedComposioTool) => Boolean(tool.toolkit) && isApprovedAppToolkit(tool.toolkit!));
-}
-
-function getToolResultPayload(rawResult: any) {
-  return rawResult?.data ?? rawResult;
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : 'Composio tool failed.';
-}
-
-async function createAuthRequiredResult({
-  composio,
-  requestOrigin,
-  toolkit,
-  userId,
-}: {
-  composio: ComposioAgentClient;
-  requestOrigin?: string;
-  toolkit?: { name?: string; slug?: string };
-  userId: string;
-}) {
-  const toolkitName = toolkit?.name || toolkit?.slug || 'this app';
-  const callbackUrl = requestOrigin ? `${requestOrigin}/?${APPS_VIEW_QUERY_KEY}=${APPS_VIEW_QUERY_VALUE}` : undefined;
-  let authUrl: string | undefined;
-
-  if (toolkit?.slug) {
-    try {
-      const connectionRequest = await createComposioConnectionRequest(composio, userId, toolkit.slug, {
-        callbackUrl,
-      });
-      authUrl = extractComposioRedirectUrl(connectionRequest);
-    } catch (error) {
-      authUrl = extractComposioRedirectUrl(error);
-    }
-  }
-
-  return {
-    authUrl: authUrl || callbackUrl,
-    message: authUrl
-      ? `Authentication is required for ${toolkitName}. Open the auth link, connect the app, then retry the request.`
-      : `Authentication is required for ${toolkitName}. Open the Apps tab, connect the app, then retry the request.`,
-    status: 'auth_required' as const,
-    toolkit,
+  const toolkitAliases: Record<string, string[]> = {
+    gmail: ['gmail', 'googlemail', 'email', 'emails', 'inbox', 'mailbox'],
+    github: ['github', 'repo', 'repository', 'pullrequest', 'pullrequests', 'issue', 'issues'],
+    googlecalendar: ['calendar', 'calendars', 'meeting', 'meetings', 'schedule', 'scheduling'],
+    googlesheets: ['sheet', 'sheets', 'spreadsheet', 'spreadsheets'],
+    google_docs: ['doc', 'docs', 'document', 'documents'],
+    notion: ['notion', 'workspace', 'wiki'],
+    slack: ['slack', 'channel', 'channels'],
+    stripe: ['stripe', 'checkout', 'payment', 'payments', 'invoice', 'invoices', 'billing'],
+    linear: ['linear', 'ticket', 'tickets', 'project', 'projects'],
+    gmail_schedule: [],
   };
+
+  return Object.entries(toolkitAliases)
+    .filter(([, aliases]) => aliases.some((alias) => normalizedPrompt.includes(alias)))
+    .map(([toolkitSlug]) => toolkitSlug);
 }
 
 async function buildOfficialComposioTools({
-  composio,
-  requestOrigin,
+  apiKey,
   userId,
   userPrompt,
 }: {
-  composio: ComposioAgentClient;
-  requestOrigin?: string;
+  apiKey: string;
   userId: string;
   userPrompt?: string;
 }) {
-  const rawTools = await getRelevantRawTools(composio, userPrompt);
-
-  if (rawTools.length === 0) {
-    return {};
-  }
-
-  const toolsBySlug = new Map<string, ApprovedComposioTool>(rawTools.map((tool: ApprovedComposioTool) => [tool.slug, tool]));
-
-  return composio.provider.wrapTools(rawTools, async (toolSlug: string, input: Record<string, unknown>) => {
-    const resolvedTool = toolsBySlug.get(toolSlug);
-
-    try {
-      const rawResult = await composio.tools.execute(toolSlug, {
-        arguments: input,
-        userId,
-      });
-
-      return getToolResultPayload(rawResult);
-    } catch (error) {
-      if (isComposioAuthError(error)) {
-        return createAuthRequiredResult({
-          composio,
-          requestOrigin,
-          toolkit: resolvedTool?.toolkit,
-          userId,
-        });
-      }
-
-      return {
-        message: getErrorMessage(error),
-        status: 'error' as const,
-        toolkit: resolvedTool?.toolkit,
-      };
-    }
+  const inferredToolkits = inferToolkitSlugsFromPrompt(userPrompt);
+  const session = await createComposioSessionFromApiKey(apiKey, userId, {
+    manageConnections: true,
+    ...(inferredToolkits.length > 0 ? { toolkits: inferredToolkits } : {}),
   });
+
+  return session.tools();
 }
 
 export async function getComposioTools(options: ComposioToolRuntimeOptions): Promise<ComposioToolResolution> {
@@ -267,10 +159,9 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
   }
 
   try {
-    const composio = createComposioAgentClientFromApiKey(getComposioApiKey(options.env)!);
+    const apiKey = getComposioApiKey(options.env)!;
     const tools = await buildOfficialComposioTools({
-      composio,
-      requestOrigin: options.requestOrigin,
+      apiKey,
       userId: composioUserId,
       userPrompt: options.userPrompt,
     });

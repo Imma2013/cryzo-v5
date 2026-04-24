@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const composioState = vi.hoisted(() => ({
-  createComposioAgentClientFromApiKey: vi.fn(),
-  createComposioConnectionRequest: vi.fn(),
+  createComposioSessionFromApiKey: vi.fn(),
 }));
 
 vi.mock('~/lib/.server/composio', async () => {
@@ -10,8 +9,7 @@ vi.mock('~/lib/.server/composio', async () => {
 
   return {
     ...actual,
-    createComposioAgentClientFromApiKey: composioState.createComposioAgentClientFromApiKey,
-    createComposioConnectionRequest: composioState.createComposioConnectionRequest,
+    createComposioSessionFromApiKey: composioState.createComposioSessionFromApiKey,
   };
 });
 
@@ -66,8 +64,7 @@ describe('shouldEnableComposioTools', () => {
 describe('getComposioTools', () => {
   afterEach(() => {
     __resetPendingComposioConfirmationsForTests();
-    composioState.createComposioAgentClientFromApiKey.mockReset();
-    composioState.createComposioConnectionRequest.mockReset();
+    composioState.createComposioSessionFromApiKey.mockReset();
   });
 
   it('returns no tools when Composio is disabled', async () => {
@@ -134,23 +131,11 @@ describe('getComposioTools', () => {
     }
   });
 
-  it('returns provider-wrapped tools for a signed-in user', async () => {
-    const wrapTools = vi.fn().mockReturnValue({
-      GMAIL_FETCH_EMAILS: { description: 'Fetch Gmail email' },
-    });
-    composioState.createComposioAgentClientFromApiKey.mockReturnValue({
-      provider: { wrapTools },
-      tools: {
-        getRawComposioTools: vi.fn().mockResolvedValue([
-          {
-            description: 'Fetch Gmail email',
-            inputParameters: { properties: {}, type: 'object' },
-            name: 'Fetch Gmail email',
-            slug: 'GMAIL_FETCH_EMAILS',
-            toolkit: { name: 'Gmail', slug: 'gmail' },
-          },
-        ]),
-      },
+  it('creates a session and returns docs-level session tools for a signed-in user', async () => {
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({
+        COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
+      }),
     });
 
     const resolution = await getComposioTools({
@@ -164,8 +149,11 @@ describe('getComposioTools', () => {
     expect(resolution.status).toBe('available');
     expect(resolution.resolvedUserId).toBe('user_123');
     expect(resolution.tools).toEqual({
-      GMAIL_FETCH_EMAILS: { description: 'Fetch Gmail email' },
+      COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
     });
-    expect(wrapTools).toHaveBeenCalledTimes(1);
+    expect(composioState.createComposioSessionFromApiKey).toHaveBeenCalledWith('test-key', 'user_123', {
+      manageConnections: true,
+      toolkits: ['gmail'],
+    });
   });
 });

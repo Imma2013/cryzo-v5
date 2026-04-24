@@ -5,7 +5,8 @@ import { getServerEnv, normalizeServerEnvValue } from '~/lib/server-env';
 
 type RouteContext = ActionFunctionArgs['context'] | LoaderFunctionArgs['context'];
 export type ComposioClient = any;
-export type ComposioAgentClient = any;
+export type ComposioToolClient = any;
+export type ComposioSession = any;
 
 function normalizeComposioEnvRecord(record?: Record<string, unknown> | null) {
   if (!record) {
@@ -44,7 +45,7 @@ export function createComposioClientFromApiKey(apiKey: string): ComposioClient {
   return new Composio({ apiKey }) as any;
 }
 
-export function createComposioAgentClientFromApiKey(apiKey: string): ComposioAgentClient {
+export function createComposioToolClientFromApiKey(apiKey: string): ComposioToolClient {
   return new Composio({
     apiKey,
     provider: new VercelProvider() as any,
@@ -68,7 +69,30 @@ export function createComposioAgentClient(context: RouteContext) {
     throw new Error('Missing COMPOSIO_API_KEY on the server runtime. Add it to the Vercel environment variables before using Apps.');
   }
 
-  return createComposioAgentClientFromApiKey(apiKey);
+  return createComposioToolClientFromApiKey(apiKey);
+}
+
+export async function createComposioSessionFromApiKey(
+  apiKey: string,
+  userId: string,
+  config?: Record<string, unknown>,
+): Promise<ComposioSession> {
+  const composio = createComposioToolClientFromApiKey(apiKey);
+  return composio.create(userId, config);
+}
+
+export async function createComposioSession(
+  context: RouteContext,
+  userId: string,
+  config?: Record<string, unknown>,
+): Promise<ComposioSession> {
+  const apiKey = resolveComposioApiKey(context);
+
+  if (!apiKey) {
+    throw new Error('Missing COMPOSIO_API_KEY on the server runtime. Add it to the Vercel environment variables before using Apps.');
+  }
+
+  return createComposioSessionFromApiKey(apiKey, userId, config);
 }
 
 export function extractComposioRedirectUrl(value: unknown): string | undefined {
@@ -103,7 +127,7 @@ export function extractComposioRedirectUrl(value: unknown): string | undefined {
     }
   }
 
-  for (const nestedKey of ['connectionData', 'connection', 'data', 'val']) {
+  for (const nestedKey of ['connectionData', 'connection', 'connectionRequest', 'data', 'response', 'val']) {
     const nested = record[nestedKey];
     const nestedUrl = extractComposioRedirectUrl(nested);
 
@@ -134,50 +158,4 @@ export function isComposioAuthError(error: unknown) {
     normalizedMessage.includes('authorization') ||
     normalizedMessage.includes('oauth')
   );
-}
-
-export async function resolveComposioManagedAuthConfigId(composio: ComposioClient, toolkitSlug: string) {
-  const authConfigs = await composio.authConfigs.list({
-    isComposioManaged: true,
-    limit: 100,
-    toolkit: toolkitSlug,
-  });
-
-  const enabledAuthConfig = authConfigs.items.find((item: any) => item?.status === 'ENABLED' || item?.enabled === true);
-
-  if (enabledAuthConfig?.id) {
-    return enabledAuthConfig.id as string;
-  }
-
-  const toolkit = await composio.toolkits.get(toolkitSlug);
-  const authConfigDetails = toolkit.authConfigDetails ?? toolkit.auth_config_details;
-
-  if (!authConfigDetails?.length) {
-    return null;
-  }
-
-  const createdAuthConfig = await composio.authConfigs.create(toolkitSlug, {
-    credentials: {},
-    name: `${toolkit.name} Auth Config`,
-    type: 'use_composio_managed_auth',
-  });
-
-  return createdAuthConfig.id;
-}
-
-export async function createComposioConnectionRequest(
-  composio: ComposioClient,
-  userId: string,
-  toolkitSlug: string,
-  options?: { callbackUrl?: string },
-) {
-  const authConfigId = await resolveComposioManagedAuthConfigId(composio, toolkitSlug);
-
-  if (!authConfigId) {
-    return composio.toolkits.authorize(userId, toolkitSlug);
-  }
-
-  return composio.connectedAccounts.link(userId, authConfigId, {
-    ...(options?.callbackUrl ? { callbackUrl: options.callbackUrl } : {}),
-  });
 }

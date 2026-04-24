@@ -10,6 +10,40 @@ function extractResult(invocation: any) {
   return invocation?.result ?? invocation?.output ?? invocation?.toolResult;
 }
 
+function extractUrl(value: unknown): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return /^https?:\/\//.test(value) ? value : undefined;
+  }
+
+  if (typeof value !== 'object') {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of ['authUrl', 'redirectUrl', 'redirect_url', 'authorizationUrl', 'url', 'link']) {
+    const candidate = record[key];
+
+    if (typeof candidate === 'string' && /^https?:\/\//.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const nestedKey of ['data', 'result', 'response', 'connectionRequest', 'connection']) {
+    const nestedUrl = extractUrl(record[nestedKey]);
+
+    if (nestedUrl) {
+      return nestedUrl;
+    }
+  }
+
+  return undefined;
+}
+
 function isPending(invocation: any) {
   const state = invocation?.state;
   return state === 'partial-call' || state === 'call' || state === 'running' || state == null;
@@ -21,7 +55,7 @@ export function ToolInvocationCard({ append, invocation }: ToolInvocationCardPro
   const toolName = invocation?.toolName || 'tool';
   const pending = isPending(invocation) && result == null;
   const status = result?.status;
-  const authUrl = typeof result?.authUrl === 'string' ? result.authUrl : undefined;
+  const authUrl = extractUrl(result);
   const confirmationToken =
     typeof result?.confirmationToken === 'string' ? result.confirmationToken : undefined;
 
@@ -46,7 +80,7 @@ export function ToolInvocationCard({ append, invocation }: ToolInvocationCardPro
               ? 'i-ph:spinner-gap animate-spin text-base'
               : status === 'completed'
                 ? 'i-ph:check-circle text-base text-green-500'
-                : status === 'auth_required'
+                : status === 'auth_required' || authUrl
                   ? 'i-ph:link text-base text-blue-500'
                   : status === 'confirmation_required'
                     ? 'i-ph:warning-circle text-base text-amber-500'
@@ -55,7 +89,7 @@ export function ToolInvocationCard({ append, invocation }: ToolInvocationCardPro
         />
         <code>{toolName}</code>
         <span className="ml-auto uppercase tracking-wide">
-          {pending ? 'running' : status || invocation?.state || 'completed'}
+          {pending ? 'running' : status || (authUrl ? 'auth_required' : invocation?.state) || 'completed'}
         </span>
       </div>
 
