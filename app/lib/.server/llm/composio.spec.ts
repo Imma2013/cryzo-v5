@@ -153,7 +153,29 @@ describe('getComposioTools', () => {
     });
     expect(composioState.createComposioSessionFromApiKey).toHaveBeenCalledWith('test-key', 'user_123', {
       manageConnections: true,
-      toolkits: ['gmail'],
+    });
+  });
+
+  it('returns a resolution failure with the real session.tools error message', async () => {
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockRejectedValue(new Error('No connected accounts found for toolkit gmail')),
+    });
+
+    const resolution = await getComposioTools({
+      env: { COMPOSIO_API_KEY: 'test-key' } as any,
+      providerName: 'Google',
+      requestOrigin: 'https://cryzo-v5-blue.vercel.app',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: 'read my gmail account',
+    });
+
+    expect(resolution).toEqual({
+      configured: true,
+      errorMessage: 'No connected accounts found for toolkit gmail',
+      hasIdentity: true,
+      resolvedUserId: 'user_123',
+      status: 'resolution_failed',
+      tools: {},
     });
   });
 });

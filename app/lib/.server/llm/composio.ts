@@ -96,67 +96,52 @@ export function shouldEnableComposioTools({ env, providerName, user }: ComposioT
   return getDisabledReason({ env, providerName, user }) == null;
 }
 
-function normalizePromptForToolkitMatching(userPrompt?: string) {
-  return (userPrompt || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function inferToolkitSlugsFromPrompt(userPrompt?: string) {
-  const normalizedPrompt = normalizePromptForToolkitMatching(userPrompt);
-
-  if (!normalizedPrompt) {
-    return [];
-  }
-
-  const toolkitAliases: Record<string, string[]> = {
-    gmail: ['gmail', 'googlemail', 'email', 'emails', 'inbox', 'mailbox'],
-    github: ['github', 'repo', 'repository', 'pullrequest', 'pullrequests', 'issue', 'issues'],
-    googlecalendar: ['calendar', 'calendars', 'meeting', 'meetings', 'schedule', 'scheduling'],
-    googlesheets: ['sheet', 'sheets', 'spreadsheet', 'spreadsheets'],
-    google_docs: ['doc', 'docs', 'document', 'documents'],
-    notion: ['notion', 'workspace', 'wiki'],
-    slack: ['slack', 'channel', 'channels'],
-    stripe: ['stripe', 'checkout', 'payment', 'payments', 'invoice', 'invoices', 'billing'],
-    linear: ['linear', 'ticket', 'tickets', 'project', 'projects'],
-    gmail_schedule: [],
-  };
-
-  return Object.entries(toolkitAliases)
-    .filter(([, aliases]) => aliases.some((alias) => normalizedPrompt.includes(alias)))
-    .map(([toolkitSlug]) => toolkitSlug);
-}
-
 async function buildOfficialComposioTools({
   apiKey,
   userId,
-  userPrompt,
 }: {
   apiKey: string;
   userId: string;
-  userPrompt?: string;
 }) {
-  const inferredToolkits = inferToolkitSlugsFromPrompt(userPrompt);
-  console.info('[llm.composio] creating tool session', {
-    inferredToolkits,
+  console.info('[llm.composio] creating docs-level tool session', {
+    manageConnections: true,
     userId,
   });
   const session = await createComposioSessionFromApiKey(apiKey, userId, {
     manageConnections: true,
-    ...(inferredToolkits.length > 0 ? { toolkits: inferredToolkits } : {}),
   });
 
-  return session.tools();
+  console.info('[llm.composio] session created', {
+    hasToolsMethod: typeof session?.tools === 'function',
+    sessionId: typeof session?.sessionId === 'string' ? session.sessionId : undefined,
+    userId,
+  });
+
+  const tools = await session.tools();
+  const toolNames = Object.keys(tools || {});
+
+  console.info('[llm.composio] session.tools resolved', {
+    toolCount: toolNames.length,
+    toolNames: toolNames.slice(0, 10),
+    userId,
+  });
+
+  return tools;
 }
 
 export async function getComposioTools(options: ComposioToolRuntimeOptions): Promise<ComposioToolResolution> {
   const composioUserId = getResolvedComposioUserId(options.user);
   const disabledReason = getDisabledReason(options);
   const hasIdentity = Boolean(composioUserId);
+  const hasApiKey = Boolean(getComposioApiKey(options.env));
 
   if (disabledReason || !composioUserId) {
     console.info('[llm.composio] tools unavailable', {
       disabledReason: disabledReason || 'missing_identity',
+      hasApiKey,
       hasIdentity,
       providerName: options.providerName,
+      resolvedUserId: composioUserId,
     });
 
     return {
@@ -170,10 +155,17 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
 
   try {
     const apiKey = getComposioApiKey(options.env)!;
+    console.info('[llm.composio] resolving tools', {
+      hasApiKey: true,
+      providerName: options.providerName,
+      requestOrigin: options.requestOrigin,
+      resolvedUserId: composioUserId,
+      userPrompt: options.userPrompt,
+    });
+
     const tools = await buildOfficialComposioTools({
       apiKey,
       userId: composioUserId,
-      userPrompt: options.userPrompt,
     });
 
     return {
@@ -185,6 +177,14 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
+    console.warn('[llm.composio] session.tools failed', {
+      errorMessage,
+      hasApiKey,
+      providerName: options.providerName,
+      requestOrigin: options.requestOrigin,
+      resolvedUserId: composioUserId,
+      userPrompt: options.userPrompt,
+    });
     console.warn('Composio tools unavailable:', error);
 
     return {
