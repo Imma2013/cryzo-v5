@@ -1,15 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const composioState = vi.hoisted(() => ({
-  createComposioSessionFromApiKey: vi.fn(),
+const mcpState = vi.hoisted(() => ({
+  createMCPClient: vi.fn(),
 }));
 
-vi.mock('~/lib/.server/composio', async () => {
-  const actual = await vi.importActual<typeof import('~/lib/.server/composio')>('~/lib/.server/composio');
-
+vi.mock('@ai-sdk/mcp', () => {
   return {
-    ...actual,
-    createComposioSessionFromApiKey: composioState.createComposioSessionFromApiKey,
+    createMCPClient: mcpState.createMCPClient,
   };
 });
 
@@ -64,7 +61,7 @@ describe('shouldEnableComposioTools', () => {
 describe('getComposioTools', () => {
   afterEach(() => {
     __resetPendingComposioConfirmationsForTests();
-    composioState.createComposioSessionFromApiKey.mockReset();
+    mcpState.createMCPClient.mockReset();
   });
 
   it('returns no tools when Composio is disabled', async () => {
@@ -131,8 +128,11 @@ describe('getComposioTools', () => {
     }
   });
 
-  it('creates a session and returns docs-level session tools for a signed-in user', async () => {
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+  it('creates an MCP client and returns MCP tools for a signed-in user', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    mcpState.createMCPClient.mockResolvedValue({
+      close,
+      serverInfo: { name: 'composio-tool-router', version: '1.0.0' },
       tools: vi.fn().mockResolvedValue({
         COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
       }),
@@ -151,13 +151,26 @@ describe('getComposioTools', () => {
     expect(resolution.tools).toEqual({
       COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
     });
-    expect(composioState.createComposioSessionFromApiKey).toHaveBeenCalledWith('test-key', 'user_123', {
-      manageConnections: true,
+    expect(mcpState.createMCPClient).toHaveBeenCalledWith({
+      name: 'cryzo-composio-mcp',
+      transport: {
+        headers: {
+          'x-api-key': 'test-key',
+        },
+        type: 'http',
+        url: 'https://backend.composio.dev/tool_router/trs_3dvKvFzgd8Xr/mcp',
+      },
     });
+    expect(close).not.toHaveBeenCalled();
+
+    await resolution.cleanup?.();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a resolution failure with the real session.tools error message', async () => {
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+  it('returns a resolution failure with the real MCP tool error message', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    mcpState.createMCPClient.mockResolvedValue({
+      close,
       tools: vi.fn().mockRejectedValue(new Error('No connected accounts found for toolkit gmail')),
     });
 
@@ -177,5 +190,6 @@ describe('getComposioTools', () => {
       status: 'resolution_failed',
       tools: {},
     });
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

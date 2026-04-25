@@ -15,8 +15,21 @@ export function extractToolInvocationUrl(value: unknown): string | undefined {
     return undefined;
   }
 
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nestedUrl = extractToolInvocationUrl(item);
+
+      if (nestedUrl) {
+        return nestedUrl;
+      }
+    }
+
+    return undefined;
+  }
+
   if (typeof value === 'string') {
-    return /^https?:\/\//.test(value) ? value : undefined;
+    const match = value.match(/https?:\/\/[^\s)]+/);
+    return match?.[0];
   }
 
   if (typeof value !== 'object') {
@@ -36,15 +49,18 @@ export function extractToolInvocationUrl(value: unknown): string | undefined {
     'authorizeUrl',
     'url',
     'link',
+    'text',
   ]) {
     const candidate = record[key];
 
-    if (typeof candidate === 'string' && /^https?:\/\//.test(candidate)) {
-      return candidate;
+    const directUrl = extractToolInvocationUrl(candidate);
+
+    if (directUrl) {
+      return directUrl;
     }
   }
 
-  for (const nestedKey of ['data', 'result', 'response', 'connectionRequest', 'connection']) {
+  for (const nestedKey of ['data', 'result', 'response', 'connectionRequest', 'connection', 'content', 'value', 'toolResult', 'structuredContent']) {
     const nestedUrl = extractToolInvocationUrl(record[nestedKey]);
 
     if (nestedUrl) {

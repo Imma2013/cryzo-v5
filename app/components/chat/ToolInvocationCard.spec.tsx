@@ -27,4 +27,29 @@ describe('extractToolInvocationUrl', () => {
       }),
     ).toBe('https://platform.composio.dev/connect/stripe');
   });
+
+  it('finds auth URLs inside MCP-style content arrays and embedded text', () => {
+    expect(
+      extractToolInvocationUrl({
+        content: [
+          {
+            type: 'text',
+            text: 'Authorize here: https://platform.composio.dev/connect/gmail?from=mcp',
+          },
+        ],
+      }),
+    ).toBe('https://platform.composio.dev/connect/gmail?from=mcp');
+
+    expect(
+      extractToolInvocationUrl({
+        value: [
+          {
+            response: {
+              text: 'Complete setup at https://platform.composio.dev/connect/github',
+            },
+          },
+        ],
+      }),
+    ).toBe('https://platform.composio.dev/connect/github');
+  });
 });
