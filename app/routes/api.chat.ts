@@ -25,7 +25,6 @@ import {
   getGoogleProviderSetupPayloadForRuntime,
   resolveGoogleServerApiKeyForRuntime,
 } from '~/lib/llm/google-server-runtime';
-import { resolveAssistantMode, shouldUseGoogleRuntimeForAssistantMode } from '~/lib/.server/llm/external-tool-mode';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -131,14 +130,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const apiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader) as Record<string, IProviderSetting>;
   const lastUserMessage = messages.filter((message) => message.role === 'user').slice(-1)[0];
-  const activeProviderName = lastUserMessage ? extractPropertiesFromMessage(lastUserMessage).provider : undefined;
-  const latestUserPrompt = messages
-    .filter((message) => message.role === 'user' && !isHiddenMessage(message))
-    .map((message) => message.content)
-    .join('\n')
-    .trim();
-  const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
-  const runtimeProviderName = shouldUseGoogleRuntimeForAssistantMode(assistantMode) ? 'Google' : activeProviderName;
+  const runtimeProviderName = lastUserMessage ? extractPropertiesFromMessage(lastUserMessage).provider : undefined;
 
   const stream = new SwitchableStream();
 

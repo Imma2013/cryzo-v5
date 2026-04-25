@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAssistantSystemPrompt,
   buildGoogleCoreMessages,
+  getExternalToolRuntimeErrorMessage,
   getAssistantToolRuntimeSettings,
   getGoogleProviderOptions,
 } from './stream-text';
@@ -244,5 +245,55 @@ describe('getAssistantToolRuntimeSettings', () => {
         toolsAvailable: false,
       }),
     ).toEqual({});
+  });
+});
+
+describe('getExternalToolRuntimeErrorMessage', () => {
+  it('returns explicit setup messaging when the MCP URL is missing', () => {
+    expect(
+      getExternalToolRuntimeErrorMessage({
+        assistantMode: 'external-tool',
+        composioToolResolution: {
+          status: 'missing_mcp_url',
+        },
+        providerName: 'OpenAI',
+      }),
+    ).toContain('COMPOSIO_MCP_URL');
+  });
+
+  it('returns explicit setup messaging when the MCP API key is missing', () => {
+    expect(
+      getExternalToolRuntimeErrorMessage({
+        assistantMode: 'external-tool',
+        composioToolResolution: {
+          status: 'missing_mcp_api_key',
+        },
+        providerName: 'OpenAI',
+      }),
+    ).toContain('COMPOSIO_MCP_API_KEY');
+  });
+
+  it('returns explicit provider messaging when the selected provider cannot call tools', () => {
+    expect(
+      getExternalToolRuntimeErrorMessage({
+        assistantMode: 'external-tool',
+        composioToolResolution: {
+          status: 'unsupported_provider',
+        },
+        providerName: 'Ollama',
+      }),
+    ).toContain('Selected provider "Ollama" does not support external app tool calling');
+  });
+
+  it('does not turn mixed builder requests into hard runtime errors', () => {
+    expect(
+      getExternalToolRuntimeErrorMessage({
+        assistantMode: 'build-with-tools',
+        composioToolResolution: {
+          status: 'missing_mcp_url',
+        },
+        providerName: 'OpenAI',
+      }),
+    ).toBeUndefined();
   });
 });

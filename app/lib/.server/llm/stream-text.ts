@@ -32,7 +32,6 @@ import {
   getBuildWithToolsSystemPrompt,
   getExternalToolSystemPrompt,
   resolveAssistantMode,
-  shouldUseGoogleRuntimeForAssistantMode,
 } from './external-tool-mode';
 import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
 import { buildDesignAuditSystemPrompt, buildDesignAuditUserPrompt, parseBuildDesignAudit } from './design-audit';
@@ -580,6 +579,45 @@ export function getAssistantToolRuntimeSettings({
   return {};
 }
 
+export function getExternalToolRuntimeErrorMessage({
+  assistantMode,
+  providerName,
+  composioToolResolution,
+}: {
+  assistantMode: 'build' | 'discuss' | 'external-tool' | 'build-with-tools';
+  providerName: string;
+  composioToolResolution: {
+    errorMessage?: string;
+    status:
+      | 'available'
+      | 'disabled'
+      | 'missing_mcp_url'
+      | 'missing_mcp_api_key'
+      | 'unsupported_provider'
+      | 'missing_identity'
+      | 'resolution_failed';
+  };
+}) {
+  if (assistantMode !== 'external-tool') {
+    return undefined;
+  }
+
+  switch (composioToolResolution.status) {
+    case 'missing_mcp_url':
+      return 'External app tools are not configured: COMPOSIO_MCP_URL is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+    case 'missing_mcp_api_key':
+      return 'External app tools are not configured: COMPOSIO_MCP_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+    case 'unsupported_provider':
+      return `Selected provider "${providerName}" does not support external app tool calling. Switch to a tool-capable provider and retry.`;
+    case 'resolution_failed':
+      return composioToolResolution.errorMessage
+        ? `External app tools are temporarily unavailable: ${composioToolResolution.errorMessage}`
+        : 'External app tools are temporarily unavailable right now. Retry in a moment.';
+    default:
+      return undefined;
+  }
+}
+
 export function buildGoogleCoreMessages(
   messages: Omit<Message, 'id'>[],
   tools: StreamingOptions['tools'],
@@ -859,14 +897,7 @@ export async function streamText(props: {
   });
   const latestUserPrompt = getAuthorPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
-
-  if (shouldUseGoogleRuntimeForAssistantMode(assistantMode)) {
-    currentProvider = 'Google';
-
-    if (!isSupportedGoogleChatModel(currentModel)) {
-      currentModel = DEFAULT_MODEL;
-    }
-  }
+  const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
   const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
@@ -1083,7 +1114,6 @@ export async function streamText(props: {
           ),
         )
       : options || {};
-  const shouldInjectComposioTools = shouldUseGoogleRuntimeForAssistantMode(assistantMode);
   const composioToolResolution = shouldInjectComposioTools
     ? await getComposioTools({
         env: serverEnv as unknown as Record<string, string | undefined>,
@@ -1162,6 +1192,16 @@ export async function streamText(props: {
         }),
       );
     }
+  }
+
+  const externalToolRuntimeError = getExternalToolRuntimeErrorMessage({
+    assistantMode,
+    composioToolResolution,
+    providerName: provider.name,
+  });
+
+  if (externalToolRuntimeError) {
+    throw new Error(externalToolRuntimeError);
   }
 
   const tools = {
