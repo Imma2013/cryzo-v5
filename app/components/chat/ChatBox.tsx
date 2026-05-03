@@ -109,31 +109,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
       <div>
         <ClientOnly>
           {() => (
-            <div className={props.isModelSettingsCollapsed ? 'hidden' : ''}>
-              <ModelSelector
-                key={props.provider?.name + ':' + props.modelList.length}
-                model={props.model}
-                setModel={props.setModel}
-                modelList={props.modelList}
-                provider={props.provider}
-                setProvider={props.setProvider}
-                providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
-                providersReady={props.providersReady ?? true}
-                apiKeys={props.apiKeys}
-                modelLoading={props.isModelLoading}
-              />
-              {(props.providerList || []).length > 0 &&
-                props.provider &&
-                props.provider.name !== 'Google' &&
-                !LOCAL_PROVIDERS.includes(props.provider.name) && (
-                  <APIKeyManager
-                    provider={props.provider}
-                    apiKey={props.apiKeys[props.provider.name] || ''}
-                    setApiKey={(key) => {
-                      props.onApiKeysChange(props.provider.name, key);
-                    }}
-                  />
-                )}
+            <div className="hidden">
+              {/* ModelSelector and APIKeyManager hidden by Gemini Auto Fallback */}
             </div>
           )}
         </ClientOnly>

@@ -1370,111 +1370,128 @@ export async function streamText(props: {
     ),
   );
 
-  try {
-    if (assistantMode === 'build') {
-      const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
-        onFinish?: StreamingOptions['onFinish'];
-      };
+  const googleFallbackModels = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-flash-latest'];
+  const modelsToTry = provider.name === 'Google' ? googleFallbackModels : [modelDetails.name];
 
-      let layoutPlanBlock = '';
-      let layoutPlanGenerated = false;
-      let layoutPlanDegraded = false;
-      let firstDraftSystemPrompt = String(nonStreamingStreamParams.system);
+  let lastError: any;
 
-      if (selectedPrimaryReference && compiledReferenceBrief) {
-        try {
-          const layoutPlan = await buildLockedLayoutPlan({
-            executionPacket: compiledReferenceBrief,
-            primaryReference: selectedPrimaryReference,
-            userPrompt: latestUserPrompt,
-            model: nonStreamingStreamParams.model,
-            isReasoning,
-          });
-
-          if (layoutPlan) {
-            layoutPlanBlock = buildDesignLayoutPlanBlock(layoutPlan);
-            firstDraftSystemPrompt = `${firstDraftSystemPrompt}\n\n${layoutPlanBlock}`;
-            layoutPlanGenerated = true;
-          } else {
-            layoutPlanDegraded = true;
-          }
-        } catch (error) {
-          layoutPlanDegraded = true;
-          logger.warn(`Build layout-plan generation degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
-        }
-      }
-
-      const firstDraft = await generateText({
-        ...nonStreamingStreamParams,
-        system: firstDraftSystemPrompt,
+  for (const modelName of modelsToTry) {
+    try {
+      streamParams.model = provider.getModelInstance({
+        model: modelName,
+        serverEnv,
+        apiKeys,
+        providerSettings,
       });
-      let finalDraft = firstDraft;
-      let auditVerdict = 'skipped';
-      let auditRetryCount = 0;
-      let auditDegraded = false;
 
-      if (selectedPrimaryReference && compiledReferenceBrief && firstDraft.text?.trim()) {
-        try {
-          const audit = await auditBuildDraft({
-            generatedText: firstDraft.text,
-            executionPacket: compiledReferenceBrief,
-            layoutPlan:
-              layoutPlanBlock || '<design_layout_lock status="degraded">No locked layout plan was available.</design_layout_lock>',
-            primaryReference: selectedPrimaryReference,
-            userPrompt: latestUserPrompt,
-            model: nonStreamingStreamParams.model,
-            isReasoning,
-          });
+      if (assistantMode === 'build') {
+        const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
+          onFinish?: StreamingOptions['onFinish'];
+        };
 
-          if (audit) {
-            auditVerdict = audit.verdict;
+        let layoutPlanBlock = '';
+        let layoutPlanGenerated = false;
+        let layoutPlanDegraded = false;
+        let firstDraftSystemPrompt = String(nonStreamingStreamParams.system);
 
-            if (audit.verdict === 'retry' && audit.critique.length > 0) {
-              auditRetryCount = 1;
-              finalDraft = await generateText({
-                ...nonStreamingStreamParams,
-                system: appendRetryAuditBlock(firstDraftSystemPrompt, audit.critique),
-              });
+        if (selectedPrimaryReference && compiledReferenceBrief) {
+          try {
+            const layoutPlan = await buildLockedLayoutPlan({
+              executionPacket: compiledReferenceBrief,
+              primaryReference: selectedPrimaryReference,
+              userPrompt: latestUserPrompt,
+              model: nonStreamingStreamParams.model,
+              isReasoning,
+            });
+
+            if (layoutPlan) {
+              layoutPlanBlock = buildDesignLayoutPlanBlock(layoutPlan);
+              firstDraftSystemPrompt = `${firstDraftSystemPrompt}\n\n${layoutPlanBlock}`;
+              layoutPlanGenerated = true;
+            } else {
+              layoutPlanDegraded = true;
             }
-          } else {
+          } catch (error) {
+            layoutPlanDegraded = true;
+            logger.warn(`Build layout-plan generation degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
+          }
+        }
+
+        const firstDraft = await generateText({
+          ...nonStreamingStreamParams,
+          system: firstDraftSystemPrompt,
+        });
+        let finalDraft = firstDraft;
+        let auditVerdict = 'skipped';
+        let auditRetryCount = 0;
+        let auditDegraded = false;
+
+        if (selectedPrimaryReference && compiledReferenceBrief && firstDraft.text?.trim()) {
+          try {
+            const audit = await auditBuildDraft({
+              generatedText: firstDraft.text,
+              executionPacket: compiledReferenceBrief,
+              layoutPlan:
+                layoutPlanBlock || '<design_layout_lock status="degraded">No locked layout plan was available.</design_layout_lock>',
+              primaryReference: selectedPrimaryReference,
+              userPrompt: latestUserPrompt,
+              model: nonStreamingStreamParams.model,
+              isReasoning,
+            });
+
+            if (audit) {
+              auditVerdict = audit.verdict;
+
+              if (audit.verdict === 'retry' && audit.critique.length > 0) {
+                auditRetryCount = 1;
+                finalDraft = await generateText({
+                  ...nonStreamingStreamParams,
+                  system: appendRetryAuditBlock(firstDraftSystemPrompt, audit.critique),
+                });
+              }
+            } else {
+              auditVerdict = 'degraded';
+              auditDegraded = true;
+            }
+          } catch (error) {
             auditVerdict = 'degraded';
             auditDegraded = true;
+            logger.warn(`Build design audit degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
           }
-        } catch (error) {
-          auditVerdict = 'degraded';
-          auditDegraded = true;
-          logger.warn(`Build design audit degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
         }
+
+        logger.info(
+          `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} layoutPlan=${layoutPlanGenerated ? 'yes' : 'no'} layoutPlanDegraded=${layoutPlanDegraded ? 'yes' : 'no'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
+        );
+
+        return createGenerateTextCompatResult({
+          result: finalDraft,
+          onFinish,
+        });
       }
 
-      logger.info(
-        `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} layoutPlan=${layoutPlanGenerated ? 'yes' : 'no'} layoutPlanDegraded=${layoutPlanDegraded ? 'yes' : 'no'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
-      );
+      if (provider.name === 'Google') {
+        logger.warn(
+          'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
+        );
 
-      return createGenerateTextCompatResult({
-        result: finalDraft,
-        onFinish,
-      });
+        const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
+          onFinish?: StreamingOptions['onFinish'];
+        };
+
+        return await createGenerateTextCompatResultFromParams({
+          onFinish,
+          streamParams: nonStreamingStreamParams,
+        });
+      }
+
+      return await _streamText(streamParams);
+    } catch (error) {
+      lastError = error;
+      logger.warn(`Model ${modelName} failed, trying next model if available. Error: ${error}`);
     }
-
-    if (provider.name === 'Google') {
-      logger.warn(
-        'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
-      );
-
-      const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
-        onFinish?: StreamingOptions['onFinish'];
-      };
-
-      return createGenerateTextCompatResultFromParams({
-        onFinish,
-        streamParams: nonStreamingStreamParams,
-      });
-    }
-
-    return await _streamText(streamParams);
-  } catch (error) {
-    await cleanupComposioTools('stream-setup-error');
-    throw error;
   }
+
+  await cleanupComposioTools('stream-setup-error');
+  throw lastError;
 }
