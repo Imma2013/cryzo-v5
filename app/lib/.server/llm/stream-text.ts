@@ -625,8 +625,7 @@ export function getExternalToolRuntimeErrorMessage({
     status:
       | 'available'
       | 'disabled'
-      | 'missing_mcp_url'
-      | 'missing_mcp_api_key'
+      | 'missing_api_key'
       | 'unsupported_provider'
       | 'missing_identity'
       | 'resolution_failed';
@@ -637,10 +636,8 @@ export function getExternalToolRuntimeErrorMessage({
   }
 
   switch (composioToolResolution.status) {
-    case 'missing_mcp_url':
-      return 'External app tools are not configured: COMPOSIO_MCP_URL is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
-    case 'missing_mcp_api_key':
-      return 'External app tools are not configured: COMPOSIO_MCP_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+    case 'missing_api_key':
+      return 'External app tools are not configured: COMPOSIO_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
     case 'unsupported_provider':
       return `Selected provider "${providerName}" does not support external app tool calling. Switch to a tool-capable provider and retry.`;
     case 'resolution_failed':
@@ -1177,7 +1174,7 @@ export async function streamText(props: {
     try {
       await composioToolResolution.cleanup();
       logger.info(
-        'Composio MCP cleanup complete',
+        'Composio native cleanup complete',
         JSON.stringify({
           assistantMode,
           reason,
@@ -1187,7 +1184,7 @@ export async function streamText(props: {
       );
     } catch (error) {
       logger.warn(
-        'Composio MCP cleanup failed',
+        'Composio native cleanup failed',
         JSON.stringify({
           assistantMode,
           errorMessage: error instanceof Error ? error.message : String(error),

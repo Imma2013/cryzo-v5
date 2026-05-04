@@ -249,28 +249,16 @@ describe('getAssistantToolRuntimeSettings', () => {
 });
 
 describe('getExternalToolRuntimeErrorMessage', () => {
-  it('returns explicit setup messaging when the MCP URL is missing', () => {
+  it('returns explicit setup messaging when COMPOSIO_API_KEY is missing', () => {
     expect(
       getExternalToolRuntimeErrorMessage({
         assistantMode: 'external-tool',
         composioToolResolution: {
-          status: 'missing_mcp_url',
+          status: 'missing_api_key',
         },
         providerName: 'OpenAI',
       }),
-    ).toContain('COMPOSIO_MCP_URL');
-  });
-
-  it('returns explicit setup messaging when the MCP API key is missing', () => {
-    expect(
-      getExternalToolRuntimeErrorMessage({
-        assistantMode: 'external-tool',
-        composioToolResolution: {
-          status: 'missing_mcp_api_key',
-        },
-        providerName: 'OpenAI',
-      }),
-    ).toContain('COMPOSIO_MCP_API_KEY');
+    ).toContain('COMPOSIO_API_KEY');
   });
 
   it('returns explicit provider messaging when the selected provider cannot call tools', () => {
@@ -290,7 +278,7 @@ describe('getExternalToolRuntimeErrorMessage', () => {
       getExternalToolRuntimeErrorMessage({
         assistantMode: 'build-with-tools',
         composioToolResolution: {
-          status: 'missing_mcp_url',
+          status: 'missing_api_key',
         },
         providerName: 'OpenAI',
       }),
