@@ -20,6 +20,12 @@ export function resolveAssistantMode(chatMode: 'build' | 'discuss' | undefined, 
     return 'external-tool';
   }
 
+  // If the prompt is very short and no explicit intent is detected, default to discuss mode
+  // to avoid over-eager "building" of websites (hallucinations like Aura One)
+  if (latestUserPrompt.trim().length < 10 && !/\b(build|create|make|design)\b/i.test(latestUserPrompt)) {
+    return 'discuss';
+  }
+
   return chatMode === 'discuss' ? 'discuss' : 'build';
 }
 
