@@ -26,7 +26,7 @@ describe('resolveGoogleCatalog', () => {
             supportedGenerationMethods: ['generateContent'],
           },
           {
-            name: 'models/gemini-flash-latest',
+            name: 'models/gemini-2.5-flash',
             inputTokenLimit: 1048576,
             outputTokenLimit: 65535,
             supportedGenerationMethods: ['generateContent'],
@@ -54,7 +54,7 @@ describe('resolveGoogleCatalog', () => {
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
       'gemini-2.5-pro',
-      'gemini-flash-latest',
+      'gemini-2.5-flash',
     ]);
     expect(catalog.imageModels.map((model) => model.id)).toEqual([
       'gemini-2.5-flash-image',
@@ -74,7 +74,7 @@ describe('resolveGoogleCatalog', () => {
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
       'gemini-2.5-pro',
-      'gemini-flash-latest',
+      'gemini-2.5-flash',
     ]);
 
     fetchSpy.mockRestore();

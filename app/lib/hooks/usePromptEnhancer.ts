@@ -18,7 +18,6 @@ export function usePromptEnhancer() {
     setInput: (value: string) => void,
     model: string,
     provider: ProviderInfo,
-    apiKeys?: Record<string, string>,
   ) => {
     setEnhancingPrompt(true);
     setPromptEnhanced(false);
@@ -28,10 +27,6 @@ export function usePromptEnhancer() {
       model,
       provider,
     };
-
-    if (apiKeys) {
-      requestBody.apiKeys = apiKeys;
-    }
 
     const response = await fetch('/api/enhancer', {
       method: 'POST',

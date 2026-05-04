@@ -1,5 +1,6 @@
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
+import { GOOGLE_PROVIDER_NAME } from './provider-setup';
 
 interface ResolveActiveProviderSelectionOptions {
   activeProviders: ProviderInfo[];
@@ -18,49 +19,28 @@ interface ResolveProviderModelSelectionOptions {
 
 export function resolveActiveProviderSelection({
   activeProviders,
-  currentProviderName,
-  preferredProviderName,
-  savedProviderName,
+  currentProviderName: _currentProviderName,
+  preferredProviderName: _preferredProviderName,
+  savedProviderName: _savedProviderName,
 }: ResolveActiveProviderSelectionOptions): ProviderInfo | undefined {
   if (activeProviders.length === 0) {
     return undefined;
   }
 
-  return (
-    activeProviders.find((provider) => provider.name === preferredProviderName) ||
-    activeProviders.find((provider) => provider.name === currentProviderName) ||
-    activeProviders.find((provider) => provider.name === savedProviderName) ||
-    activeProviders[0]
-  );
+  return activeProviders.find((provider) => provider.name === GOOGLE_PROVIDER_NAME) || activeProviders[0];
 }
 
 export function resolveProviderModelSelection({
   modelList,
-  providerName,
-  currentModel,
-  preferredModel,
-  savedModel,
+  providerName: _providerName,
+  currentModel: _currentModel,
+  preferredModel: _preferredModel,
+  savedModel: _savedModel,
 }: ResolveProviderModelSelectionOptions): string | undefined {
-  if (!providerName) {
-    return undefined;
-  }
-
-  const providerModels = modelList.filter((model) => model.provider === providerName);
+  const providerModels = modelList.filter((model) => model.provider === GOOGLE_PROVIDER_NAME);
 
   if (providerModels.length === 0) {
     return undefined;
-  }
-
-  if (preferredModel && providerModels.some((model) => model.name === preferredModel)) {
-    return preferredModel;
-  }
-
-  if (currentModel && providerModels.some((model) => model.name === currentModel)) {
-    return currentModel;
-  }
-
-  if (savedModel && providerModels.some((model) => model.name === savedModel)) {
-    return savedModel;
   }
 
   return providerModels[0].name;

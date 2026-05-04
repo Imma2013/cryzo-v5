@@ -4,21 +4,18 @@ import { MAX_RESPONSE_SEGMENTS, MAX_TOKENS, type FileMap } from '~/lib/.server/l
 import { CONTINUE_PROMPT } from '~/lib/common/prompts/prompts';
 import { streamText, type Messages, type StreamingOptions } from '~/lib/.server/llm/stream-text';
 import SwitchableStream from '~/lib/.server/llm/switchable-stream';
-import type { IProviderSetting } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 import { getFilePaths, selectContext } from '~/lib/.server/llm/select-context';
 import type { ContextAnnotation, ProgressAnnotation } from '~/types/context';
-import { WORK_DIR } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
-import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
-import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { getServerEnv } from '~/lib/server-env';
 import {
-  isGoogleProvider,
+  GOOGLE_PROVIDER_NAME,
   logGoogleServerKeyResolution,
 } from '~/lib/llm/provider-setup';
 import {
@@ -126,11 +123,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     uid: authenticatedUser.uid,
   };
 
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-  const providerSettings = getProviderSettingsFromCookie(cookieHeader) as Record<string, IProviderSetting>;
   const lastUserMessage = messages.filter((message) => message.role === 'user').slice(-1)[0];
-  const runtimeProviderName = lastUserMessage ? extractPropertiesFromMessage(lastUserMessage).provider : undefined;
+  const runtimeProviderName = GOOGLE_PROVIDER_NAME;
 
   const stream = new SwitchableStream();
 
@@ -145,9 +139,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
-    if (isGoogleProvider(runtimeProviderName)) {
-      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
-    }
+    logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
     const setupPayload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
 
     if (setupPayload) {
@@ -226,8 +218,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           summary = await createSummary({
             messages: [...processedMessages],
             env: serverEnv as any,
-            apiKeys,
-            providerSettings,
             promptId,
             contextOptimization,
       user,
@@ -269,9 +259,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           filteredFiles = await selectContext({
             messages: [...processedMessages],
             env: serverEnv as any,
-            apiKeys,
             files,
-            providerSettings,
             promptId,
             contextOptimization,
             user,
@@ -355,22 +343,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
             logger.info(`Reached max token limit (${MAX_TOKENS}): Continuing message (${switchesLeft} switches left)`);
 
-            const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
-            const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
             processedMessages.push({ id: generateId(), role: 'assistant', content });
             processedMessages.push({
               id: generateId(),
               role: 'user',
-              content: `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${CONTINUE_PROMPT}`,
+              content: `[Model: ${DEFAULT_MODEL}]\n\n[Provider: ${DEFAULT_PROVIDER.name}]\n\n${CONTINUE_PROMPT}`,
             });
 
             const result = await streamText({
               messages: [...processedMessages],
               env: serverEnv as any,
               options,
-              apiKeys,
               files,
-              providerSettings,
               promptId,
               contextOptimization,
               user,
@@ -410,9 +394,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           messages: [...processedMessages],
           env: serverEnv as any,
           options,
-          apiKeys,
           files,
-          providerSettings,
           promptId,
           contextOptimization,
           user,
@@ -456,15 +438,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const errorMessage = error.message || 'Unknown error';
         const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
 
-        if (isGoogleProvider(runtimeProviderName)) {
-          logger.error('Google stream failure diagnostics', {
-            causeMessage: errorCauseMessage,
-            errorMessage,
-            provider: runtimeProviderName,
-            statusCode: error?.statusCode,
-            url: error?.url,
-          });
-        }
+        logger.error('Google stream failure diagnostics', {
+          causeMessage: errorCauseMessage,
+          errorMessage,
+          provider: runtimeProviderName,
+          statusCode: error?.statusCode,
+          url: error?.url,
+        });
 
         if (errorMessage.includes('model') && errorMessage.includes('not found')) {
           return 'Custom error: Invalid model selected. Please check that the model name is correct and available.';
@@ -483,11 +463,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           errorMessage.includes('unauthorized') ||
           errorMessage.includes('authentication')
         ) {
-          if (isGoogleProvider(runtimeProviderName)) {
-            return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
-          }
-
-          return 'Custom error: Invalid or missing API key. Please check your API key configuration.';
+          return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
         }
 
         if (errorMessage.toLowerCase().includes('sign in before')) {
@@ -576,7 +552,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     if (error.message?.includes('API key')) {
       const payload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
 
-      if (payload || isGoogleProvider(runtimeProviderName)) {
+      if (payload) {
         const setupResponse =
           payload ??
           {

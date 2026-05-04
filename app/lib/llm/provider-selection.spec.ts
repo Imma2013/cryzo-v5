@@ -16,42 +16,32 @@ const modelList: ModelInfo[] = [
 ];
 
 describe('resolveActiveProviderSelection', () => {
-  it('prefers the current provider when it is still active', () => {
+  it('always selects Google when it is active', () => {
     const result = resolveActiveProviderSelection({
       activeProviders: providers,
       currentProviderName: 'OpenRouter',
       savedProviderName: 'Google',
     });
 
-    expect(result?.name).toBe('OpenRouter');
+    expect(result?.name).toBe('Google');
   });
 
-  it('prefers the synced provider when one is provided', () => {
+  it('ignores synced non-Google providers', () => {
     const result = resolveActiveProviderSelection({
       activeProviders: providers,
       currentProviderName: 'OpenRouter',
-      preferredProviderName: 'Google',
+      preferredProviderName: 'OpenAI',
       savedProviderName: 'OpenAI',
     });
 
     expect(result?.name).toBe('Google');
   });
 
-  it('falls back to the saved provider when the current provider is unavailable', () => {
+  it('falls back to the first active provider only when Google is unavailable', () => {
     const result = resolveActiveProviderSelection({
-      activeProviders: providers.slice(0, 2),
+      activeProviders: [providers[0]],
       currentProviderName: 'Anthropic',
       savedProviderName: 'Google',
-    });
-
-    expect(result?.name).toBe('Google');
-  });
-
-  it('falls back to the first active provider when neither current nor saved providers are available', () => {
-    const result = resolveActiveProviderSelection({
-      activeProviders: providers.slice(0, 2),
-      currentProviderName: 'Anthropic',
-      savedProviderName: 'OpenRouter',
     });
 
     expect(result?.name).toBe('OpenAI');
@@ -59,7 +49,7 @@ describe('resolveActiveProviderSelection', () => {
 });
 
 describe('resolveProviderModelSelection', () => {
-  it('keeps the current model when it belongs to the selected provider', () => {
+  it('always returns the first Google model', () => {
     const result = resolveProviderModelSelection({
       modelList,
       providerName: 'OpenAI',
@@ -67,37 +57,15 @@ describe('resolveProviderModelSelection', () => {
       savedModel: 'gpt-5',
     });
 
-    expect(result).toBe('gpt-4.1');
+    expect(result).toBe('gemini-3.1-pro-preview');
   });
 
-  it('prefers the synced model when one is provided', () => {
+  it('ignores synced non-Google models', () => {
     const result = resolveProviderModelSelection({
       modelList,
       providerName: 'OpenAI',
       currentModel: 'gpt-4.1',
       preferredModel: 'gpt-5',
-      savedModel: 'gpt-4.1',
-    });
-
-    expect(result).toBe('gpt-5');
-  });
-
-  it('falls back to the saved model when the current model belongs to another provider', () => {
-    const result = resolveProviderModelSelection({
-      modelList,
-      providerName: 'OpenAI',
-      currentModel: 'gemini-3.1-pro-preview',
-      savedModel: 'gpt-5',
-    });
-
-    expect(result).toBe('gpt-5');
-  });
-
-  it('falls back to the first available provider model when needed', () => {
-    const result = resolveProviderModelSelection({
-      modelList,
-      providerName: 'Google',
-      currentModel: 'gpt-5',
       savedModel: 'gpt-4.1',
     });
 

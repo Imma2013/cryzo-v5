@@ -4,6 +4,7 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 import { extractCurrentContext, extractPropertiesFromMessage, simplifyBoltActions } from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { LLMManager } from '~/lib/modules/llm/manager';
+import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 const logger = createScopedLogger('create-summary');
 
@@ -21,14 +22,13 @@ export async function createSummary(props: {
   };
   onFinish?: (resp: GenerateTextResult<Record<string, CoreTool<any, any>>, never>) => void;
 }) {
-  const { messages, env: serverEnv, apiKeys, providerSettings, onFinish } = props;
+  const { messages, env: serverEnv, onFinish } = props;
   let currentModel = DEFAULT_MODEL;
-  let currentProvider = DEFAULT_PROVIDER.name;
   const processedMessages = messages.map((message) => {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
-      currentModel = model;
-      currentProvider = provider;
+      void provider;
+      currentModel = normalizeGoogleChatModel(model);
 
       return { ...message, content };
     } else if (message.role == 'assistant') {
@@ -45,38 +45,10 @@ export async function createSummary(props: {
   });
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
-  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
+  const provider = llmManager.getProvider(DEFAULT_PROVIDER.name);
 
   if (!provider) {
-    throw new Error(`Provider ${currentProvider} not found`);
-  }
-
-  const staticModels = llmManager.getStaticModelListFromProvider(provider);
-  let modelDetails = staticModels.find((m) => m.name === currentModel);
-
-  if (!modelDetails) {
-    const modelsList = [
-      ...(provider.staticModels || []),
-      ...(await llmManager.getModelListFromProvider(provider, {
-        apiKeys,
-        providerSettings,
-        serverEnv: serverEnv as any,
-      })),
-    ];
-
-    if (!modelsList.length) {
-      throw new Error(`No models found for provider ${provider.name}`);
-    }
-
-    modelDetails = modelsList.find((m) => m.name === currentModel);
-
-    if (!modelDetails) {
-      // Fallback to first model
-      logger.warn(
-        `MODEL [${currentModel}] not found in provider [${provider.name}]. Falling back to first model. ${modelsList[0].name}`,
-      );
-      modelDetails = modelsList[0];
-    }
+    throw new Error(`Provider ${DEFAULT_PROVIDER.name} not found`);
   }
 
   let slicedMessages = processedMessages;
@@ -111,7 +83,7 @@ ${summary.summary}`;
       : message.content;
 
   // select files from the list of code file from the project that might be useful for the current request from the user
-  const resp = await generateText({
+  const generateParams = {
     system: `
         You are a software engineer. You are working on a project. you need to summarize the work till now and provide a summary of the chat till now.
 
@@ -190,18 +162,42 @@ ${slicedMessages
 
 Please provide a summary of the chat till now including the hitorical summary of the chat.
 `,
-    model: provider.getModelInstance({
-      model: currentModel,
-      serverEnv,
-      apiKeys,
-      providerSettings,
-    }),
-  });
+  };
+
+  let resp: Awaited<ReturnType<typeof generateText>> | undefined;
+  let lastError: unknown;
+  const modelsToTry = [currentModel, ...getGoogleTextModelFallbackOrder().filter((model) => model !== currentModel)];
+
+  for (const modelName of modelsToTry) {
+    try {
+      const result = await generateText({
+        ...generateParams,
+        model: provider.getModelInstance({
+          model: modelName,
+          serverEnv,
+        }),
+      });
+
+      if (!result.text?.trim()) {
+        throw new Error(`Google model ${modelName} returned an empty response`);
+      }
+
+      resp = result;
+      break;
+    } catch (error) {
+      lastError = error;
+      logger.warn(`Summary model ${modelName} failed, trying next Gemini fallback if available. Error: ${error}`);
+    }
+  }
+
+  if (!resp) {
+    throw lastError instanceof Error ? lastError : new Error('Failed to create summary with Gemini fallback models');
+  }
 
   const response = resp.text;
 
   if (onFinish) {
-    onFinish(resp);
+    onFinish(resp as GenerateTextResult<Record<string, CoreTool<any, any>>, never>);
   }
 
   return response;

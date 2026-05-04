@@ -2,9 +2,14 @@ import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { streamText } from '~/lib/.server/llm/stream-text';
 import { stripIndents } from '~/utils/stripIndent';
 import type { ProviderInfo } from '~/types/model';
-import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
+import {
+  getGoogleProviderSetupPayloadForRuntime,
+  resolveGoogleServerApiKeyForRuntime,
+} from '~/lib/llm/google-server-runtime';
+import { GOOGLE_PROVIDER_NAME, logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 
 export async function action(args: ActionFunctionArgs) {
   return enhancerAction(args);
@@ -38,9 +43,16 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
     });
   }
 
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-  const providerSettings = getProviderSettingsFromCookie(cookieHeader);
+  logGoogleServerKeyResolution('api.enhancer', resolveGoogleServerApiKeyForRuntime(serverEnv));
+  const setupPayload = getGoogleProviderSetupPayloadForRuntime(GOOGLE_PROVIDER_NAME, serverEnv);
+
+  if (setupPayload) {
+    return new Response(JSON.stringify(setupPayload), {
+      status: setupPayload.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Service Unavailable',
+    });
+  }
 
   try {
     const result = await streamText({
@@ -48,7 +60,7 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
         {
           role: 'user',
           content:
-            `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` +
+            `[Model: ${DEFAULT_MODEL}]\n\n[Provider: ${DEFAULT_PROVIDER.name}]\n\n` +
             stripIndents`
             You are a professional prompt engineer specializing in crafting precise, effective prompts.
             Your task is to enhance prompts by making them more specific, actionable, and effective.
@@ -80,8 +92,6 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
         },
       ],
       env: serverEnv as any,
-      apiKeys,
-      providerSettings,
       options: {
         system:
           'You are a senior software principal architect, you should help the user analyse the user query and enrich it with the necessary context and constraints to make it more specific, actionable, and effective. You should also ensure that the prompt is self-contained and uses professional language. Your response should ONLY contain the enhanced prompt text. Do not include any explanations, metadata, or wrapper tags.',
@@ -125,10 +135,28 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
     console.log(error);
 
     if (error instanceof Error && error.message?.includes('API key')) {
-      throw new Response('Invalid or missing API key', {
-        status: 401,
-        statusText: 'Unauthorized',
-      });
+      const payload = getGoogleProviderSetupPayloadForRuntime(GOOGLE_PROVIDER_NAME, serverEnv);
+
+      return new Response(
+        JSON.stringify(
+          payload ?? {
+            error: true,
+            errorType: 'setup',
+            isRetryable: false,
+            message:
+              'Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.',
+            provider: GOOGLE_PROVIDER_NAME,
+            setupKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+            setupSource: 'server_env',
+            statusCode: 503,
+          },
+        ),
+        {
+          status: payload?.statusCode ?? 503,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Service Unavailable',
+        },
+      );
     }
 
     throw new Response(null, {

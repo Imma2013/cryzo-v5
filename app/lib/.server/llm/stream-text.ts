@@ -33,7 +33,12 @@ import {
   getExternalToolSystemPrompt,
   resolveAssistantMode,
 } from './external-tool-mode';
-import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
+import {
+  getGoogleChatModels,
+  getGoogleTextModelFallbackOrder,
+  isSupportedGoogleChatModel,
+  normalizeGoogleChatModel,
+} from '~/lib/llm/google-catalog';
 import { buildDesignAuditSystemPrompt, buildDesignAuditUserPrompt, parseBuildDesignAudit } from './design-audit';
 import {
   buildDesignLayoutPlanBlock,
@@ -362,6 +367,34 @@ export function createGenerateTextCompatResult({
   } as any;
 }
 
+function hasUsableGenerateTextOutput(result: Awaited<ReturnType<typeof generateText>>) {
+  if (typeof result.text === 'string' && result.text.trim().length > 0) {
+    return true;
+  }
+
+  if ((result.toolCalls?.length || 0) > 0 || (result.toolResults?.length || 0) > 0) {
+    return true;
+  }
+
+  return (result.response?.messages || []).some((message: any) =>
+    Array.isArray(message?.content)
+      ? message.content.some((part: any) => {
+          if (part?.type === 'text') {
+            return typeof part.text === 'string' && part.text.trim().length > 0;
+          }
+
+          return part?.type === 'tool-call' || part?.type === 'tool-result';
+        })
+      : false,
+  );
+}
+
+function assertUsableGenerateTextOutput(result: Awaited<ReturnType<typeof generateText>>, modelName?: string) {
+  if (!hasUsableGenerateTextOutput(result)) {
+    throw new Error(`Google model ${modelName || 'unknown'} returned an empty response`);
+  }
+}
+
 async function createGenerateTextCompatResultFromParams({
   streamParams,
   onFinish,
@@ -370,6 +403,7 @@ async function createGenerateTextCompatResultFromParams({
   onFinish?: StreamingOptions['onFinish'];
 }) {
   const result = await generateText(streamParams);
+  assertUsableGenerateTextOutput(result, (streamParams.model as any)?.modelId || (streamParams.model as any)?.modelName);
 
   return createGenerateTextCompatResult({
     result,
@@ -879,8 +913,9 @@ export async function streamText(props: {
 
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
-      currentModel = model;
-      currentProvider = provider;
+      void provider;
+      currentModel = normalizeGoogleChatModel(model);
+      currentProvider = DEFAULT_PROVIDER.name;
       newMessage.content = sanitizeText(content);
     } else if (message.role == 'assistant') {
       newMessage.content = sanitizeText(message.content);
@@ -900,13 +935,13 @@ export async function streamText(props: {
   const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
-  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
+  const provider = llmManager.getProvider(DEFAULT_PROVIDER.name);
 
   if (!provider) {
     throw new Error(`Provider ${currentProvider} not found`);
   }
 
-  const effectiveModelName = currentModel;
+  const effectiveModelName = normalizeGoogleChatModel(currentModel);
   const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === effectiveModelName);
 
@@ -939,7 +974,7 @@ export async function streamText(props: {
 
       if (provider.name === 'Google') {
         throw new Error(
-          `Model "${effectiveModelName}" is unavailable for Google right now. Allowed Gemini models: gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-2.5-pro, gemini-flash-latest.`,
+          `Model "${effectiveModelName}" is unavailable for Google right now. Allowed Gemini models: ${getGoogleTextModelFallbackOrder().join(', ')}.`,
         );
       }
 
@@ -1370,7 +1405,7 @@ export async function streamText(props: {
     ),
   );
 
-  const googleFallbackModels = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-flash-latest'];
+  const googleFallbackModels = getGoogleTextModelFallbackOrder();
   const modelsToTry = provider.name === 'Google' ? googleFallbackModels : [modelDetails.name];
 
   let lastError: any;
@@ -1421,6 +1456,7 @@ export async function streamText(props: {
           ...nonStreamingStreamParams,
           system: firstDraftSystemPrompt,
         });
+        assertUsableGenerateTextOutput(firstDraft, modelName);
         let finalDraft = firstDraft;
         let auditVerdict = 'skipped';
         let auditRetryCount = 0;
@@ -1448,6 +1484,7 @@ export async function streamText(props: {
                   ...nonStreamingStreamParams,
                   system: appendRetryAuditBlock(firstDraftSystemPrompt, audit.critique),
                 });
+                assertUsableGenerateTextOutput(finalDraft, modelName);
               }
             } else {
               auditVerdict = 'degraded';

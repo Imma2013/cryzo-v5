@@ -189,7 +189,6 @@ export const ChatImpl = memo(
     } = useChat({
       api: '/api/chat',
       body: {
-        apiKeys,
         files,
         promptId,
         contextOptimization: contextOptimizationEnabled,
@@ -755,7 +754,6 @@ export const ChatImpl = memo(
             },
             model,
             activeProvider,
-            apiKeys,
           );
         }}
         uploadedFiles={uploadedFiles}

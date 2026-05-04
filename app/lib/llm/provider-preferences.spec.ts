@@ -49,10 +49,10 @@ describe('applyProviderSettingsSnapshot', () => {
       OpenAILike: { enabled: true, baseUrl: 'http://localhost:3000' },
     });
 
-    expect(result.Anthropic.settings.enabled).toBe(true);
+    expect(result.Anthropic.settings.enabled).toBe(false);
     expect(result.Google.settings.enabled).toBe(true);
     expect(result.OpenAILike.settings).toEqual({
-      enabled: true,
+      enabled: false,
       baseUrl: 'http://localhost:3000',
       OPENAI_LIKE_API_MODELS: 'local-model',
     });

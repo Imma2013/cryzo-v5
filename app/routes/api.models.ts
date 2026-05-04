@@ -2,9 +2,9 @@ import { json } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
-import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
-import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
+import { getGoogleProviderSetupPayloadForRuntime } from '~/lib/llm/google-server-runtime';
+import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-setup';
 
 interface ModelsResponse {
   modelList: ModelInfo[];
@@ -15,12 +15,10 @@ interface ModelsResponse {
 let cachedProviders: ProviderInfo[] | null = null;
 let cachedDefaultProvider: ProviderInfo | null = null;
 
-function getProviderInfo(llmManager: LLMManager, includeGoogle: boolean) {
-  const eligibleProviders = llmManager
-    .getAllProviders()
-    .filter((provider) => includeGoogle || provider.name !== 'Google');
+function getProviderInfo(llmManager: LLMManager) {
+  const eligibleProviders = llmManager.getAllProviders().filter((provider) => provider.name === GOOGLE_PROVIDER_NAME);
 
-  if (!cachedProviders || cachedProviders.some((provider) => provider.name === 'Google') !== includeGoogle) {
+  if (!cachedProviders) {
     cachedProviders = eligibleProviders.map((provider) => ({
       name: provider.name,
       staticModels: provider.staticModels,
@@ -30,11 +28,8 @@ function getProviderInfo(llmManager: LLMManager, includeGoogle: boolean) {
     }));
   }
 
-  if (!cachedDefaultProvider || (cachedDefaultProvider.name === 'Google' && !includeGoogle)) {
-    const defaultProvider =
-      eligibleProviders.find((provider) => provider.name === 'Google') ||
-      eligibleProviders[0] ||
-      llmManager.getDefaultProvider();
+  if (!cachedDefaultProvider) {
+    const defaultProvider = eligibleProviders[0] || llmManager.getDefaultProvider();
     cachedDefaultProvider = {
       name: defaultProvider.name,
       staticModels: defaultProvider.staticModels,
@@ -62,14 +57,17 @@ export async function loader({
 }): Promise<Response> {
   const serverEnv = getServerEnv(context as any);
   const llmManager = LLMManager.getInstance(serverEnv as Record<string, string>);
+  const setupPayload = getGoogleProviderSetupPayloadForRuntime(GOOGLE_PROVIDER_NAME, serverEnv);
 
-  // Get client side maintained API keys and provider settings from cookies
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-  const providerSettings = getProviderSettingsFromCookie(cookieHeader);
-  const includeGoogle = resolveGoogleServerApiKeyForRuntime(serverEnv as Record<string, string>).hasKey;
+  if (setupPayload) {
+    return new Response(JSON.stringify(setupPayload), {
+      status: setupPayload.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Service Unavailable',
+    });
+  }
 
-  const { providers, defaultProvider } = getProviderInfo(llmManager, includeGoogle);
+  const { providers, defaultProvider } = getProviderInfo(llmManager);
 
   let modelList: ModelInfo[] = [];
 
@@ -77,28 +75,16 @@ export async function loader({
     // Only update models for the specific provider
     const provider = llmManager.getProvider(params.provider);
 
-    if (provider) {
-      if (provider.name === 'Google' && !includeGoogle) {
-        modelList = [];
-      } else {
+    if (provider?.name === GOOGLE_PROVIDER_NAME) {
       modelList = await llmManager.getModelListFromProvider(provider, {
-        apiKeys,
-        providerSettings,
         serverEnv: serverEnv as Record<string, string>,
       });
-      }
     }
   } else {
     // Update all models
     modelList = await llmManager.updateModelList({
-      apiKeys,
-      providerSettings,
       serverEnv: serverEnv as Record<string, string>,
     });
-
-    if (!includeGoogle) {
-      modelList = modelList.filter((model) => model.provider !== 'Google');
-    }
   }
 
   return json<ModelsResponse>({

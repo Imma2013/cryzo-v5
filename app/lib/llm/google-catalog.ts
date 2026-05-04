@@ -30,13 +30,15 @@ const GOOGLE_CHAT_MODELS: readonly ModelInfo[] = [
     maxCompletionTokens: 65535,
   },
   {
-    name: 'gemini-flash-latest',
+    name: 'gemini-2.5-flash',
     label: 'Gemini 2.5 Flash',
     provider: 'Google',
     maxTokenAllowed: 1048576,
     maxCompletionTokens: 65535,
   },
 ] as const;
+
+export const GOOGLE_TEXT_MODEL_FALLBACK_ORDER = GOOGLE_CHAT_MODELS.map((model) => model.name);
 
 const GOOGLE_IMAGE_MODELS: readonly GoogleImageModelInfo[] = [
   {
@@ -54,6 +56,14 @@ const GOOGLE_IMAGE_MODELS: readonly GoogleImageModelInfo[] = [
 
 export function getGoogleChatModels(): ModelInfo[] {
   return GOOGLE_CHAT_MODELS.map((model) => ({ ...model }));
+}
+
+export function getGoogleTextModelFallbackOrder(): string[] {
+  return [...GOOGLE_TEXT_MODEL_FALLBACK_ORDER];
+}
+
+export function normalizeGoogleChatModel(model: string | undefined): string {
+  return isSupportedGoogleChatModel(model) ? model : GOOGLE_TEXT_MODEL_FALLBACK_ORDER[0];
 }
 
 export function isSupportedGoogleChatModel(model: string | undefined): model is ModelInfo['name'] {

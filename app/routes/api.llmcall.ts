@@ -5,17 +5,17 @@ import { generateText } from 'ai';
 import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel } from '~/lib/.server/llm/constants';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
-import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
 import {
-  isGoogleProvider,
+  GOOGLE_PROVIDER_NAME,
   logGoogleServerKeyResolution,
 } from '~/lib/llm/provider-setup';
 import {
   getGoogleProviderSetupPayloadForRuntime,
   resolveGoogleServerApiKeyForRuntime,
 } from '~/lib/llm/google-server-runtime';
+import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -82,7 +82,10 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     streamOutput?: boolean;
   }>();
 
-  const { name: providerName } = provider;
+  const { name: requestedProviderName } = provider;
+  void requestedProviderName;
+  const providerName = GOOGLE_PROVIDER_NAME;
+  const selectedModel = normalizeGoogleChatModel(model);
 
   // validate 'model' and 'provider' fields
   if (!model || typeof model !== 'string') {
@@ -92,19 +95,14 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     });
   }
 
-  if (!providerName || typeof providerName !== 'string') {
+  if (!provider?.name || typeof provider.name !== 'string') {
     throw new Response('Invalid or missing provider', {
       status: 400,
       statusText: 'Bad Request',
     });
   }
 
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-  const providerSettings = getProviderSettingsFromCookie(cookieHeader);
-  if (isGoogleProvider(providerName)) {
-    logGoogleServerKeyResolution('api.llmcall', resolveGoogleServerApiKeyForRuntime(serverEnv));
-  }
+  logGoogleServerKeyResolution('api.llmcall', resolveGoogleServerApiKeyForRuntime(serverEnv));
   const setupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
 
   if (setupPayload) {
@@ -128,8 +126,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
           },
         ],
         env: serverEnv as any,
-        apiKeys,
-        providerSettings,
       });
 
       return new Response(result.textStream, {
@@ -182,93 +178,107 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   } else {
     try {
-      const models = await getModelList({ apiKeys, providerSettings, serverEnv: serverEnv as Record<string, string> });
-      const modelDetails = models.find((m: ModelInfo) => m.name === model);
-
-      if (!modelDetails) {
-        throw new Error('Model not found');
-      }
-
-      const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
-
-      // Validate token limits before making API request
-      const validation = validateTokenLimits(modelDetails, dynamicMaxTokens);
-
-      if (!validation.valid) {
-        throw new Response(validation.error, {
-          status: 400,
-          statusText: 'Token Limit Exceeded',
-        });
-      }
-
-      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(provider.name);
+      const models = await getModelList({ serverEnv: serverEnv as Record<string, string> });
+      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(GOOGLE_PROVIDER_NAME);
 
       if (!providerInfo) {
         throw new Error('Provider not found');
       }
 
-      logger.info(`Generating response Provider: ${provider.name}, Model: ${modelDetails.name}`);
+      const modelsToTry = [selectedModel, ...getGoogleTextModelFallbackOrder().filter((modelName) => modelName !== selectedModel)];
+      let lastError: unknown;
 
-      // DEBUG: Log reasoning model detection
-      const isReasoning = isReasoningModel(modelDetails.name);
-      logger.info(`DEBUG: Model "${modelDetails.name}" detected as reasoning model: ${isReasoning}`);
+      for (const modelName of modelsToTry) {
+        try {
+          const modelDetails = models.find((m: ModelInfo) => m.name === modelName);
 
-      // Use maxCompletionTokens for reasoning models (o1, GPT-5), maxTokens for traditional models
-      const tokenParams = isReasoning ? { maxCompletionTokens: dynamicMaxTokens } : { maxTokens: dynamicMaxTokens };
+          if (!modelDetails) {
+            throw new Error(`Model ${modelName} not found`);
+          }
 
-      // Filter out unsupported parameters for reasoning models
-      const baseParams = {
-        system,
-        messages: [
-          {
-            role: 'user' as const,
-            content: `${message}`,
-          },
-        ],
-        model: providerInfo.getModelInstance({
-          model: modelDetails.name,
-          serverEnv: serverEnv as unknown as Env,
-          apiKeys,
-          providerSettings,
-        }),
-        ...tokenParams,
-        toolChoice: 'none' as const,
-      };
+          const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
 
-      // For reasoning models, set temperature to 1 (required by OpenAI API)
-      const finalParams = isReasoning
-        ? { ...baseParams, temperature: 1 } // Set to 1 for reasoning models (only supported value)
-        : { ...baseParams, temperature: 0 };
+          // Validate token limits before making API request
+          const validation = validateTokenLimits(modelDetails, dynamicMaxTokens);
 
-      // DEBUG: Log final parameters
-      logger.info(
-        `DEBUG: Final params for model "${modelDetails.name}":`,
-        JSON.stringify(
-          {
-            isReasoning,
-            hasTemperature: 'temperature' in finalParams,
-            hasMaxTokens: 'maxTokens' in finalParams,
-            hasMaxCompletionTokens: 'maxCompletionTokens' in finalParams,
-            paramKeys: Object.keys(finalParams).filter((key) => !['model', 'messages', 'system'].includes(key)),
-            tokenParams,
-            finalParams: Object.fromEntries(
-              Object.entries(finalParams).filter(([key]) => !['model', 'messages', 'system'].includes(key)),
+          if (!validation.valid) {
+            throw new Response(validation.error, {
+              status: 400,
+              statusText: 'Token Limit Exceeded',
+            });
+          }
+
+          logger.info(`Generating response Provider: ${GOOGLE_PROVIDER_NAME}, Model: ${modelDetails.name}`);
+
+          // DEBUG: Log reasoning model detection
+          const isReasoning = isReasoningModel(modelDetails.name);
+          logger.info(`DEBUG: Model "${modelDetails.name}" detected as reasoning model: ${isReasoning}`);
+
+          // Use maxCompletionTokens for reasoning models (o1, GPT-5), maxTokens for traditional models
+          const tokenParams = isReasoning ? { maxCompletionTokens: dynamicMaxTokens } : { maxTokens: dynamicMaxTokens };
+
+          // Filter out unsupported parameters for reasoning models
+          const baseParams = {
+            system,
+            messages: [
+              {
+                role: 'user' as const,
+                content: `${message}`,
+              },
+            ],
+            model: providerInfo.getModelInstance({
+              model: modelDetails.name,
+              serverEnv: serverEnv as unknown as Env,
+            }),
+            ...tokenParams,
+            toolChoice: 'none' as const,
+          };
+
+          // For reasoning models, set temperature to 1 (required by OpenAI API)
+          const finalParams = isReasoning
+            ? { ...baseParams, temperature: 1 } // Set to 1 for reasoning models (only supported value)
+            : { ...baseParams, temperature: 0 };
+
+          // DEBUG: Log final parameters
+          logger.info(
+            `DEBUG: Final params for model "${modelDetails.name}":`,
+            JSON.stringify(
+              {
+                isReasoning,
+                hasTemperature: 'temperature' in finalParams,
+                hasMaxTokens: 'maxTokens' in finalParams,
+                hasMaxCompletionTokens: 'maxCompletionTokens' in finalParams,
+                paramKeys: Object.keys(finalParams).filter((key) => !['model', 'messages', 'system'].includes(key)),
+                tokenParams,
+                finalParams: Object.fromEntries(
+                  Object.entries(finalParams).filter(([key]) => !['model', 'messages', 'system'].includes(key)),
+                ),
+              },
+              null,
             ),
-          },
-          null,
-          2,
-        ),
-      );
+          );
 
-      const result = await generateText(finalParams);
-      logger.info(`Generated response`);
+          const result = await generateText(finalParams);
 
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+          if (!result.text?.trim() && (result.toolCalls?.length || 0) === 0 && (result.toolResults?.length || 0) === 0) {
+            throw new Error(`Google model ${modelDetails.name} returned an empty response`);
+          }
+
+          logger.info(`Generated response`);
+
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        } catch (error) {
+          lastError = error;
+          logger.warn(`LLM call model ${modelName} failed, trying next Gemini fallback if available. Error: ${error}`);
+        }
+      }
+
+      throw lastError instanceof Error ? lastError : new Error('Failed to generate response with Gemini fallback models');
     } catch (error: unknown) {
       console.log(error);
 
@@ -283,19 +293,9 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       if (error instanceof Error && error.message?.includes('API key')) {
         const googleSetupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
 
-        if (googleSetupPayload || isGoogleProvider(providerName)) {
+        if (googleSetupPayload) {
           const payload =
-            googleSetupPayload ??
-            {
-              error: true,
-              errorType: 'setup' as const,
-              isRetryable: false,
-              message: error.message,
-              provider: providerName,
-              setupKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
-              setupSource: 'server_env' as const,
-              statusCode: 503,
-            };
+            googleSetupPayload;
 
           return new Response(JSON.stringify(payload), {
             status: payload.statusCode,
@@ -304,19 +304,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
           });
         }
 
-        return new Response(
-          JSON.stringify({
-            ...errorResponse,
-            message: 'Invalid or missing API key',
-            statusCode: 401,
-            isRetryable: false,
-          }),
-          {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-            statusText: 'Unauthorized',
-          },
-        );
+        return new Response(JSON.stringify({ ...errorResponse, provider: providerName }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Service Unavailable',
+        });
       }
 
       // Handle token limit errors with helpful messages

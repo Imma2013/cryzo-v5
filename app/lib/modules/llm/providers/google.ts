@@ -5,7 +5,7 @@ import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createScopedLogger } from '~/utils/logger';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
-import { getGoogleChatModels, isSupportedGoogleChatModel } from '~/lib/llm/google-catalog';
+import { getGoogleChatModels, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 import { resolveGoogleCatalog } from '~/lib/llm/google-catalog.server';
 
 const logger = createScopedLogger('google-provider');
@@ -45,8 +45,7 @@ export default class GoogleProvider extends BaseProvider {
       throw new Error(`Missing API key for ${this.name} provider`);
     }
 
-    const fallbackModel = this.staticModels[0]?.name;
-    const selectedModel = isSupportedGoogleChatModel(model) ? model : fallbackModel;
+    const selectedModel = normalizeGoogleChatModel(model);
 
     if (!selectedModel) {
       throw new Error('No supported Google chat models are configured.');

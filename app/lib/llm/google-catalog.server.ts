@@ -98,11 +98,11 @@ export async function resolveGoogleCatalog(apiKey?: string): Promise<GoogleResol
     const models = Array.isArray(payload.models) ? payload.models.filter(supportsGenerateContent) : [];
     const modelMap = new Map(models.map((model) => [normalizeGoogleModelName(model), model]));
 
-    const chatModels = CURATED_CHAT_MODELS.filter((model) => modelMap.has(model.name)).map((model) =>
-      mapChatModel(modelMap.get(model.name)!, model),
+    const chatModels = CURATED_CHAT_MODELS.map((model) =>
+      modelMap.has(model.name) ? mapChatModel(modelMap.get(model.name)!, model) : model,
     );
-    const imageModels = CURATED_IMAGE_MODELS.filter((model) => modelMap.has(model.id)).map((model) =>
-      mapImageModel(modelMap.get(model.id)!, model),
+    const imageModels = CURATED_IMAGE_MODELS.map((model) =>
+      modelMap.has(model.id) ? mapImageModel(modelMap.get(model.id)!, model) : model,
     );
 
     if (chatModels.length === 0 && imageModels.length === 0) {
