@@ -1585,9 +1585,9 @@ export async function streamText(props: {
         });
       }
 
-      if (provider.name === 'Google' && hasTools) {
+      if (provider.name === 'Google') {
         logger.warn(
-          'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
+          'google-compat: Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
         );
 
         const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {

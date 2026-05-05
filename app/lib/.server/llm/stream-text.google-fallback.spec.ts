@@ -1,4 +1,4 @@
-import { generateText, parseDataStreamPart } from 'ai';
+import { generateText, parseDataStreamPart, streamText as nativeStreamText } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('ai', async () => {
@@ -7,16 +7,19 @@ vi.mock('ai', async () => {
   return {
     ...actual,
     generateText: vi.fn(),
+    streamText: vi.fn(),
   };
 });
 
-import { createGoogleGenerateFallbackResult } from './stream-text';
+import { createGoogleGenerateFallbackResult, streamText as streamTextUnderTest } from './stream-text';
 
 describe('createGoogleGenerateFallbackResult', () => {
   const mockedGenerateText = vi.mocked(generateText);
+  const mockedNativeStreamText = vi.mocked(nativeStreamText);
 
   beforeEach(() => {
     mockedGenerateText.mockReset();
+    mockedNativeStreamText.mockReset();
   });
 
   it('packages Google generateText output into the chat data-stream format', async () => {
@@ -351,4 +354,57 @@ describe('createGoogleGenerateFallbackResult', () => {
       },
     ]);
   });
+
+  it('routes normal Google discuss requests through generateText compatibility packaging', async () => {
+    mockedGenerateText.mockResolvedValue({
+      files: [],
+      finishReason: 'stop',
+      providerMetadata: {},
+      reasoning: [],
+      request: { body: '{}' },
+      response: { id: 'resp-discuss' },
+      sources: [],
+      steps: [],
+      text: 'hello from compat',
+      toolCalls: [],
+      toolResults: [],
+      usage: {
+        completionTokens: 3,
+        promptTokens: 4,
+        totalTokens: 7,
+      },
+      warnings: [],
+    } as any);
+
+    const result = await streamTextUnderTest({
+      chatMode: 'discuss',
+      env: {
+        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    expect(mockedNativeStreamText).not.toHaveBeenCalled();
+    expect(mockedGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockedGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          {
+            content: 'hello',
+            role: 'user',
+          },
+        ],
+        tools: {},
+      }),
+    );
+
+    expect(await new Response(result.textStream).text()).toBe('hello from compat');
+  });
+
 });
