@@ -62,6 +62,42 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
+function logTiming(event: string, startedAt: number, details: Record<string, unknown> = {}) {
+  logger.info(
+    event,
+    JSON.stringify({
+      ...details,
+      elapsedMs: Date.now() - startedAt,
+    }),
+  );
+}
+
+function withFirstOutputTiming<T extends Record<string, any>>(result: T, details: Record<string, unknown>): T {
+  if (typeof result.mergeIntoDataStream !== 'function') {
+    return result;
+  }
+
+  const originalMergeIntoDataStream = result.mergeIntoDataStream.bind(result);
+  const startedAt = Date.now();
+  let firstOutputLogged = false;
+
+  (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
+    return originalMergeIntoDataStream({
+      ...(writer as any),
+      write(chunk: string) {
+        if (!firstOutputLogged && chunk.length > 0) {
+          firstOutputLogged = true;
+          logTiming('First chat stream output', startedAt, details);
+        }
+
+        writer.write(chunk);
+      },
+    });
+  };
+
+  return result;
+}
+
 function getAuthorPrompt(messages: Omit<Message, 'id'>[]) {
   return messages
     .filter(
@@ -1411,7 +1447,19 @@ export async function streamText(props: {
   let lastError: any;
 
   for (const modelName of modelsToTry) {
+    const attemptStartedAt = Date.now();
+
     try {
+      logger.info(
+        'Starting Gemini response attempt',
+        JSON.stringify({
+          assistantMode,
+          hasTools,
+          model: modelName,
+          qualityPass: assistantMode === 'build' && Boolean(selectedPrimaryReference && compiledReferenceBrief),
+        }),
+      );
+
       streamParams.model = provider.getModelInstance({
         model: modelName,
         serverEnv,
@@ -1419,7 +1467,7 @@ export async function streamText(props: {
         providerSettings,
       });
 
-      if (assistantMode === 'build') {
+      if (assistantMode === 'build' && selectedPrimaryReference && compiledReferenceBrief) {
         const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
           onFinish?: StreamingOptions['onFinish'];
         };
@@ -1429,32 +1477,41 @@ export async function streamText(props: {
         let layoutPlanDegraded = false;
         let firstDraftSystemPrompt = String(nonStreamingStreamParams.system);
 
-        if (selectedPrimaryReference && compiledReferenceBrief) {
-          try {
-            const layoutPlan = await buildLockedLayoutPlan({
-              executionPacket: compiledReferenceBrief,
-              primaryReference: selectedPrimaryReference,
-              userPrompt: latestUserPrompt,
-              model: nonStreamingStreamParams.model,
-              isReasoning,
-            });
+        try {
+          const phaseStartedAt = Date.now();
+          const layoutPlan = await buildLockedLayoutPlan({
+            executionPacket: compiledReferenceBrief,
+            primaryReference: selectedPrimaryReference,
+            userPrompt: latestUserPrompt,
+            model: nonStreamingStreamParams.model,
+            isReasoning,
+          });
 
-            if (layoutPlan) {
-              layoutPlanBlock = buildDesignLayoutPlanBlock(layoutPlan);
-              firstDraftSystemPrompt = `${firstDraftSystemPrompt}\n\n${layoutPlanBlock}`;
-              layoutPlanGenerated = true;
-            } else {
-              layoutPlanDegraded = true;
-            }
-          } catch (error) {
+          logTiming('Build layout-plan generation finished', phaseStartedAt, {
+            model: modelName,
+            primary: selectedPrimaryReference.slug,
+          });
+
+          if (layoutPlan) {
+            layoutPlanBlock = buildDesignLayoutPlanBlock(layoutPlan);
+            firstDraftSystemPrompt = `${firstDraftSystemPrompt}\n\n${layoutPlanBlock}`;
+            layoutPlanGenerated = true;
+          } else {
             layoutPlanDegraded = true;
-            logger.warn(`Build layout-plan generation degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
           }
+        } catch (error) {
+          layoutPlanDegraded = true;
+          logger.warn(`Build layout-plan generation degraded for ${selectedPrimaryReference.slug}: ${String(error)}`);
         }
 
+        const firstDraftStartedAt = Date.now();
         const firstDraft = await generateText({
           ...nonStreamingStreamParams,
           system: firstDraftSystemPrompt,
+        });
+        logTiming('Build first draft generation finished', firstDraftStartedAt, {
+          model: modelName,
+          primary: selectedPrimaryReference.slug,
         });
         assertUsableGenerateTextOutput(firstDraft, modelName);
         let finalDraft = firstDraft;
@@ -1462,8 +1519,9 @@ export async function streamText(props: {
         let auditRetryCount = 0;
         let auditDegraded = false;
 
-        if (selectedPrimaryReference && compiledReferenceBrief && firstDraft.text?.trim()) {
+        if (firstDraft.text?.trim()) {
           try {
+            const auditStartedAt = Date.now();
             const audit = await auditBuildDraft({
               generatedText: firstDraft.text,
               executionPacket: compiledReferenceBrief,
@@ -1474,15 +1532,24 @@ export async function streamText(props: {
               model: nonStreamingStreamParams.model,
               isReasoning,
             });
+            logTiming('Build design audit finished', auditStartedAt, {
+              model: modelName,
+              primary: selectedPrimaryReference.slug,
+            });
 
             if (audit) {
               auditVerdict = audit.verdict;
 
               if (audit.verdict === 'retry' && audit.critique.length > 0) {
                 auditRetryCount = 1;
+                const retryStartedAt = Date.now();
                 finalDraft = await generateText({
                   ...nonStreamingStreamParams,
                   system: appendRetryAuditBlock(firstDraftSystemPrompt, audit.critique),
+                });
+                logTiming('Build audit retry generation finished', retryStartedAt, {
+                  model: modelName,
+                  primary: selectedPrimaryReference.slug,
                 });
                 assertUsableGenerateTextOutput(finalDraft, modelName);
               }
@@ -1501,13 +1568,24 @@ export async function streamText(props: {
           `Build design audit diagnostics: primary=${selectedPrimaryReference?.slug ?? 'none'} layoutPlan=${layoutPlanGenerated ? 'yes' : 'no'} layoutPlanDegraded=${layoutPlanDegraded ? 'yes' : 'no'} verdict=${auditVerdict} retryCount=${auditRetryCount} degraded=${auditDegraded ? 'yes' : 'no'}`,
         );
 
-        return createGenerateTextCompatResult({
+        const result = createGenerateTextCompatResult({
           result: finalDraft,
           onFinish,
         });
+
+        logTiming('Build quality-pass response ready', attemptStartedAt, {
+          model: modelName,
+          primary: selectedPrimaryReference.slug,
+        });
+
+        return withFirstOutputTiming(result, {
+          assistantMode,
+          model: modelName,
+          path: 'build-quality-pass',
+        });
       }
 
-      if (provider.name === 'Google') {
+      if (provider.name === 'Google' && hasTools) {
         logger.warn(
           'Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
         );
@@ -1516,13 +1594,35 @@ export async function streamText(props: {
           onFinish?: StreamingOptions['onFinish'];
         };
 
-        return await createGenerateTextCompatResultFromParams({
+        const result = await createGenerateTextCompatResultFromParams({
           onFinish,
           streamParams: nonStreamingStreamParams,
         });
+
+        logTiming('Gemini compatibility response ready', attemptStartedAt, {
+          assistantMode,
+          model: modelName,
+        });
+
+        return withFirstOutputTiming(result, {
+          assistantMode,
+          model: modelName,
+          path: 'google-compat',
+        });
       }
 
-      return await _streamText(streamParams);
+      const result = await _streamText(streamParams);
+      logTiming('Native streaming response initialized', attemptStartedAt, {
+        assistantMode,
+        model: modelName,
+        provider: provider.name,
+      });
+
+      return withFirstOutputTiming(result, {
+        assistantMode,
+        model: modelName,
+        path: provider.name === 'Google' ? 'google-native' : 'native',
+      });
     } catch (error) {
       lastError = error;
       logger.warn(`Model ${modelName} failed, trying next model if available. Error: ${error}`);

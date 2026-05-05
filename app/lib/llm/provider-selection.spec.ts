@@ -12,6 +12,7 @@ const providers: ProviderInfo[] = [
 const modelList: ModelInfo[] = [
   { name: 'gpt-5', label: 'GPT 5', provider: 'OpenAI', maxTokenAllowed: 400000 },
   { name: 'gpt-4.1', label: 'GPT 4.1', provider: 'OpenAI', maxTokenAllowed: 128000 },
+  { name: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', provider: 'Google', maxTokenAllowed: 1048576 },
   { name: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', provider: 'Google', maxTokenAllowed: 1048576 },
 ];
 
@@ -57,7 +58,7 @@ describe('resolveProviderModelSelection', () => {
       savedModel: 'gpt-5',
     });
 
-    expect(result).toBe('gemini-3.1-pro-preview');
+    expect(result).toBe('gemini-3-flash-preview');
   });
 
   it('ignores synced non-Google models', () => {
@@ -69,6 +70,6 @@ describe('resolveProviderModelSelection', () => {
       savedModel: 'gpt-4.1',
     });
 
-    expect(result).toBe('gemini-3.1-pro-preview');
+    expect(result).toBe('gemini-3-flash-preview');
   });
 });

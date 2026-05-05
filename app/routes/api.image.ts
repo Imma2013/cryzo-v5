@@ -1,6 +1,10 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
-import { isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
+import {
+  buildGoogleImageQuotaErrorPayload,
+  isGoogleQuotaError,
+} from '~/lib/llm/google-image-errors';
+import { isSupportedGoogleImageModel, normalizeGoogleImageModel } from '~/lib/llm/google-catalog';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { withSecurity } from '~/lib/security';
@@ -20,19 +24,6 @@ type ImageInput = {
   data?: string;
   mimeType: string;
 };
-
-const DEFAULT_IMAGE_MODEL = 'gemini-2.5-flash-image';
-const IMAGE_MODEL_ALIASES: Record<string, string> = {
-  'gemini-3.1-flash-image-preview': DEFAULT_IMAGE_MODEL,
-};
-
-function normalizeImageModel(model?: string) {
-  if (!model?.trim()) {
-    return DEFAULT_IMAGE_MODEL;
-  }
-
-  return IMAGE_MODEL_ALIASES[model] || model;
-}
 
 function buildImageParts(prompt: string, inputs: ImageInput[] = []) {
   return [
@@ -111,7 +102,7 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
     return jsonResponse({ message: 'Image edit actions require at least one input image.' }, 400, responseHeaders);
   }
 
-  const selectedModel = normalizeImageModel(model);
+  const selectedModel = normalizeGoogleImageModel(model);
 
   if (!isSupportedGoogleImageModel(selectedModel)) {
     return jsonResponse(
@@ -150,7 +141,7 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
   );
 
   const result = (await response.json()) as {
-    error?: { message?: string };
+    error?: { code?: number; details?: Array<Record<string, unknown>>; message?: string; status?: string };
     promptFeedback?: { blockReason?: string };
     candidates?: Array<{
       finishReason?: string;
@@ -161,6 +152,18 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
   };
 
   if (!response.ok) {
+    if (isGoogleQuotaError(response.status, result.error)) {
+      return jsonResponse(
+        buildGoogleImageQuotaErrorPayload({
+          error: result.error,
+          model: selectedModel,
+          retryAfterHeader: response.headers.get('Retry-After'),
+        }),
+        response.status,
+        responseHeaders,
+      );
+    }
+
     return jsonResponse(
       {
         message: result.error?.message || 'Google image generation request failed.',

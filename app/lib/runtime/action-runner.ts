@@ -436,9 +436,11 @@ export class ActionRunner {
       logger.error(`[${action.type}]:Action failed\n\n`, error);
 
       if (action.type === 'image') {
+        const errorType = error instanceof Error ? (error as Error & { errorType?: string }).errorType : undefined;
+
         this.onAlert?.({
           type: 'error',
-          title: 'Image Generation Failed',
+          title: errorType === 'quota' ? 'Google Image Quota Exceeded' : 'Image Generation Failed',
           description: error instanceof Error ? error.message : 'Image generation failed',
           content: action.filePath,
           source: 'preview',
@@ -656,9 +658,24 @@ export class ActionRunner {
     });
 
     if (!response.ok) {
-      const error = (await response.json().catch(() => null)) as { message?: string; providerError?: string } | null;
-      const errorMessage = [error?.message, error?.providerError].filter(Boolean).join(' ');
-      throw new Error(errorMessage || 'Image generation failed');
+      const error = (await response.json().catch(() => null)) as {
+        errorType?: string;
+        message?: string;
+        providerError?: string;
+        retryAfterSeconds?: number;
+      } | null;
+      const errorMessage =
+        error?.errorType === 'quota'
+          ? error.message
+          : [error?.message, error?.providerError].filter(Boolean).join(' ');
+      const thrownError = new Error(errorMessage || 'Image generation failed') as Error & {
+        errorType?: string;
+        retryAfterSeconds?: number;
+      };
+
+      thrownError.errorType = error?.errorType;
+      thrownError.retryAfterSeconds = error?.retryAfterSeconds;
+      throw thrownError;
     }
 
     const payload = (await response.json()) as {

@@ -5,13 +5,15 @@ import {
   getGoogleImageModels,
   isSupportedGoogleChatModel,
   isSupportedGoogleImageModel,
+  normalizeGoogleChatModel,
+  normalizeGoogleImageModel,
 } from './google-catalog';
 
 describe('google-catalog', () => {
   it('returns the curated Gemini chat models', () => {
     expect(getGoogleChatModels().map((model) => model.name)).toEqual([
-      'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
+      'gemini-3.1-pro-preview',
       'gemini-2.5-pro',
       'gemini-2.5-flash',
     ]);
@@ -31,5 +33,12 @@ describe('google-catalog', () => {
     expect(isSupportedGoogleImageModel('gemini-2.5-flash-image')).toBe(true);
     expect(isSupportedGoogleImageModel('gemini-3.1-flash-image-preview')).toBe(false);
     expect(isSupportedGoogleImageModel(undefined)).toBe(false);
+  });
+
+  it('uses Gemini Flash first for chat fallback and normalizes stale image aliases', () => {
+    expect(normalizeGoogleChatModel(undefined)).toBe('gemini-3-flash-preview');
+    expect(normalizeGoogleImageModel('gemini-2.5-flash-preview-image')).toBe('gemini-2.5-flash-image');
+    expect(normalizeGoogleImageModel('gemini-3.1-flash-image-preview')).toBe('gemini-2.5-flash-image');
+    expect(normalizeGoogleImageModel('unknown-image-model')).toBe('unknown-image-model');
   });
 });

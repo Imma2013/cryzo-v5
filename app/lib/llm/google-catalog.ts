@@ -9,15 +9,15 @@ export type GoogleImageModelInfo = {
 
 const GOOGLE_CHAT_MODELS: readonly ModelInfo[] = [
   {
-    name: 'gemini-3.1-pro-preview',
-    label: 'Gemini 3.1 Pro (Preview)',
+    name: 'gemini-3-flash-preview',
+    label: 'Gemini 3 Flash (Preview)',
     provider: 'Google',
     maxTokenAllowed: 1048576,
     maxCompletionTokens: 65535,
   },
   {
-    name: 'gemini-3-flash-preview',
-    label: 'Gemini 3 Flash (Preview)',
+    name: 'gemini-3.1-pro-preview',
+    label: 'Gemini 3.1 Pro (Preview)',
     provider: 'Google',
     maxTokenAllowed: 1048576,
     maxCompletionTokens: 65535,
@@ -54,6 +54,11 @@ const GOOGLE_IMAGE_MODELS: readonly GoogleImageModelInfo[] = [
   },
 ] as const;
 
+const GOOGLE_IMAGE_MODEL_ALIASES: Readonly<Record<string, GoogleImageModelInfo['id']>> = {
+  'gemini-2.5-flash-preview-image': 'gemini-2.5-flash-image',
+  'gemini-3.1-flash-image-preview': 'gemini-2.5-flash-image',
+};
+
 export function getGoogleChatModels(): ModelInfo[] {
   return GOOGLE_CHAT_MODELS.map((model) => ({ ...model }));
 }
@@ -76,6 +81,16 @@ export function getGoogleImageModels(): GoogleImageModelInfo[] {
 
 export function isSupportedGoogleImageModel(model: string | undefined): model is GoogleImageModelInfo['id'] {
   return Boolean(model && GOOGLE_IMAGE_MODELS.some((entry) => entry.id === model));
+}
+
+export function normalizeGoogleImageModel(model: string | undefined): GoogleImageModelInfo['id'] | string {
+  const trimmedModel = model?.trim();
+
+  if (!trimmedModel) {
+    return getDefaultGoogleImageModel().id;
+  }
+
+  return GOOGLE_IMAGE_MODEL_ALIASES[trimmedModel] || trimmedModel;
 }
 
 export function getDefaultGoogleImageModel(): GoogleImageModelInfo {

@@ -8,13 +8,13 @@ describe('resolveGoogleCatalog', () => {
       json: async () => ({
         models: [
           {
-            name: 'models/gemini-3.1-pro-preview',
+            name: 'models/gemini-3-flash-preview',
             inputTokenLimit: 1048576,
             outputTokenLimit: 65535,
             supportedGenerationMethods: ['generateContent'],
           },
           {
-            name: 'models/gemini-3-flash-preview',
+            name: 'models/gemini-3.1-pro-preview',
             inputTokenLimit: 1048576,
             outputTokenLimit: 65535,
             supportedGenerationMethods: ['generateContent'],
@@ -51,8 +51,8 @@ describe('resolveGoogleCatalog', () => {
 
     expect(catalog.catalogSource).toBe('live');
     expect(catalog.chatModels.map((model) => model.name)).toEqual([
-      'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
+      'gemini-3.1-pro-preview',
       'gemini-2.5-pro',
       'gemini-2.5-flash',
     ]);
@@ -71,8 +71,8 @@ describe('resolveGoogleCatalog', () => {
 
     expect(catalog.catalogSource).toBe('fallback');
     expect(catalog.chatModels.map((model) => model.name)).toEqual([
-      'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
+      'gemini-3.1-pro-preview',
       'gemini-2.5-pro',
       'gemini-2.5-flash',
     ]);

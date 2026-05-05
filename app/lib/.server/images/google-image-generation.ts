@@ -1,6 +1,14 @@
 import { generateId } from 'ai';
 import { storeGeneratedImage } from './generated-image-store';
-import { getDefaultGoogleImageModel, isSupportedGoogleImageModel } from '~/lib/llm/google-catalog';
+import {
+  isSupportedGoogleImageModel,
+  normalizeGoogleImageModel,
+} from '~/lib/llm/google-catalog';
+import {
+  buildGoogleImageQuotaErrorPayload,
+  GoogleImageQuotaError,
+  isGoogleQuotaError,
+} from '~/lib/llm/google-image-errors';
 
 type ImageReference = {
   dataUrl: string;
@@ -52,11 +60,12 @@ export async function generateGoogleImage({
     throw new Error('Prompt is required.');
   }
 
-  if (model && !isSupportedGoogleImageModel(model)) {
-    throw new Error(`Unsupported Google image model: ${model}`);
+  const selectedModel = normalizeGoogleImageModel(model);
+
+  if (!isSupportedGoogleImageModel(selectedModel)) {
+    throw new Error(`Unsupported Google image model: ${selectedModel}`);
   }
 
-  const selectedModel = model || getDefaultGoogleImageModel().id;
   const parts: Array<Record<string, unknown>> = [];
 
   for (const reference of references) {
@@ -111,11 +120,25 @@ export async function generateGoogleImage({
       };
     }>;
     error?: {
+      code?: number;
+      details?: Array<Record<string, unknown>>;
       message?: string;
+      status?: string;
     };
   };
 
   if (!response.ok) {
+    if (isGoogleQuotaError(response.status, result.error)) {
+      throw new GoogleImageQuotaError(
+        buildGoogleImageQuotaErrorPayload({
+          error: result.error,
+          model: selectedModel,
+          retryAfterHeader: response.headers.get('Retry-After'),
+        }),
+        response.status,
+      );
+    }
+
     throw new Error(result.error?.message || 'Google image generation failed.');
   }
 
