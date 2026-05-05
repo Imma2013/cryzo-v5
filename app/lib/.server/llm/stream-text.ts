@@ -1307,7 +1307,7 @@ export async function streamText(props: {
       - Stock-photo URLs are invalid output unless the user explicitly asks for stock photography.
       - Never emit URLs from Unsplash, Pexels, or similar stock-photo sources in generated files.
       - When the design materially benefits from real imagery, emit dedicated \`<boltAction type="image" ...>\` actions to generate project-local assets instead of using stock-photo URLs.
-      - Use \`gemini-2.5-flash-image\` as the standard automatic image model for both generation and edits.
+      - Use \`gemini-3.1-flash-image-preview\` as the standard automatic image model for both generation and edits.
       - Save generated assets at stable project paths under \`public/images/\` or \`public/assets/\`, then reference those files from the app code.
     </image_enforcement>`;
   }

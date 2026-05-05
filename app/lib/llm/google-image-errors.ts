@@ -80,6 +80,28 @@ export function isGoogleQuotaError(status: number, error?: GoogleProviderError) 
   return status === 429 || statusText.includes('quota') || message.includes('quota');
 }
 
+export function isGoogleImageRetryableProviderError(status: number, error?: GoogleProviderError) {
+  if (isGoogleQuotaError(status, error)) {
+    return true;
+  }
+
+  const message = error?.message?.toLowerCase() || '';
+  const statusText = error?.status?.toLowerCase() || '';
+  const text = `${statusText} ${message}`;
+
+  return (
+    status === 503 ||
+    text.includes('billing') ||
+    text.includes('resource exhausted') ||
+    text.includes('unavailable') ||
+    text.includes('not available') ||
+    text.includes('not enabled') ||
+    text.includes('unsupported') ||
+    text.includes('not supported') ||
+    (text.includes('not found') && text.includes('model'))
+  );
+}
+
 export function buildGoogleImageQuotaErrorPayload({
   error,
   model,
@@ -100,7 +122,7 @@ export function buildGoogleImageQuotaErrorPayload({
     error: true,
     errorType: 'quota',
     message:
-      `Google image generation quota or billing is blocking ${model}. Check the Google AI Studio quota/billing settings for the API key, or wait for quota to reset before retrying.` +
+      `Google image generation quota, billing, or model availability is blocking ${model}. Check the Google AI Studio quota/billing settings for the API key, verify the model is available, or wait for quota to reset before retrying.` +
       retryMessage,
     model,
     provider: 'Google',

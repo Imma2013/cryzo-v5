@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGoogleImageQuotaErrorPayload,
+  isGoogleImageRetryableProviderError,
   isGoogleQuotaError,
   parseGoogleRetryAfterSeconds,
 } from './google-image-errors';
@@ -34,5 +35,15 @@ describe('google image errors', () => {
 
   it('treats Google 429 as quota even when the provider message is vague', () => {
     expect(isGoogleQuotaError(429, { message: 'Resource exhausted' })).toBe(true);
+  });
+
+  it('treats model availability and billing failures as retryable image provider errors', () => {
+    expect(
+      isGoogleImageRetryableProviderError(404, {
+        message: 'models/gemini-3.1-flash-image-preview is not found or is not supported for generateContent',
+      }),
+    ).toBe(true);
+    expect(isGoogleImageRetryableProviderError(403, { message: 'Billing is not enabled for this project.' })).toBe(true);
+    expect(isGoogleImageRetryableProviderError(503, { message: 'The model is temporarily unavailable.' })).toBe(true);
   });
 });

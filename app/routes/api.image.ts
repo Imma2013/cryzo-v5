@@ -2,9 +2,14 @@ import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import {
   buildGoogleImageQuotaErrorPayload,
-  isGoogleQuotaError,
+  isGoogleImageRetryableProviderError,
 } from '~/lib/llm/google-image-errors';
-import { isSupportedGoogleImageModel, normalizeGoogleImageModel } from '~/lib/llm/google-catalog';
+import {
+  DEFAULT_GOOGLE_IMAGE_MODEL_ID,
+  GOOGLE_IMAGE_FALLBACK_MODEL_ID,
+  isSupportedGoogleImageModel,
+  normalizeGoogleImageModel,
+} from '~/lib/llm/google-catalog';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { withSecurity } from '~/lib/security';
@@ -114,94 +119,105 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
     );
   }
 
-  const payload = {
-    contents: [
+  const modelsToTry =
+    selectedModel === DEFAULT_GOOGLE_IMAGE_MODEL_ID ? [selectedModel, GOOGLE_IMAGE_FALLBACK_MODEL_ID] : [selectedModel];
+
+  for (const modelToUse of modelsToTry) {
+    const payload = {
+      contents: [
+        {
+          parts: buildImageParts(prompt, inputs),
+        },
+      ],
+      generationConfig: {
+        responseModalities: ['Image'],
+        imageConfig: {
+          ...(aspectRatio ? { aspectRatio } : {}),
+        },
+      },
+    };
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`,
       {
-        parts: buildImageParts(prompt, inputs),
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': googleKeyResolution.key,
+        },
+        body: JSON.stringify(payload),
       },
-    ],
-    generationConfig: {
-      responseModalities: ['Image'],
-      imageConfig: {
-        ...(aspectRatio ? { aspectRatio } : {}),
-      },
-    },
-  };
+    );
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': googleKeyResolution.key,
-      },
-      body: JSON.stringify(payload),
-    },
-  );
+    const result = (await response.json()) as {
+      error?: { code?: number; details?: Array<Record<string, unknown>>; message?: string; status?: string };
+      promptFeedback?: { blockReason?: string };
+      candidates?: Array<{
+        finishReason?: string;
+        content?: {
+          parts?: GeminiPart[];
+        };
+      }>;
+    };
 
-  const result = (await response.json()) as {
-    error?: { code?: number; details?: Array<Record<string, unknown>>; message?: string; status?: string };
-    promptFeedback?: { blockReason?: string };
-    candidates?: Array<{
-      finishReason?: string;
-      content?: {
-        parts?: GeminiPart[];
-      };
-    }>;
-  };
+    if (!response.ok) {
+      if (isGoogleImageRetryableProviderError(response.status, result.error)) {
+        if (modelToUse === DEFAULT_GOOGLE_IMAGE_MODEL_ID) {
+          continue;
+        }
 
-  if (!response.ok) {
-    if (isGoogleQuotaError(response.status, result.error)) {
+        return jsonResponse(
+          buildGoogleImageQuotaErrorPayload({
+            error: result.error,
+            model: modelToUse,
+            retryAfterHeader: response.headers.get('Retry-After'),
+          }),
+          response.status,
+          responseHeaders,
+        );
+      }
+
       return jsonResponse(
-        buildGoogleImageQuotaErrorPayload({
-          error: result.error,
-          model: selectedModel,
-          retryAfterHeader: response.headers.get('Retry-After'),
-        }),
+        {
+          message: result.error?.message || 'Google image generation request failed.',
+          providerError: result.error?.message,
+        },
         response.status,
+        responseHeaders,
+      );
+    }
+
+    const imagePart = result.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => {
+      return Boolean(part.inlineData?.data);
+    });
+
+    if (!imagePart?.inlineData?.data) {
+      const providerError =
+        result.promptFeedback?.blockReason || result.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
+
+      return jsonResponse(
+        {
+          message: providerError ? `The model did not return an image (${providerError}).` : 'The model did not return an image.',
+          providerError,
+        },
+        502,
         responseHeaders,
       );
     }
 
     return jsonResponse(
       {
-        message: result.error?.message || 'Google image generation request failed.',
-        providerError: result.error?.message,
+        imageBase64: imagePart.inlineData.data,
+        mimeType: imagePart.inlineData.mimeType || 'image/png',
+        model: modelToUse,
+        operation,
       },
-      response.status,
+      200,
       responseHeaders,
     );
   }
 
-  const imagePart = result.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => {
-    return Boolean(part.inlineData?.data);
-  });
-
-  if (!imagePart?.inlineData?.data) {
-    const providerError =
-      result.promptFeedback?.blockReason || result.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
-
-    return jsonResponse(
-      {
-        message: providerError ? `The model did not return an image (${providerError}).` : 'The model did not return an image.',
-        providerError,
-      },
-      502,
-      responseHeaders,
-    );
-  }
-
-  return jsonResponse(
-    {
-      imageBase64: imagePart.inlineData.data,
-      mimeType: imagePart.inlineData.mimeType || 'image/png',
-      model: selectedModel,
-      operation,
-    },
-    200,
-    responseHeaders,
-  );
+  return jsonResponse({ message: 'Google image generation request failed.' }, 502, responseHeaders);
 }
 
 export const action = withSecurity(imageAction, {

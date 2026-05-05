@@ -21,24 +21,25 @@ describe('google-catalog', () => {
 
   it('returns the curated Nano Banana models and default', () => {
     expect(getGoogleImageModels().map((model) => model.id)).toEqual([
-      'gemini-2.5-flash-image',
+      'gemini-3.1-flash-image-preview',
       'gemini-3-pro-image-preview',
+      'gemini-2.5-flash-image',
     ]);
-    expect(getDefaultGoogleImageModel().id).toBe('gemini-2.5-flash-image');
+    expect(getDefaultGoogleImageModel().id).toBe('gemini-3.1-flash-image-preview');
   });
 
   it('validates supported Google image models', () => {
     expect(isSupportedGoogleChatModel('gemini-3.1-pro-preview')).toBe(true);
     expect(isSupportedGoogleChatModel('gemini-1.5-pro')).toBe(false);
     expect(isSupportedGoogleImageModel('gemini-2.5-flash-image')).toBe(true);
-    expect(isSupportedGoogleImageModel('gemini-3.1-flash-image-preview')).toBe(false);
+    expect(isSupportedGoogleImageModel('gemini-3.1-flash-image-preview')).toBe(true);
     expect(isSupportedGoogleImageModel(undefined)).toBe(false);
   });
 
   it('uses Gemini Flash first for chat fallback and normalizes stale image aliases', () => {
     expect(normalizeGoogleChatModel(undefined)).toBe('gemini-3-flash-preview');
     expect(normalizeGoogleImageModel('gemini-2.5-flash-preview-image')).toBe('gemini-2.5-flash-image');
-    expect(normalizeGoogleImageModel('gemini-3.1-flash-image-preview')).toBe('gemini-2.5-flash-image');
+    expect(normalizeGoogleImageModel('gemini-3.1-flash-image-preview')).toBe('gemini-3.1-flash-image-preview');
     expect(normalizeGoogleImageModel('unknown-image-model')).toBe('unknown-image-model');
   });
 });

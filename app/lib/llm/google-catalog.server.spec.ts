@@ -32,6 +32,10 @@ describe('resolveGoogleCatalog', () => {
             supportedGenerationMethods: ['generateContent'],
           },
           {
+            name: 'models/gemini-3.1-flash-image-preview',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
             name: 'models/gemini-2.5-flash-image',
             supportedGenerationMethods: ['generateContent'],
           },
@@ -57,8 +61,9 @@ describe('resolveGoogleCatalog', () => {
       'gemini-2.5-flash',
     ]);
     expect(catalog.imageModels.map((model) => model.id)).toEqual([
-      'gemini-2.5-flash-image',
+      'gemini-3.1-flash-image-preview',
       'gemini-3-pro-image-preview',
+      'gemini-2.5-flash-image',
     ]);
 
     fetchSpy.mockRestore();
