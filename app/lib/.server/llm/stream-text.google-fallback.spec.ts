@@ -1,6 +1,10 @@
 import { generateText, parseDataStreamPart, streamText as nativeStreamText } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const composioState = vi.hoisted(() => ({
+  getComposioTools: vi.fn(),
+}));
+
 vi.mock('ai', async () => {
   const actual = await vi.importActual<typeof import('ai')>('ai');
 
@@ -8,6 +12,12 @@ vi.mock('ai', async () => {
     ...actual,
     generateText: vi.fn(),
     streamText: vi.fn(),
+  };
+});
+
+vi.mock('./composio', () => {
+  return {
+    getComposioTools: composioState.getComposioTools,
   };
 });
 
@@ -20,6 +30,13 @@ describe('createGoogleGenerateFallbackResult', () => {
   beforeEach(() => {
     mockedGenerateText.mockReset();
     mockedNativeStreamText.mockReset();
+    composioState.getComposioTools.mockReset();
+    composioState.getComposioTools.mockResolvedValue({
+      configured: false,
+      hasIdentity: false,
+      status: 'disabled',
+      tools: {},
+    });
   });
 
   it('packages Google generateText output into the chat data-stream format', async () => {
@@ -403,8 +420,85 @@ describe('createGoogleGenerateFallbackResult', () => {
         tools: {},
       }),
     );
+    expect(composioState.getComposioTools).not.toHaveBeenCalled();
 
     expect(await new Response(result.textStream).text()).toBe('hello from compat');
+  });
+
+  it('injects Composio session tools into Google requests for external app prompts', async () => {
+    const composioTools = {
+      COMPOSIO_SEARCH_TOOLS: {
+        description: 'Search Composio tools',
+      },
+    };
+
+    composioState.getComposioTools.mockResolvedValue({
+      configured: true,
+      hasIdentity: true,
+      resolvedUserId: 'user_123',
+      status: 'available',
+      tools: composioTools,
+    });
+    mockedGenerateText.mockResolvedValue({
+      files: [],
+      finishReason: 'stop',
+      providerMetadata: {},
+      reasoning: [],
+      request: { body: '{}' },
+      response: { id: 'resp-tools' },
+      sources: [],
+      steps: [],
+      text: 'checking Gmail',
+      toolCalls: [],
+      toolResults: [],
+      usage: {
+        completionTokens: 3,
+        promptTokens: 4,
+        totalTokens: 7,
+      },
+      warnings: [],
+    } as any);
+
+    await streamTextUnderTest({
+      chatMode: 'discuss',
+      env: {
+        COMPOSIO_API_KEY: 'test-composio-key',
+        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+      } as any,
+      messages: [
+        {
+          content: 'Check my Gmail inbox',
+          role: 'user',
+        },
+      ],
+      options: {},
+      user: {
+        composioUserId: 'user_123',
+        hasComposioIdentity: true,
+        isAuthenticated: true,
+        uid: 'user_123',
+      },
+    });
+
+    expect(composioState.getComposioTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          COMPOSIO_API_KEY: 'test-composio-key',
+        }),
+        providerName: 'Google',
+        user: expect.objectContaining({
+          uid: 'user_123',
+        }),
+        userPrompt: 'Check my Gmail inbox',
+      }),
+    );
+    expect(mockedGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxSteps: 10,
+        toolChoice: 'required',
+        tools: composioTools,
+      }),
+    );
   });
 
 });

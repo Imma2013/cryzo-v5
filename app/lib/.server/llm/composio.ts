@@ -1,5 +1,4 @@
-import { createMCPClient } from '@ai-sdk/mcp';
-import { normalizeServerEnvValue } from '~/lib/server-env';
+import { createComposioSessionFromApiKey, resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
 
 type ComposioUserContext = {
   composioUserId?: string;
@@ -27,8 +26,7 @@ export type ComposioToolResolution = {
   status:
     | 'available'
     | 'disabled'
-    | 'missing_mcp_url'
-    | 'missing_mcp_api_key'
+    | 'missing_api_key'
     | 'unsupported_provider'
     | 'missing_identity'
     | 'resolution_failed';
@@ -60,24 +58,8 @@ function getComposioEnabled(env: ComposioToolRuntimeOptions['env']) {
   return raw !== '0' && raw.toLowerCase() !== 'false';
 }
 
-function normalizeRuntimeEnvValue(value: unknown) {
-  return normalizeServerEnvValue(typeof value === 'string' ? value : undefined);
-}
-
-function getComposioMcpApiKey(env: ComposioToolRuntimeOptions['env']) {
-  return (
-    normalizeRuntimeEnvValue((env as Record<string, string | undefined> | undefined)?.COMPOSIO_MCP_API_KEY) ??
-    normalizeRuntimeEnvValue(process.env.COMPOSIO_MCP_API_KEY) ??
-    null
-  );
-}
-
-function getComposioMcpUrl(env: ComposioToolRuntimeOptions['env']) {
-  return (
-    normalizeRuntimeEnvValue((env as Record<string, string | undefined> | undefined)?.COMPOSIO_MCP_URL) ??
-    normalizeRuntimeEnvValue(process.env.COMPOSIO_MCP_URL) ??
-    null
-  );
+function getComposioApiKey(env: ComposioToolRuntimeOptions['env']) {
+  return resolveComposioApiKeyFromEnv(env as Record<string, string | undefined> | undefined);
 }
 
 function getResolvedComposioUserId(user?: ComposioUserContext) {
@@ -93,12 +75,8 @@ function getDisabledReason({ env, providerName, user }: ComposioToolRuntimeOptio
     return 'disabled' as const;
   }
 
-  if (!getComposioMcpUrl(env)) {
-    return 'missing_mcp_url' as const;
-  }
-
-  if (!getComposioMcpApiKey(env)) {
-    return 'missing_mcp_api_key' as const;
+  if (!getComposioApiKey(env)) {
+    return 'missing_api_key' as const;
   }
 
   if (!TOOL_CAPABLE_PROVIDERS.has(providerName)) {
@@ -117,17 +95,14 @@ export function shouldEnableComposioTools({ env, providerName, user }: ComposioT
 }
 
 function isComposioRuntimeConfigured(status: ComposioToolResolution['status']) {
-  return !['disabled', 'missing_mcp_url', 'missing_mcp_api_key'].includes(status);
+  return !['disabled', 'missing_api_key'].includes(status);
 }
 
 export async function getComposioTools(options: ComposioToolRuntimeOptions): Promise<ComposioToolResolution> {
   const composioUserId = getResolvedComposioUserId(options.user);
   const disabledReason = getDisabledReason(options);
   const hasIdentity = Boolean(composioUserId);
-  const hasApiKey = Boolean(getComposioMcpApiKey(options.env));
-  const mcpUrl = getComposioMcpUrl(options.env);
-  let client: Awaited<ReturnType<typeof createMCPClient>> | undefined;
-  let cleanedUp = false;
+  const hasApiKey = Boolean(getComposioApiKey(options.env));
 
   if (disabledReason || !composioUserId) {
     console.info('[llm.composio] tools unavailable', {
@@ -148,71 +123,31 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
   }
 
   try {
-    const apiKey = getComposioMcpApiKey(options.env)!;
-    const resolvedMcpUrl = mcpUrl!;
+    const apiKey = getComposioApiKey(options.env)!;
     console.info('[llm.composio] resolving tools', {
       hasApiKey: true,
-      mcpUrl: resolvedMcpUrl,
       providerName: options.providerName,
       requestOrigin: options.requestOrigin,
       resolvedUserId: composioUserId,
       userPrompt: options.userPrompt,
     });
-    client = await createMCPClient({
-      name: 'cryzo-composio-mcp',
-      transport: {
-        type: 'http',
-        url: resolvedMcpUrl,
-        headers: {
-          'x-api-key': apiKey,
-        },
-      },
-    });
 
-    console.info('[llm.composio] mcp client created', {
-      mcpUrl: resolvedMcpUrl,
-      serverInfo: client.serverInfo,
+    const session = await createComposioSessionFromApiKey(apiKey, composioUserId);
+
+    console.info('[llm.composio] session created', {
       userId: composioUserId,
     });
 
-    const tools = await client.tools();
+    const tools = (await session.tools()) || {};
     const toolNames = Object.keys(tools || {});
 
-    console.info('[llm.composio] mcp tools resolved', {
+    console.info('[llm.composio] session tools resolved', {
       toolCount: toolNames.length,
       toolNames: toolNames.slice(0, 10),
       userId: composioUserId,
     });
 
-    const cleanup = async () => {
-      if (cleanedUp) {
-        return;
-      }
-
-      cleanedUp = true;
-      const activeClient = client;
-
-      if (!activeClient) {
-        return;
-      }
-
-      try {
-        await activeClient.close();
-        console.info('[llm.composio] mcp client closed', {
-          mcpUrl: resolvedMcpUrl,
-          userId: composioUserId,
-        });
-      } catch (closeError) {
-        console.warn('[llm.composio] failed to close mcp client', {
-          errorMessage: closeError instanceof Error ? closeError.message : String(closeError),
-          mcpUrl: resolvedMcpUrl,
-          userId: composioUserId,
-        });
-      }
-    };
-
     return {
-      cleanup,
       configured: true,
       hasIdentity: true,
       resolvedUserId: composioUserId,
@@ -221,7 +156,7 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
-    console.warn('[llm.composio] mcp tool resolution failed', {
+    console.warn('[llm.composio] session tool resolution failed', {
       errorMessage,
       hasApiKey,
       providerName: options.providerName,
@@ -230,24 +165,6 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
       userPrompt: options.userPrompt,
     });
     console.warn('Composio tools unavailable:', error);
-
-    if (client && !cleanedUp) {
-      cleanedUp = true;
-
-      try {
-        await client.close();
-        console.info('[llm.composio] mcp client closed after resolution failure', {
-          mcpUrl: mcpUrl!,
-          userId: composioUserId,
-        });
-      } catch (closeError) {
-        console.warn('[llm.composio] failed to close mcp client after resolution failure', {
-          errorMessage: closeError instanceof Error ? closeError.message : String(closeError),
-          mcpUrl: mcpUrl!,
-          userId: composioUserId,
-        });
-      }
-    }
 
     return {
       configured: true,
