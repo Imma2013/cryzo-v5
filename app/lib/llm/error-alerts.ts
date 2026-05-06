@@ -71,6 +71,46 @@ export function createLlmErrorAlert(error: unknown, fallbackProvider: string): L
     };
   }
 
+  if (parsed.errorType === 'quota' || parsed.message.toLowerCase().includes('quota')) {
+    return {
+      type: 'error',
+      title: 'Quota Exceeded',
+      description: parsed.message,
+      provider,
+      errorType: 'quota',
+    };
+  }
+
+  if (parsed.errorType === 'billing') {
+    return {
+      type: 'error',
+      title: 'Billing Required',
+      description: parsed.message,
+      provider,
+      errorType: 'billing',
+    };
+  }
+
+  if (parsed.errorType === 'model_unavailable') {
+    return {
+      type: 'error',
+      title: 'Model Unavailable',
+      description: parsed.message,
+      provider,
+      errorType: 'model_unavailable',
+    };
+  }
+
+  if (parsed.errorType === 'provider') {
+    return {
+      type: 'error',
+      title: 'Provider Error',
+      description: parsed.message,
+      provider,
+      errorType: 'provider',
+    };
+  }
+
   if (parsed.statusCode === 429 || parsed.message.toLowerCase().includes('rate limit')) {
     return {
       type: 'error',
@@ -78,16 +118,6 @@ export function createLlmErrorAlert(error: unknown, fallbackProvider: string): L
       description: parsed.message,
       provider,
       errorType: 'rate_limit',
-    };
-  }
-
-  if (parsed.message.toLowerCase().includes('quota')) {
-    return {
-      type: 'error',
-      title: 'Quota Exceeded',
-      description: parsed.message,
-      provider,
-      errorType: 'quota',
     };
   }
 

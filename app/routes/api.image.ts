@@ -1,9 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
-import {
-  buildGoogleImageQuotaErrorPayload,
-  isGoogleImageRetryableProviderError,
-} from '~/lib/llm/google-image-errors';
+import { buildGoogleImageProviderErrorPayload } from '~/lib/llm/google-image-errors';
+import { getGoogleApiKeyFingerprint, logGoogleImageProviderFailure } from '~/lib/llm/google-image-diagnostics';
 import {
   DEFAULT_GOOGLE_IMAGE_MODEL_ID,
   isSupportedGoogleImageModel,
@@ -119,6 +117,7 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
   }
 
   const modelToUse = DEFAULT_GOOGLE_IMAGE_MODEL_ID;
+  const keyFingerprint = await getGoogleApiKeyFingerprint(googleKeyResolution.key);
   const payload = {
     contents: [
       {
@@ -154,23 +153,27 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
   };
 
   if (!response.ok) {
-    if (isGoogleImageRetryableProviderError(response.status, result.error)) {
-      return jsonResponse(
-        buildGoogleImageQuotaErrorPayload({
-          error: result.error,
-          model: modelToUse,
-          retryAfterHeader: response.headers.get('Retry-After'),
-        }),
-        response.status,
-        responseHeaders,
-      );
-    }
+    const retryAfterHeader = response.headers.get('Retry-After');
+
+    logGoogleImageProviderFailure({
+      context: 'api.image',
+      error: result.error,
+      keyFingerprint,
+      keySource: googleKeyResolution.source,
+      model: modelToUse,
+      retryAfterHeader,
+      status: response.status,
+    });
 
     return jsonResponse(
-      {
-        message: result.error?.message || 'Google image generation request failed.',
-        providerError: result.error?.message,
-      },
+      buildGoogleImageProviderErrorPayload({
+        error: result.error,
+        keyFingerprint,
+        keySource: googleKeyResolution.source,
+        model: modelToUse,
+        retryAfterHeader,
+        status: response.status,
+      }),
       response.status,
       responseHeaders,
     );

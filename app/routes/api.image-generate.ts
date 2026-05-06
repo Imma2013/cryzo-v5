@@ -1,7 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { generateGoogleImage } from '~/lib/.server/images/google-image-generation';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
-import { GoogleImageQuotaError } from '~/lib/llm/google-image-errors';
+import { GoogleImageProviderError } from '~/lib/llm/google-image-errors';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { getServerEnv } from '~/lib/server-env';
@@ -66,6 +66,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
       apiKey: googleKeyResolution.key,
       aspectRatio: body.aspectRatio,
       imageSize: body.imageSize,
+      keySource: googleKeyResolution.source,
       model: body.model,
       prompt,
       references: body.references,
@@ -86,7 +87,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
       responseHeaders,
     );
   } catch (error) {
-    if (error instanceof GoogleImageQuotaError) {
+    if (error instanceof GoogleImageProviderError) {
       return jsonResponse(error.payload, error.status, responseHeaders);
     }
 

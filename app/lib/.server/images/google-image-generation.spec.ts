@@ -77,7 +77,7 @@ describe('generateGoogleImage', () => {
     ).rejects.toMatchObject({
       payload: {
         error: true,
-        errorType: 'quota',
+        errorType: 'model_unavailable',
         model: 'gemini-3.1-flash-image-preview',
         provider: 'Google',
         providerError:
@@ -142,7 +142,7 @@ describe('generateGoogleImage', () => {
     ).rejects.toMatchObject({
       payload: {
         error: true,
-        errorType: 'quota',
+        errorType: 'billing',
         model: 'gemini-3.1-flash-image-preview',
         provider: 'Google',
         providerError: 'Billing is not enabled for Gemini 3.1 Flash image.',

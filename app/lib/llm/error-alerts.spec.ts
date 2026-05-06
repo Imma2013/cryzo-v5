@@ -29,4 +29,32 @@ describe('createLlmErrorAlert', () => {
     expect(alert.errorType).toBe('authentication');
     expect(alert.title).toBe('Authentication Error');
   });
+
+  it('maps Google image provider error types to specific alerts', () => {
+    const billingAlert = createLlmErrorAlert(
+      new Error(
+        JSON.stringify({
+          errorType: 'billing',
+          message: 'Google image generation billing is blocking gemini-3.1-flash-image-preview.',
+          provider: 'Google',
+          statusCode: 403,
+        }),
+      ),
+      'Google',
+    );
+    const modelAlert = createLlmErrorAlert(
+      new Error(
+        JSON.stringify({
+          errorType: 'model_unavailable',
+          message: 'Google image model availability is blocking gemini-3.1-flash-image-preview.',
+          provider: 'Google',
+          statusCode: 404,
+        }),
+      ),
+      'Google',
+    );
+
+    expect(billingAlert).toMatchObject({ errorType: 'billing', title: 'Billing Required' });
+    expect(modelAlert).toMatchObject({ errorType: 'model_unavailable', title: 'Model Unavailable' });
+  });
 });

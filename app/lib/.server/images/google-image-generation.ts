@@ -6,10 +6,10 @@ import {
   normalizeGoogleImageModel,
 } from '~/lib/llm/google-catalog';
 import {
-  buildGoogleImageQuotaErrorPayload,
-  GoogleImageQuotaError,
-  isGoogleImageRetryableProviderError,
+  buildGoogleImageProviderErrorPayload,
+  GoogleImageProviderError,
 } from '~/lib/llm/google-image-errors';
+import { getGoogleApiKeyFingerprint, logGoogleImageProviderFailure } from '~/lib/llm/google-image-diagnostics';
 
 type ImageReference = {
   dataUrl: string;
@@ -19,6 +19,7 @@ type GenerateGoogleImageOptions = {
   apiKey: string;
   aspectRatio?: string;
   imageSize?: '1K' | '2K' | '4K';
+  keySource?: string;
   model?: string;
   prompt: string;
   references?: ImageReference[];
@@ -71,6 +72,7 @@ export async function generateGoogleImage({
   apiKey,
   aspectRatio,
   imageSize,
+  keySource,
   model,
   prompt,
   references = [],
@@ -102,6 +104,7 @@ export async function generateGoogleImage({
   parts.push({ text: trimmedPrompt });
 
   const modelToUse = DEFAULT_GOOGLE_IMAGE_MODEL_ID;
+  const keyFingerprint = await getGoogleApiKeyFingerprint(apiKey);
   const generationConfig: Record<string, unknown> = {
     responseModalities: ['Image'],
     imageConfig: {
@@ -132,18 +135,29 @@ export async function generateGoogleImage({
   const result = (await response.json()) as GoogleImageApiResult;
 
   if (!response.ok) {
-    if (isGoogleImageRetryableProviderError(response.status, result.error)) {
-      throw new GoogleImageQuotaError(
-        buildGoogleImageQuotaErrorPayload({
-          error: result.error,
-          model: modelToUse,
-          retryAfterHeader: response.headers.get('Retry-After'),
-        }),
-        response.status,
-      );
-    }
+    const retryAfterHeader = response.headers.get('Retry-After');
 
-    throw new Error(result.error?.message || 'Google image generation failed.');
+    logGoogleImageProviderFailure({
+      context: 'generateGoogleImage',
+      error: result.error,
+      keyFingerprint,
+      keySource,
+      model: modelToUse,
+      retryAfterHeader,
+      status: response.status,
+    });
+
+    throw new GoogleImageProviderError(
+      buildGoogleImageProviderErrorPayload({
+        error: result.error,
+        keyFingerprint,
+        keySource,
+        model: modelToUse,
+        retryAfterHeader,
+        status: response.status,
+      }),
+      response.status,
+    );
   }
 
   const responseParts = result.candidates?.[0]?.content?.parts || [];
