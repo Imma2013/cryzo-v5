@@ -1,6 +1,7 @@
 import type { ToolSet } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
+  BUILD_IMAGE_SOURCE_GUIDANCE,
   buildAssistantSystemPrompt,
   buildGoogleCoreMessages,
   getExternalToolRuntimeErrorMessage,
@@ -204,6 +205,16 @@ describe('buildAssistantSystemPrompt', () => {
     expect(prompt).toContain('must start by using a Composio tool');
     expect(prompt).toContain('Do not invent auth links');
     expect(prompt).toContain('If tools are available, call a Composio tool before any fallback explanation');
+  });
+});
+
+describe('BUILD_IMAGE_SOURCE_GUIDANCE', () => {
+  it('allows linked stock photos instead of automatic generated image actions', () => {
+    expect(BUILD_IMAGE_SOURCE_GUIDANCE).toContain('Stock-photo URLs are valid output');
+    expect(BUILD_IMAGE_SOURCE_GUIDANCE).toContain('Prefer valid Pexels URLs');
+    expect(BUILD_IMAGE_SOURCE_GUIDANCE).toContain('Do not download, store, or auto-generate image files');
+    expect(BUILD_IMAGE_SOURCE_GUIDANCE).not.toContain('gemini-3.1-flash-image-preview');
+    expect(BUILD_IMAGE_SOURCE_GUIDANCE).not.toContain('<boltAction type="image"');
   });
 });
 

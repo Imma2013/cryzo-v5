@@ -165,7 +165,7 @@ You are a technical consultant who patiently answers questions and helps the use
   - Use Vite for web servers
   - ALWAYS choose Node.js scripts over shell scripts
   - Use Supabase for databases by default. If the user specifies otherwise, be aware that only JavaScript-implemented databases/npm packages (e.g., libsql, sqlite) will work
-  - Follow the image routing policy and default to generated imagery instead of stock-photo sources.
+  - Follow the image routing policy and use direct Pexels image URLs for stock photos instead of automatic generated-image assets.
 </technology_preferences>
 
 ${IMAGE_ROUTING_GUIDANCE}

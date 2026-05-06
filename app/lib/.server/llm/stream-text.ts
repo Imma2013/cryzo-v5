@@ -62,6 +62,15 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
+export const BUILD_IMAGE_SOURCE_GUIDANCE = `
+    <image_source_guidance>
+      - Stock-photo URLs are valid output for website and app builds when photos are appropriate.
+      - Prefer valid Pexels URLs and link to them directly in generated project files.
+      - Do not download, store, or auto-generate image files for normal website builds.
+      - Only create first-party generated image assets when the user explicitly asks to generate or edit an image asset.
+      - Use CSS, SVG, icons, canvas, or 3D code when stock photos are not appropriate.
+    </image_source_guidance>`;
+
 function logTiming(event: string, startedAt: number, details: Record<string, unknown> = {}) {
   logger.info(
     event,
@@ -1300,13 +1309,7 @@ export async function streamText(props: {
   if (assistantMode === 'build') {
     systemPrompt = `${systemPrompt}
 
-    <image_enforcement>
-      - Stock-photo URLs are invalid output unless the user explicitly asks for stock photography.
-      - Never emit URLs from Unsplash, Pexels, or similar stock-photo sources in generated files.
-      - When the design materially benefits from real imagery, emit dedicated \`<boltAction type="image" ...>\` actions to generate project-local assets instead of using stock-photo URLs.
-      - Use \`gemini-3.1-flash-image-preview\` as the standard automatic image model for both generation and edits.
-      - Save generated assets at stable project paths under \`public/images/\` or \`public/assets/\`, then reference those files from the app code.
-    </image_enforcement>`;
+${BUILD_IMAGE_SOURCE_GUIDANCE}`;
   }
 
   // DEBUG: Log filtered options

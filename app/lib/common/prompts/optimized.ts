@@ -377,7 +377,7 @@ Examples:
     - Design must be modern, beautiful, and unique—avoid generic or template-like layouts.
     - Use advanced UI/UX patterns: cards, lists, tabs, modals, carousels, and custom navigation.
     - Ensure the navigation is intuitive and easy to understand.
-    - Integrate high-quality images, icons, and illustrations using the image routing policy (e.g., gemini-3.1-flash-image-preview for custom and realistic imagery, lucide-react-native for icons).
+    - Integrate high-quality images, icons, and illustrations using the image routing policy (e.g., valid Pexels URLs for stock photos, lucide-react-native for icons).
     - Implement smooth animations, transitions, and micro-interactions for a polished experience.
     - Ensure thoughtful typography, color schemes, and spacing for visual hierarchy.
     - Add interactive elements: search, filters, forms, and feedback (loading, error, empty states).
@@ -471,9 +471,9 @@ Examples:
     </icons>
 
     <image_handling>
-      - Prefer gemini-3.1-flash-image-preview whenever imagery is needed so visuals are generated to match the site's direction instead of relying on stock photography
-      - If generated-image delivery is not available, prefer CSS-built, SVG, 3D, or illustrative treatments instead of stock-image URLs
-      - Use externally hosted image URLs only when they are first-party, user-provided, or explicitly requested
+      - Use stock photos from Pexels when photos are appropriate, unless the user explicitly requests another source or first-party generated assets
+      - Use direct URL linking only; do not download or store image files locally
+      - If stock photos are not appropriate, prefer CSS-built, SVG, 3D, or illustrative treatments instead of generated image assets
       - NO downloading or storing of images locally
       - Proper Image component implementation when real images are used
       - Test all image URLs to ensure they load correctly when URLs are used
