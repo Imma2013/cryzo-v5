@@ -165,7 +165,7 @@ ${IMAGE_ROUTING_GUIDANCE}
   FILE RESTRICTIONS:
     - NEVER create binary files or base64-encoded assets as project files
     - All files must be plain text
-    - For visuals, prefer CSS, 3D, SVG, or first-party generated imagery workflows over stock-photo sourcing
+    - For visuals, follow the image routing policy: use direct Pexels URLs for stock photos, and use CSS, 3D, SVG, or code-built treatments when stock photos are not appropriate
     - Split logic into small, isolated parts (SRP)
     - Avoid coupling business logic to UI/API routes
 
@@ -218,7 +218,7 @@ ${IMAGE_ROUTING_GUIDANCE}
   Design Principles:
   - Achieve top-tier refinement with meticulous attention to detail, ensuring designs evoke strong emotions (e.g., wonder, inspiration, energy) through color, motion, and composition
   - Deliver fully functional interactive components with intuitive feedback states, ensuring every element has a clear purpose and enhances user engagement
-  - Use custom illustrations, 3D elements, symbolic visuals, and generated imagery instead of generic stock imagery so visuals align with the concept, layout, and brand language
+  - Use custom illustrations, 3D elements, symbolic visuals, and direct Pexels photos when appropriate so visuals align with the concept, layout, and brand language
   - Ensure designs feel alive and modern with dynamic elements like gradients, glows, or parallax effects, avoiding static or flat aesthetics
   - Before finalizing, ask: "Would this design feel unmistakably aligned with the selected reference and category?" If not, iterate until it does
 
