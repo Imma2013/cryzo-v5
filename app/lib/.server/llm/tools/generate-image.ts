@@ -20,7 +20,7 @@ type GenerateProjectImagesOptions = {
   aspectRatio?: '1:1' | '16:9' | '9:16' | '3:2' | '2:3';
   existingFiles?: string[];
   imageSize?: '1K' | '2K' | '4K';
-  model?: 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image-preview' | 'gemini-2.5-flash-image';
+  model?: 'gemini-3.1-flash-image-preview';
   onGeneratedImageAsset?: (asset: GeneratedImageAsset) => void;
   prompt: string;
   targetPath?: string;
@@ -153,7 +153,7 @@ export function createGenerateImageTool({ apiKey, existingFiles = [], onGenerate
         .describe('Preferred image aspect ratio.'),
       imageSize: z.enum(['1K', '2K', '4K']).optional().describe('Requested render size when supported by the model.'),
       model: z
-        .enum(['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image'])
+        .enum(['gemini-3.1-flash-image-preview'])
         .optional()
         .describe('Google Gemini image model to use. Use gemini-3.1-flash-image-preview by default.'),
       targetPath: z

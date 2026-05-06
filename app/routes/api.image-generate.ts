@@ -93,7 +93,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
     return jsonResponse(
       {
         error: true,
-        message: error instanceof Error ? error.message : 'Nano Banana image generation failed.',
+        message: error instanceof Error ? error.message : 'Google image generation failed.',
       },
       502,
       responseHeaders,

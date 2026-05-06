@@ -2,7 +2,6 @@ import { generateId } from 'ai';
 import { storeGeneratedImage } from './generated-image-store';
 import {
   DEFAULT_GOOGLE_IMAGE_MODEL_ID,
-  GOOGLE_IMAGE_FALLBACK_MODEL_ID,
   isSupportedGoogleImageModel,
   normalizeGoogleImageModel,
 } from '~/lib/llm/google-catalog';
@@ -102,91 +101,81 @@ export async function generateGoogleImage({
 
   parts.push({ text: trimmedPrompt });
 
-  const modelsToTry =
-    selectedModel === DEFAULT_GOOGLE_IMAGE_MODEL_ID ? [selectedModel, GOOGLE_IMAGE_FALLBACK_MODEL_ID] : [selectedModel];
+  const modelToUse = DEFAULT_GOOGLE_IMAGE_MODEL_ID;
+  const generationConfig: Record<string, unknown> = {
+    responseModalities: ['Image'],
+    imageConfig: {
+      aspectRatio: aspectRatio || '1:1',
+    },
+  };
 
-  for (const modelToUse of modelsToTry) {
-    const generationConfig: Record<string, unknown> = {
-      responseModalities: ['Image'],
-      imageConfig: {
-        aspectRatio: aspectRatio || '1:1',
-      },
-    };
-
-    if (imageSize && modelToUse !== 'gemini-2.5-flash-image') {
-      (generationConfig.imageConfig as Record<string, unknown>).imageSize = imageSize;
-    }
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts,
-          },
-        ],
-        generationConfig,
-      }),
-    });
-
-    const result = (await response.json()) as GoogleImageApiResult;
-
-    if (!response.ok) {
-      if (isGoogleImageRetryableProviderError(response.status, result.error)) {
-        if (modelToUse === DEFAULT_GOOGLE_IMAGE_MODEL_ID) {
-          continue;
-        }
-
-        throw new GoogleImageQuotaError(
-          buildGoogleImageQuotaErrorPayload({
-            error: result.error,
-            model: modelToUse,
-            retryAfterHeader: response.headers.get('Retry-After'),
-          }),
-          response.status,
-        );
-      }
-
-      throw new Error(result.error?.message || 'Google image generation failed.');
-    }
-
-    const responseParts = result.candidates?.[0]?.content?.parts || [];
-    const text = responseParts
-      .filter((part) => part.text)
-      .map((part) => part.text)
-      .join('\n')
-      .trim();
-
-    const images = responseParts
-      .filter((part) => part.inlineData?.data)
-      .map((part) => {
-        const id = generateId();
-        const mimeType = part.inlineData?.mimeType || 'image/png';
-        const data = part.inlineData?.data || '';
-
-        storeGeneratedImage(id, { data, mimeType });
-
-        return {
-          data,
-          mimeType,
-          url: `/api/generated-image/${id}`,
-        };
-      });
-
-    if (images.length === 0) {
-      throw new Error(text || 'Google image generation returned no image output.');
-    }
-
-    return {
-      images,
-      model: modelToUse,
-      text,
-    };
+  if (imageSize) {
+    (generationConfig.imageConfig as Record<string, unknown>).imageSize = imageSize;
   }
 
-  throw new Error('Google image generation failed.');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts,
+        },
+      ],
+      generationConfig,
+    }),
+  });
+
+  const result = (await response.json()) as GoogleImageApiResult;
+
+  if (!response.ok) {
+    if (isGoogleImageRetryableProviderError(response.status, result.error)) {
+      throw new GoogleImageQuotaError(
+        buildGoogleImageQuotaErrorPayload({
+          error: result.error,
+          model: modelToUse,
+          retryAfterHeader: response.headers.get('Retry-After'),
+        }),
+        response.status,
+      );
+    }
+
+    throw new Error(result.error?.message || 'Google image generation failed.');
+  }
+
+  const responseParts = result.candidates?.[0]?.content?.parts || [];
+  const text = responseParts
+    .filter((part) => part.text)
+    .map((part) => part.text)
+    .join('\n')
+    .trim();
+
+  const images = responseParts
+    .filter((part) => part.inlineData?.data)
+    .map((part) => {
+      const id = generateId();
+      const mimeType = part.inlineData?.mimeType || 'image/png';
+      const data = part.inlineData?.data || '';
+
+      storeGeneratedImage(id, { data, mimeType });
+
+      return {
+        data,
+        mimeType,
+        url: `/api/generated-image/${id}`,
+      };
+    });
+
+  if (images.length === 0) {
+    throw new Error(text || 'Google image generation returned no image output.');
+  }
+
+  return {
+    images,
+    model: modelToUse,
+    text,
+  };
 }

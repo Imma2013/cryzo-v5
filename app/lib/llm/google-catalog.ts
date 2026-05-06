@@ -8,7 +8,6 @@ export type GoogleImageModelInfo = {
 };
 
 export const DEFAULT_GOOGLE_IMAGE_MODEL_ID = 'gemini-3.1-flash-image-preview';
-export const GOOGLE_IMAGE_FALLBACK_MODEL_ID = 'gemini-3-pro-image-preview';
 
 const GOOGLE_CHAT_MODELS: readonly ModelInfo[] = [
   {
@@ -49,22 +48,7 @@ const GOOGLE_IMAGE_MODELS: readonly GoogleImageModelInfo[] = [
     label: 'Gemini 3.1 Flash Image (Preview)',
     description: 'Standard model for fast image generation and variation.',
   },
-  {
-    id: GOOGLE_IMAGE_FALLBACK_MODEL_ID,
-    label: 'Nano Banana Pro',
-    description: 'Best for polished assets and harder art direction.',
-    defaultImageSize: '2K',
-  },
-  {
-    id: 'gemini-2.5-flash-image',
-    label: 'Nano Banana',
-    description: 'Legacy manual option for quick image generation and variation.',
-  },
 ] as const;
-
-const GOOGLE_IMAGE_MODEL_ALIASES: Readonly<Record<string, GoogleImageModelInfo['id']>> = {
-  'gemini-2.5-flash-preview-image': 'gemini-2.5-flash-image',
-};
 
 export function getGoogleChatModels(): ModelInfo[] {
   return GOOGLE_CHAT_MODELS.map((model) => ({ ...model }));
@@ -93,11 +77,7 @@ export function isSupportedGoogleImageModel(model: string | undefined): model is
 export function normalizeGoogleImageModel(model: string | undefined): GoogleImageModelInfo['id'] | string {
   const trimmedModel = model?.trim();
 
-  if (!trimmedModel) {
-    return getDefaultGoogleImageModel().id;
-  }
-
-  return GOOGLE_IMAGE_MODEL_ALIASES[trimmedModel] || trimmedModel;
+  return isSupportedGoogleImageModel(trimmedModel) ? trimmedModel : getDefaultGoogleImageModel().id;
 }
 
 export function getDefaultGoogleImageModel(): GoogleImageModelInfo {

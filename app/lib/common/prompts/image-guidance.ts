@@ -2,7 +2,7 @@ export const IMAGE_ROUTING_GUIDANCE = `
 <image_routing>
   Image sourcing policy:
   - Do NOT use Unsplash, Pexels, Pixabay, or any other stock-photo provider unless the user explicitly asks for stock photography.
-  - Default to Google's Nano Banana image models for hero images, product shots, branded scenes, illustrations, edits, and prompt-specific compositions.
+  - Default to Google's gemini-3.1-flash-image-preview image model for hero images, product shots, branded scenes, illustrations, edits, and prompt-specific compositions.
   - Generate project-local image assets instead of linking to external stock-image URLs.
   - Generated imagery should match the site's palette, composition, mood, and brand language instead of falling back to generic coverage.
   - If imagery does not materially improve the result, omit it instead of inserting filler visuals.

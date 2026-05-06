@@ -377,7 +377,7 @@ Examples:
     - Design must be modern, beautiful, and unique—avoid generic or template-like layouts.
     - Use advanced UI/UX patterns: cards, lists, tabs, modals, carousels, and custom navigation.
     - Ensure the navigation is intuitive and easy to understand.
-    - Integrate high-quality images, icons, and illustrations using the image routing policy (e.g., Nano Banana for custom and realistic imagery, lucide-react-native for icons).
+    - Integrate high-quality images, icons, and illustrations using the image routing policy (e.g., gemini-3.1-flash-image-preview for custom and realistic imagery, lucide-react-native for icons).
     - Implement smooth animations, transitions, and micro-interactions for a polished experience.
     - Ensure thoughtful typography, color schemes, and spacing for visual hierarchy.
     - Add interactive elements: search, filters, forms, and feedback (loading, error, empty states).
@@ -471,7 +471,7 @@ Examples:
     </icons>
 
     <image_handling>
-      - Prefer Nano Banana whenever imagery is needed so visuals are generated to match the site's direction instead of relying on stock photography
+      - Prefer gemini-3.1-flash-image-preview whenever imagery is needed so visuals are generated to match the site's direction instead of relying on stock photography
       - If generated-image delivery is not available, prefer CSS-built, SVG, 3D, or illustrative treatments instead of stock-image URLs
       - Use externally hosted image URLs only when they are first-party, user-provided, or explicitly requested
       - NO downloading or storing of images locally

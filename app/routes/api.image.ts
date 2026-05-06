@@ -6,7 +6,6 @@ import {
 } from '~/lib/llm/google-image-errors';
 import {
   DEFAULT_GOOGLE_IMAGE_MODEL_ID,
-  GOOGLE_IMAGE_FALLBACK_MODEL_ID,
   isSupportedGoogleImageModel,
   normalizeGoogleImageModel,
 } from '~/lib/llm/google-catalog';
@@ -119,105 +118,92 @@ async function imageAction({ context, request }: ActionFunctionArgs) {
     );
   }
 
-  const modelsToTry =
-    selectedModel === DEFAULT_GOOGLE_IMAGE_MODEL_ID ? [selectedModel, GOOGLE_IMAGE_FALLBACK_MODEL_ID] : [selectedModel];
-
-  for (const modelToUse of modelsToTry) {
-    const payload = {
-      contents: [
-        {
-          parts: buildImageParts(prompt, inputs),
-        },
-      ],
-      generationConfig: {
-        responseModalities: ['Image'],
-        imageConfig: {
-          ...(aspectRatio ? { aspectRatio } : {}),
-        },
-      },
-    };
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`,
+  const modelToUse = DEFAULT_GOOGLE_IMAGE_MODEL_ID;
+  const payload = {
+    contents: [
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': googleKeyResolution.key,
-        },
-        body: JSON.stringify(payload),
+        parts: buildImageParts(prompt, inputs),
       },
-    );
+    ],
+    generationConfig: {
+      responseModalities: ['Image'],
+      imageConfig: {
+        ...(aspectRatio ? { aspectRatio } : {}),
+      },
+    },
+  };
 
-    const result = (await response.json()) as {
-      error?: { code?: number; details?: Array<Record<string, unknown>>; message?: string; status?: string };
-      promptFeedback?: { blockReason?: string };
-      candidates?: Array<{
-        finishReason?: string;
-        content?: {
-          parts?: GeminiPart[];
-        };
-      }>;
-    };
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': googleKeyResolution.key,
+    },
+    body: JSON.stringify(payload),
+  });
 
-    if (!response.ok) {
-      if (isGoogleImageRetryableProviderError(response.status, result.error)) {
-        if (modelToUse === DEFAULT_GOOGLE_IMAGE_MODEL_ID) {
-          continue;
-        }
+  const result = (await response.json()) as {
+    error?: { code?: number; details?: Array<Record<string, unknown>>; message?: string; status?: string };
+    promptFeedback?: { blockReason?: string };
+    candidates?: Array<{
+      finishReason?: string;
+      content?: {
+        parts?: GeminiPart[];
+      };
+    }>;
+  };
 
-        return jsonResponse(
-          buildGoogleImageQuotaErrorPayload({
-            error: result.error,
-            model: modelToUse,
-            retryAfterHeader: response.headers.get('Retry-After'),
-          }),
-          response.status,
-          responseHeaders,
-        );
-      }
-
+  if (!response.ok) {
+    if (isGoogleImageRetryableProviderError(response.status, result.error)) {
       return jsonResponse(
-        {
-          message: result.error?.message || 'Google image generation request failed.',
-          providerError: result.error?.message,
-        },
+        buildGoogleImageQuotaErrorPayload({
+          error: result.error,
+          model: modelToUse,
+          retryAfterHeader: response.headers.get('Retry-After'),
+        }),
         response.status,
-        responseHeaders,
-      );
-    }
-
-    const imagePart = result.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => {
-      return Boolean(part.inlineData?.data);
-    });
-
-    if (!imagePart?.inlineData?.data) {
-      const providerError =
-        result.promptFeedback?.blockReason || result.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
-
-      return jsonResponse(
-        {
-          message: providerError ? `The model did not return an image (${providerError}).` : 'The model did not return an image.',
-          providerError,
-        },
-        502,
         responseHeaders,
       );
     }
 
     return jsonResponse(
       {
-        imageBase64: imagePart.inlineData.data,
-        mimeType: imagePart.inlineData.mimeType || 'image/png',
-        model: modelToUse,
-        operation,
+        message: result.error?.message || 'Google image generation request failed.',
+        providerError: result.error?.message,
       },
-      200,
+      response.status,
       responseHeaders,
     );
   }
 
-  return jsonResponse({ message: 'Google image generation request failed.' }, 502, responseHeaders);
+  const imagePart = result.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => {
+    return Boolean(part.inlineData?.data);
+  });
+
+  if (!imagePart?.inlineData?.data) {
+    const providerError =
+      result.promptFeedback?.blockReason || result.candidates?.find((candidate) => candidate.finishReason)?.finishReason;
+
+    return jsonResponse(
+      {
+        message: providerError ? `The model did not return an image (${providerError}).` : 'The model did not return an image.',
+        providerError,
+      },
+      502,
+      responseHeaders,
+    );
+  }
+
+  return jsonResponse(
+    {
+      imageBase64: imagePart.inlineData.data,
+      mimeType: imagePart.inlineData.mimeType || 'image/png',
+      model: modelToUse,
+      operation,
+    },
+    200,
+    responseHeaders,
+  );
 }
 
 export const action = withSecurity(imageAction, {

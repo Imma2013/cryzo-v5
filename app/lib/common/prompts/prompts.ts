@@ -418,7 +418,7 @@ ${IMAGE_ROUTING_GUIDANCE}
       - Use premium typography with refined hierarchy and spacing.
       - Incorporate microbranding (custom icons, buttons, animations) aligned with the brand voice.
       - Use high-quality, optimized visual assets (photos, illustrations, icons).
-      - IMPORTANT: Follow the image routing policy. Default to Nano Banana for generated imagery, edits, and realistic branded scenes instead of stock-photo sources.
+      - IMPORTANT: Follow the image routing policy. Default to gemini-3.1-flash-image-preview for generated imagery, edits, and realistic branded scenes instead of stock-photo sources.
       - If generated-image delivery is not practical in the current response, create strong CSS, SVG, gradient, or 3D-based visual systems instead of falling back to generic stock-image URLs.
 
     Layout & Structure:

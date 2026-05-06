@@ -55,81 +55,19 @@ describe('generateGoogleImage', () => {
     });
   });
 
-  it('retries Gemini 3 Pro image preview when Gemini 3.1 Flash image is unavailable', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        googleResponse(
-          {
-            error: {
-              message:
-                'models/gemini-3.1-flash-image-preview is not found for API version v1beta, or is not supported for generateContent.',
-              status: 'NOT_FOUND',
-            },
+  it('does not fall back when Gemini 3.1 Flash image is unavailable', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      googleResponse(
+        {
+          error: {
+            message:
+              'models/gemini-3.1-flash-image-preview is not found for API version v1beta, or is not supported for generateContent.',
+            status: 'NOT_FOUND',
           },
-          { status: 404 },
-        ),
-      )
-      .mockResolvedValueOnce(googleResponse(imagePayload('fallback-image')));
-
-    const result = await generateGoogleImage({
-      apiKey: 'AIza-test',
-      prompt: 'Generate a product hero',
-    });
-
-    expect(calledModels(fetchSpy)).toEqual(['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview']);
-    expect(result.model).toBe('gemini-3-pro-image-preview');
-    expect(result.images[0]?.data).toBe('fallback-image');
-  });
-
-  it('does not use Gemini 2.5 Flash image as an automatic fallback', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        googleResponse(
-          {
-            error: {
-              message: 'Quota exceeded for quota metric Generate content API requests.',
-              status: 'RESOURCE_EXHAUSTED',
-            },
-          },
-          { status: 429 },
-        ),
-      )
-      .mockResolvedValueOnce(googleResponse(imagePayload('fallback-image')));
-
-    await generateGoogleImage({
-      apiKey: 'AIza-test',
-      prompt: 'Generate a product hero',
-    });
-
-    expect(calledModels(fetchSpy)).toEqual(['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview']);
-  });
-
-  it('preserves the structured Google quota error when both default and fallback fail', async () => {
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        googleResponse(
-          {
-            error: {
-              message: 'Quota exceeded for Gemini 3.1 Flash image.',
-              status: 'RESOURCE_EXHAUSTED',
-            },
-          },
-          { status: 429 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        googleResponse(
-          {
-            error: {
-              message: 'Billing is not enabled for Gemini 3 Pro image.',
-              status: 'FAILED_PRECONDITION',
-            },
-          },
-          { headers: { 'Retry-After': '30' }, status: 403 },
-        ),
-      );
+        },
+        { status: 404 },
+      ),
+    );
 
     await expect(
       generateGoogleImage({
@@ -140,12 +78,79 @@ describe('generateGoogleImage', () => {
       payload: {
         error: true,
         errorType: 'quota',
-        model: 'gemini-3-pro-image-preview',
+        model: 'gemini-3.1-flash-image-preview',
         provider: 'Google',
-        providerError: 'Billing is not enabled for Gemini 3 Pro image.',
+        providerError:
+          'models/gemini-3.1-flash-image-preview is not found for API version v1beta, or is not supported for generateContent.',
+      },
+      status: 404,
+    });
+
+    expect(calledModels(fetchSpy)).toEqual(['gemini-3.1-flash-image-preview']);
+  });
+
+  it('does not fall back on quota failures', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      googleResponse(
+        {
+          error: {
+            message: 'Quota exceeded for quota metric Generate content API requests.',
+            status: 'RESOURCE_EXHAUSTED',
+          },
+        },
+        { status: 429 },
+      ),
+    );
+
+    await expect(
+      generateGoogleImage({
+        apiKey: 'AIza-test',
+        prompt: 'Generate a product hero',
+      }),
+    ).rejects.toMatchObject({
+      payload: {
+        error: true,
+        errorType: 'quota',
+        model: 'gemini-3.1-flash-image-preview',
+        provider: 'Google',
+        providerError: 'Quota exceeded for quota metric Generate content API requests.',
+      },
+      status: 429,
+    });
+
+    expect(calledModels(fetchSpy)).toEqual(['gemini-3.1-flash-image-preview']);
+  });
+
+  it('preserves the structured Google quota error for billing failures', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      googleResponse(
+        {
+          error: {
+            message: 'Billing is not enabled for Gemini 3.1 Flash image.',
+            status: 'FAILED_PRECONDITION',
+          },
+        },
+        { headers: { 'Retry-After': '30' }, status: 403 },
+      ),
+    );
+
+    await expect(
+      generateGoogleImage({
+        apiKey: 'AIza-test',
+        prompt: 'Generate a product hero',
+      }),
+    ).rejects.toMatchObject({
+      payload: {
+        error: true,
+        errorType: 'quota',
+        model: 'gemini-3.1-flash-image-preview',
+        provider: 'Google',
+        providerError: 'Billing is not enabled for Gemini 3.1 Flash image.',
         retryAfterSeconds: 30,
       },
       status: 403,
     });
+
+    expect(calledModels(fetchSpy)).toEqual(['gemini-3.1-flash-image-preview']);
   });
 });

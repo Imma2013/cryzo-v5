@@ -18,14 +18,14 @@ describe('google image errors', () => {
       error: {
         message: 'Quota exceeded for quota metric Generate content API requests.',
       },
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3.1-flash-image-preview',
       retryAfterHeader: '60',
     });
 
     expect(payload).toMatchObject({
       error: true,
       errorType: 'quota',
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3.1-flash-image-preview',
       provider: 'Google',
       providerError: 'Quota exceeded for quota metric Generate content API requests.',
       retryAfterSeconds: 60,

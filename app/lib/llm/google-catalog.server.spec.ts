@@ -60,11 +60,7 @@ describe('resolveGoogleCatalog', () => {
       'gemini-2.5-pro',
       'gemini-2.5-flash',
     ]);
-    expect(catalog.imageModels.map((model) => model.id)).toEqual([
-      'gemini-3.1-flash-image-preview',
-      'gemini-3-pro-image-preview',
-      'gemini-2.5-flash-image',
-    ]);
+    expect(catalog.imageModels.map((model) => model.id)).toEqual(['gemini-3.1-flash-image-preview']);
 
     fetchSpy.mockRestore();
   });
