@@ -6,7 +6,6 @@ import type {
   BoltAction,
   DeployAlert,
   FileHistory,
-  ImageAction,
   SupabaseAction,
   SupabaseAlert,
 } from '~/types/actions';
@@ -158,48 +157,6 @@ export function getViteProjectRepairPlan(params: {
     repairFiles,
     blockingIssues,
   };
-}
-
-function decodeBase64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index++) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
-function encodeBytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  return btoa(binary);
-}
-
-function getMimeTypeFromPath(filePath: string): string {
-  const extension = filePath.split('.').pop()?.toLowerCase();
-
-  switch (extension) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'webp':
-      return 'image/webp';
-    case 'gif':
-      return 'image/gif';
-    case 'svg':
-      return 'image/svg+xml';
-    case 'png':
-    default:
-      return 'image/png';
-  }
 }
 
 export type ActionStatus = 'pending' | 'running' | 'complete' | 'aborted' | 'failed';
@@ -356,17 +313,6 @@ export class ActionRunner {
           await this.#runFileAction(action);
           break;
         }
-        case 'image': {
-          const imageResult = await this.#runImageAction(action as ImageAction);
-          const currentAction = this.actions.get()[actionId] as ActionState;
-
-          this.actions.setKey(actionId, {
-            ...currentAction,
-            mimeType: imageResult.mimeType,
-            previewData: imageResult.imageBase64,
-          } as ActionState);
-          break;
-        }
         case 'supabase': {
           try {
             await this.handleSupabaseAction(action as SupabaseAction);
@@ -434,18 +380,6 @@ export class ActionRunner {
 
       this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
       logger.error(`[${action.type}]:Action failed\n\n`, error);
-
-      if (action.type === 'image') {
-        const errorType = error instanceof Error ? (error as Error & { errorType?: string }).errorType : undefined;
-
-        this.onAlert?.({
-          type: 'error',
-          title: errorType === 'quota' ? 'Google Image Quota Exceeded' : 'Image Generation Failed',
-          description: error instanceof Error ? error.message : 'Image generation failed',
-          content: action.filePath,
-          source: 'preview',
-        });
-      }
 
       if (!(error instanceof ActionCommandError)) {
         return;
@@ -619,82 +553,6 @@ export class ActionRunner {
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
     }
-  }
-
-  async #runImageAction(action: ImageAction) {
-    const webcontainer = await this.#webcontainer;
-    const inputs: Array<{ source: 'project'; path: string; data: string; mimeType: string }> = [];
-
-    for (const inputPath of action.inputPaths || []) {
-      const relativeInputPath = nodePath.relative(webcontainer.workdir, inputPath);
-
-      try {
-        const inputBytes = await webcontainer.fs.readFile(relativeInputPath);
-
-        inputs.push({
-          source: 'project',
-          path: inputPath,
-          data: encodeBytesToBase64(inputBytes),
-          mimeType: getMimeTypeFromPath(inputPath),
-        });
-      } catch {
-        throw new Error(`Unable to read image input: ${inputPath}`);
-      }
-    }
-
-    const response = await fetch('/api/image', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        operation: action.operation || 'generate',
-        filePath: action.filePath,
-        prompt: action.prompt,
-        model: action.model,
-        aspectRatio: action.aspectRatio,
-        inputs,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = (await response.json().catch(() => null)) as {
-        errorType?: string;
-        message?: string;
-        providerError?: string;
-        retryAfterSeconds?: number;
-      } | null;
-      const errorMessage =
-        error?.errorType === 'quota'
-          ? error.message
-          : [error?.message, error?.providerError].filter(Boolean).join(' ');
-      const thrownError = new Error(errorMessage || 'Image generation failed') as Error & {
-        errorType?: string;
-        retryAfterSeconds?: number;
-      };
-
-      thrownError.errorType = error?.errorType;
-      thrownError.retryAfterSeconds = error?.retryAfterSeconds;
-      throw thrownError;
-    }
-
-    const payload = (await response.json()) as {
-      imageBase64: string;
-      mimeType: string;
-      model?: string;
-      operation?: string;
-    };
-
-    const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
-    const folder = nodePath.dirname(relativePath).replace(/\/+$/g, '');
-
-    if (folder !== '.') {
-      await webcontainer.fs.mkdir(folder, { recursive: true });
-    }
-
-    await webcontainer.fs.writeFile(relativePath, decodeBase64ToBytes(payload.imageBase64));
-
-    return payload;
   }
 
   #updateAction(id: string, newState: ActionStateUpdate) {

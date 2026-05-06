@@ -1,6 +1,6 @@
 import type { Change } from 'diff';
 
-export type ActionType = 'file' | 'shell' | 'start' | 'build' | 'supabase' | 'image';
+export type ActionType = 'file' | 'shell' | 'start' | 'build' | 'supabase';
 
 export interface BaseAction {
   content: string;
@@ -30,19 +30,7 @@ export interface SupabaseAction extends BaseAction {
   projectId?: string;
 }
 
-export interface ImageAction extends BaseAction {
-  type: 'image';
-  filePath: string;
-  prompt: string;
-  operation?: 'generate' | 'edit';
-  model?: string;
-  aspectRatio?: string;
-  inputPaths?: string[];
-  mimeType?: string;
-  previewData?: string;
-}
-
-export type BoltAction = FileAction | ShellAction | StartAction | BuildAction | SupabaseAction | ImageAction;
+export type BoltAction = FileAction | ShellAction | StartAction | BuildAction | SupabaseAction;
 
 export type BoltActionData = BoltAction | BaseAction;
 

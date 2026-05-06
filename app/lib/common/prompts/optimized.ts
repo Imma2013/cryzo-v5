@@ -471,9 +471,9 @@ Examples:
     </icons>
 
     <image_handling>
-      - Use stock photos from Pexels when photos are appropriate, unless the user explicitly requests another source or first-party generated assets
+      - Use stock photos from Pexels when photos are appropriate, unless the user explicitly requests another source
       - Use direct URL linking only; do not download or store image files locally
-      - If stock photos are not appropriate, prefer CSS-built, SVG, 3D, or illustrative treatments instead of generated image assets
+      - If stock photos are not appropriate, prefer CSS-built, SVG, 3D, or illustrative treatments
       - NO downloading or storing of images locally
       - Proper Image component implementation when real images are used
       - Test all image URLs to ensure they load correctly when URLs are used

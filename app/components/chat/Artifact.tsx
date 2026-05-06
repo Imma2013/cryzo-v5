@@ -8,7 +8,6 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { WORK_DIR } from '~/utils/constants';
-import type { ImageAction } from '~/types/actions';
 
 const highlighterOptions = {
   langs: ['shell'],
@@ -177,35 +176,6 @@ function ShellCodeBlock({ classsName, code }: ShellCodeBlockProps) {
   );
 }
 
-function ImageActionPreview({ action }: { action: ActionState & ImageAction }) {
-  const imageSrc = action.previewData ? `data:${action.mimeType || 'image/png'};base64,${action.previewData}` : undefined;
-  const imageLabel = action.operation === 'edit' ? 'Refine image' : 'Generate image';
-
-  return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2">
-      {imageSrc ? (
-        <img src={imageSrc} alt={action.prompt || action.filePath} className="block h-40 w-full object-cover" />
-      ) : (
-        <div className="flex h-40 w-full items-center justify-center bg-bolt-elements-background-depth-3 text-bolt-elements-textTertiary">
-          <div className="text-xs">Rendering image preview...</div>
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-        <div className="min-w-0">
-          <div className="font-medium text-bolt-elements-textPrimary">Cryzo Image Generation</div>
-          <div className="truncate text-bolt-elements-textSecondary">{imageLabel}</div>
-        </div>
-        <code
-          className="shrink-0 cursor-pointer rounded-md bg-bolt-elements-artifacts-inlineCode-background px-1.5 py-1 text-bolt-elements-artifacts-inlineCode-text hover:underline"
-          onClick={() => openArtifactInWorkbench(action.filePath)}
-        >
-          {action.filePath}
-        </code>
-      </div>
-    </div>
-  );
-}
-
 interface ActionListProps {
   actions: ActionState[];
 }
@@ -270,10 +240,6 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                       {action.filePath}
                     </code>
                   </div>
-                ) : type === 'image' ? (
-                  <div className="flex items-center w-full min-h-[28px]">
-                    <span className="flex-1">{action.operation === 'edit' ? 'Refine image' : 'Generate image'}</span>
-                  </div>
                 ) : type === 'shell' ? (
                   <div className="flex items-center w-full min-h-[28px]">
                     <span className="flex-1">Run command</span>
@@ -290,7 +256,6 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                   </a>
                 ) : null}
               </div>
-              {type === 'image' && <ImageActionPreview action={action as ActionState & ImageAction} />}
               {(type === 'shell' || type === 'start') && (
                 <ShellCodeBlock
                   classsName={classNames('mt-1', {

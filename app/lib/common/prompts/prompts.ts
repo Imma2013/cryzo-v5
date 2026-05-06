@@ -419,7 +419,7 @@ ${IMAGE_ROUTING_GUIDANCE}
       - Incorporate microbranding (custom icons, buttons, animations) aligned with the brand voice.
       - Use high-quality, optimized visual assets (photos, illustrations, icons).
       - IMPORTANT: Follow the image routing policy. Use valid Pexels stock-photo URLs when photos are appropriate, and link to them directly instead of generating or storing image files.
-      - When stock photos are not appropriate, create strong CSS, SVG, gradient, or 3D-based visual systems instead of forcing generated image assets.
+      - When stock photos are not appropriate, create strong CSS, SVG, gradient, or 3D-based visual systems.
 
     Layout & Structure:
       - Implement a systemized spacing/sizing system (e.g., 8pt grid, design tokens).

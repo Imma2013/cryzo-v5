@@ -156,6 +156,29 @@ describe('StreamingMessageParser', () => {
     ])('should correctly parse chunks and strip out bolt artifacts (%#)', (input, expected) => {
       runTest(input, expected);
     });
+
+    it('preserves direct Pexels URLs in generated file actions', () => {
+      const onActionClose = vi.fn();
+      const parser = new StreamingMessageParser({
+        callbacks: {
+          onActionClose,
+        },
+      });
+      const imageUrl = 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg';
+
+      parser.parse(
+        'test_id',
+        `<boltArtifact title="Site"><boltAction type="file" filePath="src/App.tsx"><img src="${imageUrl}" /></boltAction></boltArtifact>`,
+      );
+
+      expect(onActionClose).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: expect.objectContaining({
+            content: expect.stringContaining(imageUrl),
+          }),
+        }),
+      );
+    });
   });
 });
 

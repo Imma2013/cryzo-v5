@@ -67,7 +67,6 @@ export const BUILD_IMAGE_SOURCE_GUIDANCE = `
       - Stock-photo URLs are valid output for website and app builds when photos are appropriate.
       - Prefer valid Pexels URLs and link to them directly in generated project files.
       - Do not download, store, or auto-generate image files for normal website builds.
-      - Only create first-party generated image assets when the user explicitly asks to generate or edit an image asset.
       - Use CSS, SVG, icons, canvas, or 3D code when stock photos are not appropriate.
     </image_source_guidance>`;
 

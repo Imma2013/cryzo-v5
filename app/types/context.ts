@@ -35,11 +35,3 @@ export type GoogleToolCallMetadataAnnotation = {
   toolCallId: string;
   providerMetadata: Record<string, any>;
 };
-
-export type GeneratedImageAssetData = {
-  type: 'generatedImageAsset';
-  id: string;
-  filePath: string;
-  mimeType: string;
-  data: string;
-};

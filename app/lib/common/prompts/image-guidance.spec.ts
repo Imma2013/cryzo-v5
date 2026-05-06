@@ -13,7 +13,7 @@ const oldAutomaticImageGenerationMarkers = [
 function expectBoltStyleImagePolicy(prompt: string) {
   expect(prompt).toContain('Pexels');
   expect(prompt).toContain('direct');
-  expect(prompt).toContain('Do not call automatic image generation for normal website builds');
+  expect(prompt).toContain('Do not call automatic image generation for website builds');
 
   for (const marker of oldAutomaticImageGenerationMarkers) {
     expect(prompt).not.toContain(marker);

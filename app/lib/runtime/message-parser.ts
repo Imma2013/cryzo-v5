@@ -3,7 +3,6 @@ import type {
   BoltAction,
   BoltActionData,
   FileAction,
-  ImageAction,
   ShellAction,
   SupabaseAction,
 } from '~/types/actions';
@@ -82,37 +81,6 @@ function cleanEscapedTags(content: string) {
   return content.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 }
 
-function parseListAttribute(value?: string): string[] | undefined {
-  if (!value?.trim()) {
-    return undefined;
-  }
-
-  const trimmedValue = value.trim();
-
-  if (trimmedValue.startsWith('[') && trimmedValue.endsWith(']')) {
-    try {
-      const parsedValue = JSON.parse(trimmedValue);
-
-      if (Array.isArray(parsedValue)) {
-        return parsedValue.map((item) => String(item).trim()).filter(Boolean);
-      }
-    } catch {
-      // Fall back to comma-separated parsing below.
-    }
-  }
-
-  return trimmedValue
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function stripForbiddenStockImageUrls(content: string) {
-  return content.replace(
-    /https?:\/\/(?:images\.)?(?:source\.)?(?:www\.)?(?:unsplash\.com|pexels\.com|images\.pexels\.com|pixabay\.com)[^\s'"`)<>]*/gi,
-    '',
-  );
-}
 export class StreamingMessageParser {
   #messages = new Map<string, MessageState>();
   #artifactCounter = 0;
@@ -195,7 +163,6 @@ export class StreamingMessageParser {
                 content = cleanEscapedTags(content);
               }
 
-              content = stripForbiddenStockImageUrls(content);
               content += '\n';
             }
 
@@ -228,7 +195,6 @@ export class StreamingMessageParser {
                 content = cleanEscapedTags(content);
               }
 
-              content = stripForbiddenStockImageUrls(content);
               this._options.callbacks?.onActionStream?.({
                 artifactId: currentArtifact.id,
                 messageId,
@@ -415,30 +381,11 @@ export class StreamingMessageParser {
       }
 
       (actionAttributes as FileAction).filePath = filePath;
-    } else if (actionType === 'image') {
-      const filePath = this.#extractAttribute(actionTag, 'filePath') as string;
-      const prompt = this.#extractAttribute(actionTag, 'prompt') as string;
-
-      if (!filePath) {
-        logger.debug('Image path not specified');
-      }
-
-      if (!prompt) {
-        logger.debug('Image prompt not specified');
-      }
-
-      (actionAttributes as ImageAction).filePath = filePath;
-      (actionAttributes as ImageAction).prompt = prompt;
-      (actionAttributes as ImageAction).operation =
-        (this.#extractAttribute(actionTag, 'operation') as 'generate' | 'edit' | undefined) || 'generate';
-      (actionAttributes as ImageAction).model = this.#extractAttribute(actionTag, 'model');
-      (actionAttributes as ImageAction).aspectRatio = this.#extractAttribute(actionTag, 'aspectRatio');
-      (actionAttributes as ImageAction).inputPaths = parseListAttribute(this.#extractAttribute(actionTag, 'inputPaths'));
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);
     }
 
-    return actionAttributes as FileAction | ShellAction | ImageAction;
+    return actionAttributes as FileAction | ShellAction;
   }
 
   #extractAttribute(tag: string, attributeName: string): string | undefined {

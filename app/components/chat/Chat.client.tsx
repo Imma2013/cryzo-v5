@@ -8,7 +8,7 @@ import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST, WORK_DIR } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { BaseChat } from './BaseChat';
@@ -27,8 +27,6 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import type { LlmErrorAlertType } from '~/types/actions';
-import type { GeneratedImageAssetData } from '~/types/context';
-import { buildGeneratedImageManifestEntries, buildGeneratedImageManifestSource } from '~/lib/common/generated-image-manifest';
 import { useSupabaseAuth } from '~/lib/auth/supabase-auth';
 import { isExternalAppToolIntent } from '~/utils/tool-intent';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
@@ -118,7 +116,6 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
-    const appliedGeneratedImageAssetIds = useRef(new Set<string>());
     const { user } = useSupabaseAuth();
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
     const composioUserId = user?.uid || null;
@@ -270,54 +267,6 @@ export const ChatImpl = memo(
         storeMessageHistory,
       });
     }, [messages, isLoading, parseMessages]);
-
-    useEffect(() => {
-      if (!chatData) {
-        return;
-      }
-
-      const generatedAssets = chatData.filter(
-        (entry): entry is GeneratedImageAssetData =>
-          typeof entry === 'object' && entry !== null && (entry as GeneratedImageAssetData).type === 'generatedImageAsset',
-      );
-
-      generatedAssets.forEach((asset) => {
-        if (appliedGeneratedImageAssetIds.current.has(asset.id)) {
-          return;
-        }
-
-        appliedGeneratedImageAssetIds.current.add(asset.id);
-
-        const fullPath = `${WORK_DIR}/${asset.filePath.replace(/^\/+/, '')}`;
-        const bytes = Uint8Array.from(atob(asset.data), (char) => char.charCodeAt(0));
-
-        workbenchStore.createFile(fullPath, bytes, { select: false }).catch((error) => {
-          appliedGeneratedImageAssetIds.current.delete(asset.id);
-          logger.error('Failed to create generated image asset', error);
-        });
-      });
-
-      const manifestEntries = buildGeneratedImageManifestEntries(
-        generatedAssets.map((asset) => ({
-          filePath: asset.filePath,
-          urlPath: `/${asset.filePath.replace(/^public\/+/, '')}`,
-        })),
-      );
-
-      if (manifestEntries.length > 0) {
-        const manifestPath = `${WORK_DIR}/src/generated-images.ts`;
-        const manifestSource = buildGeneratedImageManifestSource(
-          manifestEntries.map((entry) => ({
-            filePath: entry.filePath,
-            urlPath: entry.urlPath,
-          })),
-        );
-
-        workbenchStore.createFile(manifestPath, manifestSource, { select: false }).catch((error) => {
-          logger.error('Failed to create generated image manifest', error);
-        });
-      }
-    }, [chatData]);
 
     const scrollTextArea = () => {
       const textarea = textareaRef.current;
