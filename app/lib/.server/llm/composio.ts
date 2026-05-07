@@ -295,18 +295,61 @@ export function stripComposioConfirmationFields(args: unknown) {
   return stripped;
 }
 
+function sanitizeJsonSchemaForGemini(schema: any): any {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  if (Array.isArray(schema)) {
+    return schema.map(sanitizeJsonSchemaForGemini);
+  }
+
+  const sanitized = { ...schema };
+
+  if (sanitized.type === 'object' || sanitized.properties !== undefined) {
+    if (sanitized.properties) {
+      for (const key of Object.keys(sanitized.properties)) {
+        sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
+      }
+    }
+
+    if (Array.isArray(sanitized.required)) {
+      const validProps = sanitized.properties ? Object.keys(sanitized.properties) : [];
+      sanitized.required = sanitized.required.filter((req: string) => validProps.includes(req));
+      if (sanitized.required.length === 0) {
+        delete sanitized.required;
+      }
+    }
+  }
+
+  if (sanitized.type === 'array' && sanitized.items) {
+    sanitized.items = sanitizeJsonSchemaForGemini(sanitized.items);
+  }
+
+  if (sanitized.anyOf) {
+    sanitized.anyOf = sanitized.anyOf.map(sanitizeJsonSchemaForGemini);
+  }
+  if (sanitized.allOf) {
+    sanitized.allOf = sanitized.allOf.map(sanitizeJsonSchemaForGemini);
+  }
+
+  return sanitized;
+}
+
 export function normalizeComposioToolForAiSdkV4(tool: any) {
   if (!tool || typeof tool !== 'object') {
     return tool;
   }
 
-  if (tool.parameters || !tool.inputSchema) {
-    return tool;
+  let parameters = tool.parameters || tool.inputSchema;
+  
+  if (parameters) {
+    parameters = sanitizeJsonSchemaForGemini(parameters);
   }
 
   return {
     ...tool,
-    parameters: tool.inputSchema,
+    parameters,
   };
 }
 
