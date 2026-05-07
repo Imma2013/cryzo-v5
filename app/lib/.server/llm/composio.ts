@@ -419,16 +419,28 @@ export function normalizeComposioToolForAiSdkV4(tool: any) {
     return tool;
   }
 
-  let parameters = tool.parameters || tool.inputSchema;
-  
-  if (parameters) {
-    parameters = sanitizeJsonSchemaForGemini(parameters);
+  // AI SDK v5 (used by @composio/vercel and @ai-sdk/google) reads
+  // `inputSchema`, while v4 reads `parameters`. The previous version of this
+  // helper only sanitized `parameters` and spread the original `tool` last,
+  // which left an unsanitized `inputSchema` on the returned tool — Gemini's
+  // strict OpenAPI validator then rejected the request. Sanitize both so
+  // either provider path uses the cleaned schema.
+  const rawParameters = tool.parameters;
+  const rawInputSchema = tool.inputSchema;
+  const source = rawParameters ?? rawInputSchema;
+  const sanitized = source ? sanitizeJsonSchemaForGemini(source) : source;
+
+  const next: Record<string, any> = { ...tool };
+
+  if (rawParameters !== undefined || sanitized !== undefined) {
+    next.parameters = sanitized;
   }
 
-  return {
-    ...tool,
-    parameters,
-  };
+  if (rawInputSchema !== undefined || sanitized !== undefined) {
+    next.inputSchema = sanitized;
+  }
+
+  return next;
 }
 
 export function wrapComposioToolWithConfirmation(tool: any, context: ComposioToolConfirmationContext) {
