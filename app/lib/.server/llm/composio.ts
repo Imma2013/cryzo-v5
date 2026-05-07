@@ -295,47 +295,120 @@ export function stripComposioConfirmationFields(args: unknown) {
   return stripped;
 }
 
-function sanitizeJsonSchemaForGemini(schema: any): any {
+// JSON Schema keys whose value is a single nested schema.
+const SCHEMA_KEYS_SINGLE = [
+  'items',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contains',
+  'propertyNames',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+  'additionalItems',
+  'jsonSchema',
+  'schema',
+] as const;
+
+// JSON Schema keys whose value is an array of nested schemas.
+const SCHEMA_KEYS_ARRAY = ['anyOf', 'allOf', 'oneOf', 'prefixItems'] as const;
+
+// JSON Schema keys whose value is a record/map of nested schemas.
+const SCHEMA_KEYS_RECORD = [
+  'properties',
+  'patternProperties',
+  '$defs',
+  'definitions',
+  'dependentSchemas',
+] as const;
+
+/**
+ * Recursively sanitize a JSON Schema so it passes Google Gemini's strict
+ * OpenAPI validator. Composio tool-router meta-tools (e.g. COMPOSIO_SEARCH_TOOLS,
+ * COMPOSIO_EXECUTE_TOOL) ship JSON schemas with `required` entries that
+ * reference properties that aren't defined on the same object — usually inside
+ * `oneOf`, `$defs`, or `additionalProperties` branches that the previous
+ * sanitizer never traversed. Gemini rejects those payloads with errors like:
+ *
+ *   GenerateContentRequest.tools[0].function_declarations[1]
+ *     .parameters.properties[tools].items.required[1]: property is not defined
+ *
+ * This walks every standard JSON Schema branch (single, array, record forms,
+ * plus `additionalProperties`) and:
+ *   - filters `required` to keys that actually exist in `properties`
+ *   - drops `required` entirely when no valid entries remain
+ *   - guards against cycles via a WeakSet (Composio schemas reuse `$defs`).
+ */
+function sanitizeJsonSchemaForGemini(schema: any, seen: WeakSet<object> = new WeakSet()): any {
   if (!schema || typeof schema !== 'object') {
     return schema;
   }
 
   if (Array.isArray(schema)) {
-    return schema.map(sanitizeJsonSchemaForGemini);
+    return schema.map((entry) => sanitizeJsonSchemaForGemini(entry, seen));
   }
 
-  const sanitized = { ...schema };
-
-  if (sanitized.jsonSchema) {
-    sanitized.jsonSchema = sanitizeJsonSchemaForGemini(sanitized.jsonSchema);
+  if (seen.has(schema)) {
+    return schema;
   }
-  if (sanitized.schema) {
-    sanitized.schema = sanitizeJsonSchemaForGemini(sanitized.schema);
-  }
+  seen.add(schema);
 
-  if (sanitized.properties) {
-    for (const key of Object.keys(sanitized.properties)) {
-      sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
+  const sanitized: Record<string, any> = { ...schema };
+
+  for (const key of SCHEMA_KEYS_SINGLE) {
+    const value = sanitized[key];
+
+    if (value !== undefined && value !== null && typeof value === 'object') {
+      sanitized[key] = sanitizeJsonSchemaForGemini(value, seen);
     }
   }
 
+  for (const key of SCHEMA_KEYS_ARRAY) {
+    if (Array.isArray(sanitized[key])) {
+      sanitized[key] = sanitized[key].map((entry: unknown) => sanitizeJsonSchemaForGemini(entry, seen));
+    }
+  }
+
+  for (const key of SCHEMA_KEYS_RECORD) {
+    const value = sanitized[key];
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const next: Record<string, any> = {};
+
+      for (const [innerKey, innerValue] of Object.entries(value as Record<string, unknown>)) {
+        next[innerKey] = sanitizeJsonSchemaForGemini(innerValue, seen);
+      }
+      sanitized[key] = next;
+    }
+  }
+
+  // `additionalProperties` may be either a boolean or a nested schema.
+  if (sanitized.additionalProperties && typeof sanitized.additionalProperties === 'object') {
+    sanitized.additionalProperties = sanitizeJsonSchemaForGemini(sanitized.additionalProperties, seen);
+  }
+
+  // Filter `required` to keys that actually exist on `properties`. Gemini
+  // crashes if a required entry doesn't match a defined property, but it
+  // accepts `required` when every entry resolves. If nothing valid remains,
+  // drop the key entirely so the LLM call still goes through.
   if (Array.isArray(sanitized.required)) {
-    // Aggressive fix: completely delete all nested required arrays
-    // because Gemini's strict OpenAPI validator crashes when arrays 
-    // define required constraints without matching properties.
-    // The Gemini LLM functions perfectly without required arrays.
-    delete sanitized.required;
-  }
+    const properties =
+      sanitized.properties && typeof sanitized.properties === 'object' && !Array.isArray(sanitized.properties)
+        ? (sanitized.properties as Record<string, unknown>)
+        : null;
 
-  if (sanitized.items) {
-    sanitized.items = sanitizeJsonSchemaForGemini(sanitized.items);
-  }
+    const validRequired = properties
+      ? sanitized.required.filter(
+          (name: unknown) => typeof name === 'string' && Object.prototype.hasOwnProperty.call(properties, name),
+        )
+      : [];
 
-  if (Array.isArray(sanitized.anyOf)) {
-    sanitized.anyOf = sanitized.anyOf.map(sanitizeJsonSchemaForGemini);
-  }
-  if (Array.isArray(sanitized.allOf)) {
-    sanitized.allOf = sanitized.allOf.map(sanitizeJsonSchemaForGemini);
+    if (validRequired.length > 0) {
+      sanitized.required = validRequired;
+    } else {
+      delete sanitized.required;
+    }
   }
 
   return sanitized;

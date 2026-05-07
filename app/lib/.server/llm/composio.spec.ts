@@ -220,6 +220,111 @@ describe('Composio tool normalization and confirmation safety', () => {
     });
   });
 
+  it('sanitizes Composio tool-router schemas so Gemini accepts them', () => {
+    // Mirrors the exact shape that produced the Gemini error:
+    //   GenerateContentRequest.tools[0].function_declarations[1]
+    //     .parameters.properties[tools].items.required[1]: property is not defined
+    const tool = {
+      description: 'Execute Composio tools',
+      execute: vi.fn(),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tools: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                slug: { type: 'string' },
+                arguments: { type: 'object' },
+              },
+              // "user_id" is referenced as required but is NOT in properties.
+              // Gemini's validator rejects this payload outright.
+              required: ['slug', 'user_id'],
+              oneOf: [
+                {
+                  type: 'object',
+                  properties: { slug: { type: 'string' } },
+                  required: ['slug', 'phantom'],
+                },
+              ],
+              $defs: {
+                ToolRef: {
+                  type: 'object',
+                  properties: { name: { type: 'string' } },
+                  required: ['name', 'missing'],
+                },
+              },
+              additionalProperties: {
+                type: 'object',
+                properties: { value: { type: 'string' } },
+                required: ['value', 'unknown'],
+              },
+            },
+          },
+        },
+        required: ['tools', 'never_present'],
+      },
+    };
+
+    const normalized = normalizeComposioToolForAiSdkV4(tool);
+    const params = normalized.parameters;
+
+    // Top level `required` keeps only entries that exist in properties.
+    expect(params.required).toEqual(['tools']);
+
+    const itemsSchema = params.properties.tools.items;
+
+    // `required` on items kept only the valid `slug` entry.
+    expect(itemsSchema.required).toEqual(['slug']);
+
+    // The oneOf branch's `phantom` was filtered, leaving `slug` valid.
+    expect(itemsSchema.oneOf[0].required).toEqual(['slug']);
+
+    // $defs entries are walked: `missing` is dropped, only `name` survives.
+    expect(itemsSchema.$defs.ToolRef.required).toEqual(['name']);
+
+    // additionalProperties (when a schema) is walked too.
+    expect(itemsSchema.additionalProperties.required).toEqual(['value']);
+
+    // Properties unrelated to the bug are preserved.
+    expect(itemsSchema.properties.slug).toEqual({ type: 'string' });
+  });
+
+  it('drops required arrays entirely when no entries reference defined properties', () => {
+    const tool = {
+      description: 'Phantom required',
+      execute: vi.fn(),
+      inputSchema: {
+        type: 'object',
+        properties: { foo: { type: 'string' } },
+        required: ['bar', 'baz'],
+      },
+    };
+
+    const normalized = normalizeComposioToolForAiSdkV4(tool);
+
+    expect(normalized.parameters).not.toHaveProperty('required');
+    expect(normalized.parameters.properties.foo).toEqual({ type: 'string' });
+  });
+
+  it('handles cyclic schemas without infinite recursion', () => {
+    const cyclic: any = {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+    };
+    cyclic.properties.self = cyclic;
+
+    const normalized = normalizeComposioToolForAiSdkV4({
+      description: 'Cycle',
+      execute: vi.fn(),
+      inputSchema: cyclic,
+    });
+
+    expect(normalized.parameters.required).toEqual(['name']);
+  });
+
   it('classifies write-style Composio tool names conservatively', () => {
     expect(isLikelyMutatingComposioTool('GITHUB_CREATE_ISSUE')).toBe(true);
     expect(isLikelyMutatingComposioTool('GITHUB_STAR_REPO')).toBe(true);
