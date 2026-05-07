@@ -306,6 +306,13 @@ function sanitizeJsonSchemaForGemini(schema: any): any {
 
   const sanitized = { ...schema };
 
+  if (sanitized.jsonSchema) {
+    sanitized.jsonSchema = sanitizeJsonSchemaForGemini(sanitized.jsonSchema);
+  }
+  if (sanitized.schema) {
+    sanitized.schema = sanitizeJsonSchemaForGemini(sanitized.schema);
+  }
+
   if (sanitized.properties) {
     for (const key of Object.keys(sanitized.properties)) {
       sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
