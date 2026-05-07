@@ -45,6 +45,10 @@ changelogUI.md
 docs/instructions/Roadmap.md
 .cursorrules
 *.md
+!Codex.md
+!tasks/
+!tasks/todo.md
+!tasks/lessons.md
 !docs/design-reference-audit.md
 !vendor/awesome-design-md/
 !vendor/awesome-design-md/design-md/

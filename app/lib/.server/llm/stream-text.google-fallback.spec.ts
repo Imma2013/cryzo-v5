@@ -501,4 +501,74 @@ describe('createGoogleGenerateFallbackResult', () => {
     );
   });
 
+  it('injects Composio session tools for Vercel and Supabase app-action prompts', async () => {
+    const composioTools = {
+      COMPOSIO_SEARCH_TOOLS: {
+        description: 'Search Composio tools',
+      },
+    };
+
+    composioState.getComposioTools.mockResolvedValue({
+      configured: true,
+      hasIdentity: true,
+      resolvedUserId: 'user_123',
+      status: 'available',
+      tools: composioTools,
+    });
+    mockedGenerateText.mockResolvedValue({
+      files: [],
+      finishReason: 'stop',
+      providerMetadata: {},
+      reasoning: [],
+      request: { body: '{}' },
+      response: { id: 'resp-tools-vercel' },
+      sources: [],
+      steps: [],
+      text: 'checking deployment',
+      toolCalls: [],
+      toolResults: [],
+      usage: {
+        completionTokens: 3,
+        promptTokens: 4,
+        totalTokens: 7,
+      },
+      warnings: [],
+    } as any);
+
+    await streamTextUnderTest({
+      chatMode: 'discuss',
+      env: {
+        COMPOSIO_API_KEY: 'test-composio-key',
+        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+      } as any,
+      messages: [
+        {
+          content: 'Redeploy my Vercel project and list my Supabase projects',
+          role: 'user',
+        },
+      ],
+      options: {},
+      user: {
+        composioUserId: 'user_123',
+        hasComposioIdentity: true,
+        isAuthenticated: true,
+        uid: 'user_123',
+      },
+    });
+
+    expect(composioState.getComposioTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerName: 'Google',
+        userPrompt: 'Redeploy my Vercel project and list my Supabase projects',
+      }),
+    );
+    expect(mockedGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxSteps: 10,
+        toolChoice: 'required',
+        tools: composioTools,
+      }),
+    );
+  });
+
 });

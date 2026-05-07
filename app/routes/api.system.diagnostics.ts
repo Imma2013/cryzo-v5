@@ -1,4 +1,5 @@
 import { json, type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { getServerEnv, getServerEnvDiagnostics } from '~/lib/server-env';
 
 /**
  * Diagnostic API for troubleshooting connection issues
@@ -12,10 +13,14 @@ interface AppContext {
 }
 
 export const loader: LoaderFunction = async ({ request, context }: LoaderFunctionArgs & { context: AppContext }) => {
+  const serverEnv = getServerEnv(context as any);
+  const serverEnvDiagnostics = getServerEnvDiagnostics(serverEnv);
   // Get environment variables
   const envVars = {
-    hasGithubToken: Boolean(process.env.GITHUB_ACCESS_TOKEN || context.env?.GITHUB_ACCESS_TOKEN),
-    hasNetlifyToken: Boolean(process.env.NETLIFY_TOKEN || context.env?.NETLIFY_TOKEN),
+    hasComposioApiKey: Boolean(serverEnv.COMPOSIO_API_KEY),
+    hasComposioFeatureFlag: Boolean(serverEnv.FEATURE_COMPOSIO_TOOLS),
+    hasGithubToken: Boolean(serverEnv.GITHUB_ACCESS_TOKEN || context.env?.GITHUB_ACCESS_TOKEN),
+    hasNetlifyToken: Boolean(serverEnv.NETLIFY_TOKEN || context.env?.NETLIFY_TOKEN),
     nodeEnv: process.env.NODE_ENV,
   };
 
@@ -121,6 +126,7 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
     {
       status: 'success',
       environment: envVars,
+      serverEnvDiagnostics,
       cookies: {
         hasGithubTokenCookie,
         hasGithubUsernameCookie,

@@ -16,7 +16,14 @@ vi.mock('~/lib/.server/composio', () => {
   };
 });
 
-import { __resetPendingComposioConfirmationsForTests, getComposioTools, shouldEnableComposioTools } from './composio';
+import {
+  __resetPendingComposioConfirmationsForTests,
+  createComposioConfirmationToken,
+  getComposioTools,
+  isLikelyMutatingComposioTool,
+  normalizeComposioToolForAiSdkV4,
+  shouldEnableComposioTools,
+} from './composio';
 
 const originalComposioApiKey = process.env.COMPOSIO_API_KEY;
 
@@ -135,10 +142,12 @@ describe('getComposioTools', () => {
   });
 
   it('creates a Composio Vercel-provider session and returns session tools for a signed-in user', async () => {
+    const tools = vi.fn().mockResolvedValue({
+      COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
+    });
+
     composioState.createComposioSessionFromApiKey.mockResolvedValue({
-      tools: vi.fn().mockResolvedValue({
-        COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
-      }),
+      tools,
     });
 
     const resolution = await getComposioTools({
@@ -157,6 +166,7 @@ describe('getComposioTools', () => {
       COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
     });
     expect(composioState.createComposioSessionFromApiKey).toHaveBeenCalledWith('test-key', 'user_123');
+    expect(tools).toHaveBeenCalledWith();
     expect(resolution.cleanup).toBeUndefined();
   });
 
@@ -183,5 +193,214 @@ describe('getComposioTools', () => {
       status: 'resolution_failed',
       tools: {},
     });
+  });
+});
+
+describe('Composio tool normalization and confirmation safety', () => {
+  afterEach(() => {
+    composioState.createComposioSessionFromApiKey.mockReset();
+  });
+
+  it('normalizes Composio Vercel inputSchema to AI SDK v4 parameters while preserving execute', () => {
+    const execute = vi.fn();
+    const tool = {
+      description: 'Search tools',
+      execute,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+      },
+    };
+
+    expect(normalizeComposioToolForAiSdkV4(tool)).toEqual({
+      ...tool,
+      parameters: tool.inputSchema,
+    });
+  });
+
+  it('classifies write-style Composio tool names conservatively', () => {
+    expect(isLikelyMutatingComposioTool('GITHUB_CREATE_ISSUE')).toBe(true);
+    expect(isLikelyMutatingComposioTool('GITHUB_STAR_REPO')).toBe(true);
+    expect(isLikelyMutatingComposioTool('GMAIL_SEND_EMAIL')).toBe(true);
+    expect(isLikelyMutatingComposioTool('GMAIL_FETCH_EMAILS', 'Fetch email messages')).toBe(false);
+    expect(isLikelyMutatingComposioTool('COMPOSIO_SEARCH_TOOLS')).toBe(false);
+  });
+
+  it('lets read tools execute immediately', async () => {
+    const execute = vi.fn().mockResolvedValue({ items: [] });
+
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({
+        COMPOSIO_SEARCH_TOOLS: {
+          description: 'Search Composio tools',
+          execute,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+            },
+          },
+        },
+      }),
+    });
+
+    const resolution = await getComposioTools({
+      env: {
+        COMPOSIO_API_KEY: 'test-key',
+      } as any,
+      providerName: 'Google',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: 'summarize my emails from today',
+    });
+
+    await expect(resolution.tools.COMPOSIO_SEARCH_TOOLS.execute({ query: 'gmail' })).resolves.toEqual({ items: [] });
+    expect(execute).toHaveBeenCalledWith({ query: 'gmail' });
+    expect(resolution.tools.COMPOSIO_SEARCH_TOOLS.parameters).toEqual({
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+    });
+  });
+
+  it('requires confirmation before executing write tools', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({
+        GITHUB_CREATE_ISSUE: {
+          description: 'Create an issue',
+          execute,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+            },
+          },
+        },
+      }),
+    });
+
+    const resolution = await getComposioTools({
+      env: {
+        COMPOSIO_API_KEY: 'test-key',
+        COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
+      } as any,
+      providerName: 'Google',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: 'create a GitHub issue in my repo',
+    });
+
+    const result = await resolution.tools.GITHUB_CREATE_ISSUE.execute({ title: 'Bug' });
+
+    expect(result).toMatchObject({
+      message: 'Confirm this external action before I run GITHUB_CREATE_ISSUE.',
+      status: 'confirmation_required',
+      toolName: 'GITHUB_CREATE_ISSUE',
+    });
+    expect(result.confirmationToken).toEqual(expect.any(String));
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('executes a write tool when the latest prompt includes a valid matching confirmation token', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const token = await createComposioConfirmationToken({
+      args: { title: 'Bug' },
+      secret: 'test-confirmation-secret',
+      toolName: 'GITHUB_CREATE_ISSUE',
+      userId: 'user_123',
+    });
+
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({
+        GITHUB_CREATE_ISSUE: {
+          description: 'Create an issue',
+          execute,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+            },
+          },
+        },
+      }),
+    });
+
+    const resolution = await getComposioTools({
+      env: {
+        COMPOSIO_API_KEY: 'test-key',
+        COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
+      } as any,
+      providerName: 'Google',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: `I confirm the external action. Use confirmation token ${token}.`,
+    });
+
+    await expect(
+      resolution.tools.GITHUB_CREATE_ISSUE.execute({
+        confirmed: true,
+        confirmationToken: token,
+        title: 'Bug',
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(execute).toHaveBeenCalledWith({ title: 'Bug' }, undefined);
+  });
+
+  it('rejects invalid, expired, or mismatched confirmation tokens without calling Composio', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const mismatchedToken = await createComposioConfirmationToken({
+      args: { title: 'Different bug' },
+      secret: 'test-confirmation-secret',
+      toolName: 'GITHUB_CREATE_ISSUE',
+      userId: 'user_123',
+    });
+
+    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({
+        GITHUB_CREATE_ISSUE: {
+          description: 'Create an issue',
+          execute,
+        },
+      }),
+    });
+
+    const resolution = await getComposioTools({
+      env: {
+        COMPOSIO_API_KEY: 'test-key',
+        COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
+      } as any,
+      providerName: 'Google',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: `Use confirmation token ${mismatchedToken}.`,
+    });
+
+    await expect(resolution.tools.GITHUB_CREATE_ISSUE.execute({ title: 'Bug' })).resolves.toMatchObject({
+      status: 'confirmation_required',
+    });
+
+    const expiredToken = await createComposioConfirmationToken({
+      args: { title: 'Bug' },
+      expiresAt: new Date(Date.now() - 60_000),
+      secret: 'test-confirmation-secret',
+      toolName: 'GITHUB_CREATE_ISSUE',
+      userId: 'user_123',
+    });
+
+    const expiredResolution = await getComposioTools({
+      env: {
+        COMPOSIO_API_KEY: 'test-key',
+        COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
+      } as any,
+      providerName: 'Google',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: `Use confirmation token ${expiredToken}.`,
+    });
+
+    await expect(expiredResolution.tools.GITHUB_CREATE_ISSUE.execute({ title: 'Bug' })).resolves.toMatchObject({
+      status: 'confirmation_required',
+    });
+    expect(execute).not.toHaveBeenCalled();
   });
 });

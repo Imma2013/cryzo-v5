@@ -12,6 +12,9 @@ describe('resolveAssistantMode', () => {
     expect(resolveAssistantMode('build', 'summarize my emails from today')).toBe('external-tool');
     expect(resolveAssistantMode('build', "what's on my calendar this week?")).toBe('external-tool');
     expect(resolveAssistantMode('build', 'create a GitHub issue in my repo')).toBe('external-tool');
+    expect(resolveAssistantMode('build', 'redeploy my Vercel project through Composio')).toBe('external-tool');
+    expect(resolveAssistantMode('build', 'list my Supabase projects')).toBe('external-tool');
+    expect(resolveAssistantMode('build', 'show my Linear issues')).toBe('external-tool');
   });
 
   it('preserves normal build and discuss routing for non-tool prompts', () => {
@@ -22,6 +25,9 @@ describe('resolveAssistantMode', () => {
   it('routes mixed builder-plus-app prompts into build-with-tools mode', () => {
     expect(resolveAssistantMode('build', 'build me a dog website and connect to my Gmail')).toBe('build-with-tools');
     expect(resolveAssistantMode('build', 'make a CRM dashboard and create a GitHub issue in my repo')).toBe(
+      'build-with-tools',
+    );
+    expect(resolveAssistantMode('build', 'build a deployment dashboard and list my Vercel deployments')).toBe(
       'build-with-tools',
     );
   });

@@ -80,11 +80,13 @@ describe('getServerEnv', () => {
     const env = getServerEnv(
       {
         env: {
+          COMPOSIO_API_KEY: 'composio-context-key',
           SUPABASE_URL: 'https://context.supabase.co',
         },
       },
       {
         metaEnv: {
+          FEATURE_COMPOSIO_TOOLS: 'true',
           VITE_SUPABASE_ANON_KEY: 'meta-anon-key',
         },
         processEnv: {},
@@ -93,6 +95,8 @@ describe('getServerEnv', () => {
 
     expect(getServerEnvDiagnostics(env)).toEqual({
       keys: {
+        COMPOSIO_API_KEY: true,
+        FEATURE_COMPOSIO_TOOLS: true,
         SUPABASE_ANON_KEY: false,
         SUPABASE_URL: true,
         VITE_SUPABASE_ANON_KEY: true,
@@ -100,24 +104,32 @@ describe('getServerEnv', () => {
       },
       sourceKeys: {
         cloudflare: {
+          COMPOSIO_API_KEY: false,
+          FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_SUPABASE_ANON_KEY: false,
           VITE_SUPABASE_URL: false,
         },
         context: {
+          COMPOSIO_API_KEY: true,
+          FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: true,
           VITE_SUPABASE_ANON_KEY: false,
           VITE_SUPABASE_URL: false,
         },
         meta: {
+          COMPOSIO_API_KEY: false,
+          FEATURE_COMPOSIO_TOOLS: true,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_SUPABASE_ANON_KEY: true,
           VITE_SUPABASE_URL: false,
         },
         process: {
+          COMPOSIO_API_KEY: false,
+          FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_SUPABASE_ANON_KEY: false,

@@ -3,7 +3,15 @@ type ServerEnvRecord = Record<string, string | undefined>;
 export type ServerEnvSourceName = 'meta' | 'process' | 'context' | 'cloudflare';
 
 export type ServerEnvDiagnostics = {
-  keys: Record<'SUPABASE_ANON_KEY' | 'SUPABASE_URL' | 'VITE_SUPABASE_ANON_KEY' | 'VITE_SUPABASE_URL', boolean>;
+  keys: Record<
+    | 'COMPOSIO_API_KEY'
+    | 'FEATURE_COMPOSIO_TOOLS'
+    | 'SUPABASE_ANON_KEY'
+    | 'SUPABASE_URL'
+    | 'VITE_SUPABASE_ANON_KEY'
+    | 'VITE_SUPABASE_URL',
+    boolean
+  >;
   sourceKeys: Record<ServerEnvSourceName, Partial<Record<keyof ServerEnvDiagnostics['keys'], boolean>>>;
   sources: Record<ServerEnvSourceName, boolean>;
 };
@@ -40,8 +48,10 @@ function hasAnyServerEnvValue(record: ServerEnvRecord) {
   return Object.values(record).some((value) => value !== undefined);
 }
 
-function buildSupabaseKeyDiagnostics(record: ServerEnvRecord) {
+function buildKeyDiagnostics(record: ServerEnvRecord): ServerEnvDiagnostics['keys'] {
   return {
+    COMPOSIO_API_KEY: Boolean(record.COMPOSIO_API_KEY),
+    FEATURE_COMPOSIO_TOOLS: Boolean(record.FEATURE_COMPOSIO_TOOLS),
     SUPABASE_ANON_KEY: Boolean(record.SUPABASE_ANON_KEY),
     SUPABASE_URL: Boolean(record.SUPABASE_URL),
     VITE_SUPABASE_ANON_KEY: Boolean(record.VITE_SUPABASE_ANON_KEY),
@@ -103,12 +113,12 @@ export function getServerEnv(
   };
 
   return attachServerEnvDiagnostics(mergedEnv, {
-    keys: buildSupabaseKeyDiagnostics(mergedEnv),
+    keys: buildKeyDiagnostics(mergedEnv),
     sourceKeys: {
-      meta: buildSupabaseKeyDiagnostics(normalizedMetaEnv),
-      process: buildSupabaseKeyDiagnostics(normalizedProcessEnv),
-      context: buildSupabaseKeyDiagnostics(normalizedContextEnv),
-      cloudflare: buildSupabaseKeyDiagnostics(normalizedCloudflareEnv),
+      meta: buildKeyDiagnostics(normalizedMetaEnv),
+      process: buildKeyDiagnostics(normalizedProcessEnv),
+      context: buildKeyDiagnostics(normalizedContextEnv),
+      cloudflare: buildKeyDiagnostics(normalizedCloudflareEnv),
     },
     sources: {
       meta: hasAnyServerEnvValue(normalizedMetaEnv),

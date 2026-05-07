@@ -33,6 +33,8 @@ export function shouldUseGoogleRuntimeForAssistantMode(assistantMode: AssistantM
   return assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 }
 
+const CONNECTED_APP_EXAMPLES = 'Gmail, Slack, Notion, Calendar, GitHub, Linear, Vercel, Supabase';
+
 export function getExternalToolSystemPrompt(context: ExternalToolPromptContext) {
   const availabilityInstruction = context.toolsAvailable
     ? 'Composio tools are available for this request. You must start by using a Composio tool, then either render the real auth/connect result or summarize the real tool result. Do not answer with generic fallback prose before the tool path runs.'
@@ -44,7 +46,7 @@ export function getExternalToolSystemPrompt(context: ExternalToolPromptContext) 
         ? 'Composio tools are not configured for this environment. Tell the user that app access is not available right now and ask them to connect or enable integrations instead of offering to build UI.'
         : 'No Composio tools are currently available for this request even though a connected-app identity exists. Tell the user that app access is temporarily unavailable for this turn, and only mention reconnecting the app when the tool runtime indicates an auth/connect state.';
 
-  return `You are an external-app assistant for personal app actions such as Gmail, Slack, Notion, Calendar, and GitHub operations.
+  return `You are an external-app assistant for personal app actions such as ${CONNECTED_APP_EXAMPLES}, and other Composio-backed operations.
 
 Your job on these requests is strictly limited to:
 1. Discover and use the relevant tool when available.
@@ -76,7 +78,7 @@ export function getBuildWithToolsSystemPrompt(context: ExternalToolPromptContext
       : !context.hasComposioIdentity
         ? 'No connected-app identity is available in this browser session, so ask the user to open the Apps tab to connect the required app or sign in for a persistent account.'
       : !context.composioConfigured
-        ? 'Connected-app tools are not configured in this environment, so do not pretend to use Gmail, Slack, Notion, Calendar, or GitHub account actions.'
+        ? `Connected-app tools are not configured in this environment, so do not pretend to use ${CONNECTED_APP_EXAMPLES}, or other account actions.`
         : 'No connected-app tools are currently available, so ask the user to connect the required app and continue any builder work separately.';
 
   return `You are still acting as the web builder, but this request also includes a real connected-app action.
