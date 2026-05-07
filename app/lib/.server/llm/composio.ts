@@ -320,11 +320,11 @@ function sanitizeJsonSchemaForGemini(schema: any): any {
   }
 
   if (Array.isArray(sanitized.required)) {
-    const validProps = sanitized.properties ? Object.keys(sanitized.properties) : [];
-    sanitized.required = sanitized.required.filter((req: string) => validProps.includes(req));
-    if (sanitized.required.length === 0) {
-      delete sanitized.required;
-    }
+    // Aggressive fix: completely delete all nested required arrays
+    // because Gemini's strict OpenAPI validator crashes when arrays 
+    // define required constraints without matching properties.
+    // The Gemini LLM functions perfectly without required arrays.
+    delete sanitized.required;
   }
 
   if (sanitized.items) {
