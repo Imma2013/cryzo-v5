@@ -306,30 +306,28 @@ function sanitizeJsonSchemaForGemini(schema: any): any {
 
   const sanitized = { ...schema };
 
-  if (sanitized.type === 'object' || sanitized.properties !== undefined) {
-    if (sanitized.properties) {
-      for (const key of Object.keys(sanitized.properties)) {
-        sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
-      }
-    }
-
-    if (Array.isArray(sanitized.required)) {
-      const validProps = sanitized.properties ? Object.keys(sanitized.properties) : [];
-      sanitized.required = sanitized.required.filter((req: string) => validProps.includes(req));
-      if (sanitized.required.length === 0) {
-        delete sanitized.required;
-      }
+  if (sanitized.properties) {
+    for (const key of Object.keys(sanitized.properties)) {
+      sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
     }
   }
 
-  if (sanitized.type === 'array' && sanitized.items) {
+  if (Array.isArray(sanitized.required)) {
+    const validProps = sanitized.properties ? Object.keys(sanitized.properties) : [];
+    sanitized.required = sanitized.required.filter((req: string) => validProps.includes(req));
+    if (sanitized.required.length === 0) {
+      delete sanitized.required;
+    }
+  }
+
+  if (sanitized.items) {
     sanitized.items = sanitizeJsonSchemaForGemini(sanitized.items);
   }
 
-  if (sanitized.anyOf) {
+  if (Array.isArray(sanitized.anyOf)) {
     sanitized.anyOf = sanitized.anyOf.map(sanitizeJsonSchemaForGemini);
   }
-  if (sanitized.allOf) {
+  if (Array.isArray(sanitized.allOf)) {
     sanitized.allOf = sanitized.allOf.map(sanitizeJsonSchemaForGemini);
   }
 
