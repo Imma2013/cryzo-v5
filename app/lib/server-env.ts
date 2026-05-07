@@ -8,6 +8,7 @@ export type ServerEnvDiagnostics = {
     | 'FEATURE_COMPOSIO_TOOLS'
     | 'SUPABASE_ANON_KEY'
     | 'SUPABASE_URL'
+    | 'VITE_COMPOSIO_API_KEY'
     | 'VITE_SUPABASE_ANON_KEY'
     | 'VITE_SUPABASE_URL',
     boolean
@@ -54,6 +55,7 @@ function buildKeyDiagnostics(record: ServerEnvRecord): ServerEnvDiagnostics['key
     FEATURE_COMPOSIO_TOOLS: Boolean(record.FEATURE_COMPOSIO_TOOLS),
     SUPABASE_ANON_KEY: Boolean(record.SUPABASE_ANON_KEY),
     SUPABASE_URL: Boolean(record.SUPABASE_URL),
+    VITE_COMPOSIO_API_KEY: Boolean(record.VITE_COMPOSIO_API_KEY),
     VITE_SUPABASE_ANON_KEY: Boolean(record.VITE_SUPABASE_ANON_KEY),
     VITE_SUPABASE_URL: Boolean(record.VITE_SUPABASE_URL),
   };

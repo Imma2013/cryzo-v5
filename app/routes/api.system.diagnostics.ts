@@ -1,4 +1,5 @@
 import { json, type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
 import { getServerEnv, getServerEnvDiagnostics } from '~/lib/server-env';
 
 /**
@@ -15,9 +16,10 @@ interface AppContext {
 export const loader: LoaderFunction = async ({ request, context }: LoaderFunctionArgs & { context: AppContext }) => {
   const serverEnv = getServerEnv(context as any);
   const serverEnvDiagnostics = getServerEnvDiagnostics(serverEnv);
+  const composioApiKey = resolveComposioApiKeyFromEnv(serverEnv);
   // Get environment variables
   const envVars = {
-    hasComposioApiKey: Boolean(serverEnv.COMPOSIO_API_KEY),
+    hasComposioApiKey: Boolean(composioApiKey),
     hasComposioFeatureFlag: Boolean(serverEnv.FEATURE_COMPOSIO_TOOLS),
     hasGithubToken: Boolean(serverEnv.GITHUB_ACCESS_TOKEN || context.env?.GITHUB_ACCESS_TOKEN),
     hasNetlifyToken: Boolean(serverEnv.NETLIFY_TOKEN || context.env?.NETLIFY_TOKEN),

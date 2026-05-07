@@ -2,18 +2,18 @@
 
 ## Goal
 
-- [ ] State the user-visible goal in one sentence.
+- [x] Make deployed Composio chat tools stop failing with the missing API key error and verify production sees the configured key.
 
 ## Plan
 
-- [ ] Review relevant entries in `tasks/lessons.md`.
-- [ ] Identify affected files, systems, and external services.
-- [ ] Write the implementation approach before editing.
-- [ ] Confirm the plan with the user when behavior, data, billing, auth, deployment, or integrations are affected.
+- [x] Review relevant entries in `tasks/lessons.md`.
+- [x] Identify affected files, systems, and external services.
+- [x] Write the implementation approach before editing.
+- [x] Confirm the plan with the user when behavior, data, billing, auth, deployment, or integrations are affected.
 
 ## Progress
 
-- [ ] Implementation not started.
+- [x] Implementation not started.
 - [ ] Core changes completed.
 - [ ] Edge cases handled.
 - [ ] Documentation or comments updated where needed.
@@ -27,10 +27,10 @@
 
 ## Review / Results
 
-- Summary:
-- Verification evidence:
-- Remaining risks:
-- Follow-up tasks:
+- Summary: In progress.
+- Verification evidence: In progress.
+- Remaining risks: In progress.
+- Follow-up tasks: None identified yet.
 
 ## Open Questions / Blockers
 

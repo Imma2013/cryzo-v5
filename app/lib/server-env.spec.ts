@@ -99,6 +99,7 @@ describe('getServerEnv', () => {
         FEATURE_COMPOSIO_TOOLS: true,
         SUPABASE_ANON_KEY: false,
         SUPABASE_URL: true,
+        VITE_COMPOSIO_API_KEY: false,
         VITE_SUPABASE_ANON_KEY: true,
         VITE_SUPABASE_URL: false,
       },
@@ -108,6 +109,7 @@ describe('getServerEnv', () => {
           FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
+          VITE_COMPOSIO_API_KEY: false,
           VITE_SUPABASE_ANON_KEY: false,
           VITE_SUPABASE_URL: false,
         },
@@ -116,6 +118,7 @@ describe('getServerEnv', () => {
           FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: true,
+          VITE_COMPOSIO_API_KEY: false,
           VITE_SUPABASE_ANON_KEY: false,
           VITE_SUPABASE_URL: false,
         },
@@ -124,6 +127,7 @@ describe('getServerEnv', () => {
           FEATURE_COMPOSIO_TOOLS: true,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
+          VITE_COMPOSIO_API_KEY: false,
           VITE_SUPABASE_ANON_KEY: true,
           VITE_SUPABASE_URL: false,
         },
@@ -132,6 +136,7 @@ describe('getServerEnv', () => {
           FEATURE_COMPOSIO_TOOLS: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
+          VITE_COMPOSIO_API_KEY: false,
           VITE_SUPABASE_ANON_KEY: false,
           VITE_SUPABASE_URL: false,
         },
@@ -143,5 +148,18 @@ describe('getServerEnv', () => {
         process: false,
       },
     });
+  });
+
+  it('tracks VITE-prefixed Composio API keys exposed by Vite runtimes', () => {
+    const env = getServerEnv(undefined, {
+      metaEnv: {
+        VITE_COMPOSIO_API_KEY: 'composio-vite-key',
+      },
+      processEnv: {},
+    });
+
+    expect(env.VITE_COMPOSIO_API_KEY).toBe('composio-vite-key');
+    expect(getServerEnvDiagnostics(env)?.keys.VITE_COMPOSIO_API_KEY).toBe(true);
+    expect(getServerEnvDiagnostics(env)?.sourceKeys.meta.VITE_COMPOSIO_API_KEY).toBe(true);
   });
 });
