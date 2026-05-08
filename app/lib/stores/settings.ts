@@ -27,7 +27,7 @@ export interface Shortcuts {
 export const URL_CONFIGURABLE_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
 export const LOCAL_PROVIDERS = ['OpenAILike', 'LMStudio', 'Ollama'];
 export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'OpenAI'];
-const DEFAULT_ENABLED_PROVIDERS = new Set<string>();
+const DEFAULT_ENABLED_PROVIDERS = new Set<string>(['OpenAI']);
 
 export type ProviderSetting = Record<string, IProviderConfig>;
 
