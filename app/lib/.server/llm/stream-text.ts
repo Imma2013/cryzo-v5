@@ -2,6 +2,7 @@ import {
   convertToCoreMessages,
   formatDataStreamPart,
   generateText,
+  parseDataStreamPart,
   streamText as _streamText,
   type CoreMessage,
   type Message,
@@ -187,12 +188,55 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
     });
   };
 
+  const classifyNativeChunk = (chunk: string) => {
+    try {
+      const part = parseDataStreamPart(chunk);
+
+      switch (part.type) {
+        case 'finish_message':
+        case 'finish_step':
+        case 'message_annotations':
+        case 'start_step':
+          return 'structural';
+        default:
+          return 'visible';
+      }
+    } catch {
+      return 'visible';
+    }
+  };
+
   (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
-    let wroteNativeChunk = false;
+    let forwardedNativeOutput = false;
+    let bufferedNativeChunks: string[] = [];
+
+    const flushBufferedNativeChunks = () => {
+      if (bufferedNativeChunks.length === 0) {
+        return;
+      }
+
+      for (const chunk of bufferedNativeChunks) {
+        writer.write(chunk);
+      }
+
+      bufferedNativeChunks = [];
+    };
+
     const nativeWriter = {
       ...(writer as any),
       write(chunk: string) {
-        wroteNativeChunk = true;
+        if (forwardedNativeOutput) {
+          writer.write(chunk);
+          return;
+        }
+
+        if (classifyNativeChunk(chunk) === 'structural') {
+          bufferedNativeChunks.push(chunk);
+          return;
+        }
+
+        forwardedNativeOutput = true;
+        flushBufferedNativeChunks();
         writer.write(chunk);
       },
     };
@@ -202,10 +246,11 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
         throw error;
       }
 
-      if (wroteNativeChunk) {
+      if (forwardedNativeOutput) {
         return sanitizePartialNativeFailure(error);
       }
 
+      bufferedNativeChunks = [];
       return retryWithCompatibility(writer);
     };
 
@@ -213,9 +258,16 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
       const mergeResult = originalMergeIntoDataStream(nativeWriter);
 
       if (mergeResult && typeof mergeResult.then === 'function') {
-        return mergeResult.catch(handleMergeError);
+        return mergeResult.then(
+          (value: unknown) => {
+            flushBufferedNativeChunks();
+            return value;
+          },
+          handleMergeError,
+        );
       }
 
+      flushBufferedNativeChunks();
       return mergeResult;
     } catch (error) {
       return handleMergeError(error);
