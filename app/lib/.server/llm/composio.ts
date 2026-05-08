@@ -1,4 +1,3 @@
-import { resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -87,10 +86,6 @@ function getComposioEnabled(env: ComposioToolRuntimeOptions['env']) {
   return raw !== '0' && raw.toLowerCase() !== 'false';
 }
 
-function getComposioApiKey(env: ComposioToolRuntimeOptions['env']) {
-  return resolveComposioApiKeyFromEnv(env as Record<string, string | undefined> | undefined);
-}
-
 function getRuntimeEnvValue(env: ComposioToolRuntimeOptions['env'], key: string) {
   const envValue = (env as Record<string, string | undefined> | undefined)?.[key];
   const processValue = typeof process !== 'undefined' ? process.env[key] : undefined;
@@ -112,7 +107,7 @@ function getComposioMcpConfig(env: ComposioToolRuntimeOptions['env']): ComposioM
 }
 
 function hasComposioCredentials(env: ComposioToolRuntimeOptions['env']) {
-  return Boolean(getComposioMcpConfig(env) || getComposioApiKey(env));
+  return Boolean(getComposioMcpConfig(env));
 }
 
 function getComposioConfirmationSecret(env: ComposioToolRuntimeOptions['env'], apiKey: string) {
@@ -380,7 +375,7 @@ export function normalizeComposioToolForAiSdkV4(tool: any) {
   }
 
   let parameters = tool.parameters || tool.inputSchema;
-
+  
   if (parameters) {
     parameters = sanitizeJsonSchemaForGemini(parameters);
   }
@@ -487,8 +482,7 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
   const disabledReason = getDisabledReason(options);
   const hasIdentity = Boolean(composioUserId);
   const mcpConfig = getComposioMcpConfig(options.env);
-  const apiKey = getComposioApiKey(options.env);
-  const hasApiKey = Boolean(mcpConfig?.apiKey || apiKey);
+  const hasApiKey = Boolean(mcpConfig?.apiKey);
 
   if (disabledReason || !composioUserId) {
     console.info('[llm.composio] tools unavailable', {
@@ -508,55 +502,52 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
     };
   }
 
+  if (!mcpConfig) {
+    return {
+      configured: false,
+      hasIdentity,
+      resolvedUserId: composioUserId,
+      status: 'missing_api_key',
+      tools: {},
+    };
+  }
+
   try {
-    const confirmationSecret = getComposioConfirmationSecret(options.env, mcpConfig?.apiKey || apiKey!);
+    const confirmationSecret = getComposioConfirmationSecret(options.env, mcpConfig.apiKey);
     console.info('[llm.composio] resolving tools', {
       hasApiKey: true,
-      mcpTransport: Boolean(mcpConfig),
+      mcpTransport: true,
       providerName: options.providerName,
       requestOrigin: options.requestOrigin,
       resolvedUserId: composioUserId,
       userPrompt: options.userPrompt,
     });
 
-    if (mcpConfig) {
-      const { cleanup, tools } = await createComposioMcpToolResolution(mcpConfig, {
-        confirmationSecret,
-        userId: composioUserId,
-        userPrompt: options.userPrompt,
-      });
-      const toolNames = Object.keys(tools || {});
+    const { cleanup, tools } = await createComposioMcpToolResolution(mcpConfig, {
+      confirmationSecret,
+      userId: composioUserId,
+      userPrompt: options.userPrompt,
+    });
+    const toolNames = Object.keys(tools || {});
 
-      console.info('[llm.composio] mcp tools resolved', {
-        serverUrl: mcpConfig.serverUrl,
-        toolCount: toolNames.length,
-        toolNames: toolNames.slice(0, 10),
-        userId: composioUserId,
-      });
-
-      return {
-        cleanup,
-        configured: true,
-        hasIdentity: true,
-        resolvedUserId: composioUserId,
-        status: 'available',
-        tools,
-      };
-    }
-
-    console.warn('[llm.composio] MCP not configured, direct SDK path disabled (incompatible with Vercel serverless runtime)');
+    console.info('[llm.composio] mcp tools resolved', {
+      serverUrl: mcpConfig.serverUrl,
+      toolCount: toolNames.length,
+      toolNames: toolNames.slice(0, 10),
+      userId: composioUserId,
+    });
 
     return {
+      cleanup,
       configured: true,
-      errorMessage: 'Composio MCP server not configured. Set COMPOSIO_MCP_SERVER_URL and COMPOSIO_MCP_API_KEY.',
       hasIdentity: true,
       resolvedUserId: composioUserId,
-      status: 'resolution_failed',
-      tools: {},
+      status: 'available',
+      tools,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
-    console.warn('[llm.composio] session tool resolution failed', {
+    console.warn('[llm.composio] mcp tool resolution failed', {
       errorMessage,
       hasApiKey,
       providerName: options.providerName,

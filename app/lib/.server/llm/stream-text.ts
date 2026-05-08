@@ -439,6 +439,26 @@ function assertUsableGenerateTextOutput(result: Awaited<ReturnType<typeof genera
   }
 }
 
+function getErrorText(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const causeMessage =
+    error && typeof error === 'object' && 'cause' in error && (error as any).cause instanceof Error
+      ? (error as any).cause.message
+      : undefined;
+
+  return [message, causeMessage].filter(Boolean).join(' ');
+}
+
+function isSuccessfulResponseStreamFormatError(error: unknown) {
+  const errorText = getErrorText(error);
+
+  return (
+    errorText.includes('Failed to process successful response') &&
+    errorText.includes('readable') &&
+    errorText.includes('ReadableStream')
+  );
+}
+
 async function createGenerateTextCompatResultFromParams({
   streamParams,
   onFinish,
@@ -627,12 +647,6 @@ ${getBuildWithToolsSystemPrompt({
 })}`;
   }
 
-  if (toolsAvailable) {
-    return `${systemPrompt}
-
-Connected-app tools (Gmail, Slack, GitHub, Vercel, Supabase, etc.) are available. Use them when the user asks about personal data or external app actions. Otherwise, focus on your primary task.`;
-  }
-
   return systemPrompt;
 }
 
@@ -660,9 +674,7 @@ export function getAssistantToolRuntimeSettings({
     };
   }
 
-  return {
-    maxSteps: 5,
-  };
+  return {};
 }
 
 export function getExternalToolRuntimeErrorMessage({
@@ -689,7 +701,7 @@ export function getExternalToolRuntimeErrorMessage({
 
   switch (composioToolResolution.status) {
     case 'missing_api_key':
-      return 'External app tools are not configured: COMPOSIO_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+      return 'External app tools are not configured: COMPOSIO_MCP_SERVER_URL or COMPOSIO_MCP_API_KEY is missing on the server. Add both to the Vercel project environment variables and redeploy before retrying.';
     case 'unsupported_provider':
       return `Selected provider "${providerName}" does not support external app tool calling. Switch to a tool-capable provider and retry.`;
     case 'resolution_failed':
@@ -963,7 +975,7 @@ export async function streamText(props: {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
       currentProvider = provider || DEFAULT_PROVIDER.name;
-      currentModel = currentProvider === 'Google' ? normalizeGoogleChatModel(model) : model;
+      currentModel = model || DEFAULT_MODEL;
       newMessage.content = sanitizeText(content);
     } else if (message.role == 'assistant') {
       newMessage.content = sanitizeText(message.content);
@@ -980,7 +992,7 @@ export async function streamText(props: {
   });
   const latestUserPrompt = getAuthorPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
-  const shouldInjectComposioTools = true;
+  const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
   const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
@@ -990,7 +1002,7 @@ export async function streamText(props: {
   }
 
   currentProvider = provider.name;
-  const effectiveModelName = provider.name === 'Google' ? normalizeGoogleChatModel(currentModel) : currentModel;
+  const effectiveModelName = currentModel;
   const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === effectiveModelName);
 
@@ -1011,22 +1023,6 @@ export async function streamText(props: {
     modelDetails = modelsList.find((m) => m.name === effectiveModelName);
 
     if (!modelDetails) {
-      if (provider.name === 'Google' && !isSupportedGoogleChatModel(effectiveModelName)) {
-        const allowedModels = getGoogleChatModels()
-          .map((model) => model.name)
-          .join(', ');
-
-        throw new Error(
-          `Model "${effectiveModelName}" is not an allowed Google model. Allowed Gemini models: ${allowedModels}.`,
-        );
-      }
-
-      if (provider.name === 'Google') {
-        throw new Error(
-          `Model "${effectiveModelName}" is unavailable for Google right now. Allowed Gemini models: ${getGoogleTextModelFallbackOrder().join(', ')}.`,
-        );
-      }
-
       // Fallback to first model with warning
       logger.warn(
         `MODEL [${currentModel}] not found in provider [${provider.name}]. Falling back to first model. ${modelsList[0].name}`,
@@ -1297,21 +1293,7 @@ export async function streamText(props: {
     assistantMode,
     toolsAvailable: composioToolCount > 0,
   });
-  const providerOptions =
-    provider.name === 'Google' && hasTools
-      ? getGoogleProviderOptions(filteredOptions.providerOptions)
-      : filteredOptions.providerOptions;
-
-  if (provider.name === 'Google' && hasTools) {
-    logger.info(
-      'Google tool schema diagnostics',
-      JSON.stringify(
-        collectGoogleToolSchemaDiagnostics(tools).filter(
-          (entry) => entry.nestedToolsItemsRequired || entry.toolName.includes('COMPOSIO'),
-        ),
-      ),
-    );
-  }
+  const providerOptions = filteredOptions.providerOptions;
 
   if (assistantMode === 'build') {
     systemPrompt = `${systemPrompt}
@@ -1336,8 +1318,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
     ),
   );
 
-  const historyMessages =
-    provider.name === 'Google' ? buildGoogleCoreMessages(processedMessages, tools) : processedMessages;
+  const historyMessages = processedMessages;
 
   const { onFinish: userOnFinish, onStepFinish: userOnStepFinish, ...restFilteredOptions } = filteredOptions as typeof filteredOptions & {
     onFinish?: StreamingOptions['onFinish'];
@@ -1348,7 +1329,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
   const instrumentedOnStepFinish = async (step: any) => {
     const toolCalls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
 
-    if (toolCalls.length > 0) {
+    if ((assistantMode === 'external-tool' || assistantMode === 'build-with-tools') && toolCalls.length > 0) {
       usedToolCall = true;
       logger.info(
         'Composio tool step finished',
@@ -1389,13 +1370,6 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
     }
   };
 
-  if (provider.name === 'Google' && hasTools) {
-    logger.info(
-      'Google reconstructed tool-call diagnostics',
-      JSON.stringify(summarizeGoogleHistoryForDiagnostics(historyMessages as unknown[])),
-    );
-  }
-
   const streamParams = {
     model: provider.getModelInstance({
       model: modelDetails.name,
@@ -1415,10 +1389,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
             toolsAvailable: Object.keys(composioTools).length > 0,
           }),
     ...tokenParams,
-    messages:
-      provider.name === 'Google'
-        ? (historyMessages as CoreMessage[])
-        : convertToCoreMessages(historyMessages as any, { tools }),
+    messages: convertToCoreMessages(historyMessages as any, { tools }),
     ...restFilteredOptions,
     ...assistantToolRuntimeSettings,
     onFinish: instrumentedOnFinish,
@@ -1448,8 +1419,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
     ),
   );
 
-  const googleFallbackModels = getGoogleTextModelFallbackOrder();
-  const modelsToTry = provider.name === 'Google' ? googleFallbackModels : [modelDetails.name];
+  const modelsToTry = [modelDetails.name];
 
   let lastError: any;
 
@@ -1458,7 +1428,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
 
     try {
       logger.info(
-        'Starting Gemini response attempt',
+        'Starting OpenAI response attempt',
         JSON.stringify({
           assistantMode,
           hasTools,
@@ -1592,44 +1562,71 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
         });
       }
 
-      if (provider.name === 'Google') {
+      try {
+        const result = await _streamText(streamParams);
+        logTiming('Native streaming response initialized', attemptStartedAt, {
+          assistantMode,
+          model: modelName,
+          provider: provider.name,
+        });
+
+        return withFirstOutputTiming(result, {
+          assistantMode,
+          model: modelName,
+          path: 'native',
+        });
+      } catch (streamError) {
+        if (!isSuccessfulResponseStreamFormatError(streamError)) {
+          throw streamError;
+        }
+
         logger.warn(
-          'google-compat: Google provider compatibility fallback enabled: using generateText result packaging instead of native streaming',
+          'Native streaming response format failed; retrying with generateText compatibility packaging',
+          JSON.stringify({
+            assistantMode,
+            model: modelName,
+            provider: provider.name,
+          }),
         );
 
         const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
           onFinish?: StreamingOptions['onFinish'];
         };
 
-        const result = await createGenerateTextCompatResultFromParams({
-          onFinish,
-          streamParams: nonStreamingStreamParams,
-        });
+        try {
+          const result = await createGenerateTextCompatResultFromParams({
+            onFinish,
+            streamParams: nonStreamingStreamParams,
+          });
 
-        logTiming('Gemini compatibility response ready', attemptStartedAt, {
-          assistantMode,
-          model: modelName,
-        });
+          logTiming('Compatibility response ready after native stream format failure', attemptStartedAt, {
+            assistantMode,
+            model: modelName,
+            provider: provider.name,
+          });
 
-        return withFirstOutputTiming(result, {
-          assistantMode,
-          model: modelName,
-          path: 'google-compat',
-        });
+          return withFirstOutputTiming(result, {
+            assistantMode,
+            model: modelName,
+            path: 'stream-format-compat',
+          });
+        } catch (compatError) {
+          logger.warn(
+            'Compatibility retry failed after native stream format failure',
+            JSON.stringify({
+              assistantMode,
+              errorMessage: compatError instanceof Error ? compatError.message : String(compatError),
+              model: modelName,
+              provider: provider.name,
+            }),
+          );
+
+          throw new Error(
+            'The AI provider returned a response this app could not stream, and the compatibility retry also failed. Please retry in a moment.',
+            { cause: compatError },
+          );
+        }
       }
-
-      const result = await _streamText(streamParams);
-      logTiming('Native streaming response initialized', attemptStartedAt, {
-        assistantMode,
-        model: modelName,
-        provider: provider.name,
-      });
-
-      return withFirstOutputTiming(result, {
-        assistantMode,
-        model: modelName,
-        path: provider.name === 'Google' ? 'google-native' : 'native',
-      });
     } catch (error) {
       lastError = error;
       logger.warn(`Model ${modelName} failed, trying next model if available. Error: ${error}`);

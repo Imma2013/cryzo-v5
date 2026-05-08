@@ -14,11 +14,8 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { getServerEnv } from '~/lib/server-env';
-import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
-import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
-import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -139,10 +136,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
-    if (runtimeProviderName === GOOGLE_PROVIDER_NAME) {
-      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
-    }
-
     const setupPayload = getProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
 
     if (setupPayload) {
@@ -223,7 +216,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             env: serverEnv as any,
             promptId,
             contextOptimization,
-      user,
+            user,
             onFinish(resp) {
               if (resp.usage) {
                 logger.debug('createSummary token usage', JSON.stringify(resp.usage));
@@ -441,7 +434,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const errorMessage = error.message || 'Unknown error';
         const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
 
-        logger.error('Google stream failure diagnostics', {
+        logger.error('OpenAI stream failure diagnostics', {
           causeMessage: errorCauseMessage,
           errorMessage,
           provider: runtimeProviderName,
@@ -454,7 +447,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         }
 
         if (errorMessage.includes('Failed to process successful response') && errorCauseMessage) {
-          return `Custom error: The AI service returned an unexpected response format. ${errorCauseMessage}`;
+          return 'Custom error: The AI provider returned a response this app could not stream. Please retry in a moment.';
+        }
+
+        if (errorMessage.includes('compatibility retry also failed')) {
+          return 'Custom error: The AI provider returned a response this app could not stream. Please retry in a moment.';
         }
 
         if (errorMessage.includes('Invalid JSON response')) {
@@ -466,7 +463,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           errorMessage.includes('unauthorized') ||
           errorMessage.includes('authentication')
         ) {
-          return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+          return 'Custom error: OpenAI is selected, but OPENAI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
         }
 
         if (errorMessage.toLowerCase().includes('sign in before')) {

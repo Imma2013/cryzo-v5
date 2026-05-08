@@ -18,6 +18,7 @@ describe('resolveAssistantMode', () => {
   });
 
   it('preserves normal build and discuss routing for non-tool prompts', () => {
+    expect(resolveAssistantMode('build', 'hello')).toBe('discuss');
     expect(resolveAssistantMode('build', 'build a Gmail dashboard UI in React')).toBe('build');
     expect(resolveAssistantMode('discuss', 'explain how this auth flow works')).toBe('discuss');
   });

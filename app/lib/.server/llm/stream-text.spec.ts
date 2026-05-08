@@ -1,5 +1,5 @@
 import type { ToolSet } from 'ai';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BUILD_IMAGE_SOURCE_GUIDANCE,
   buildAssistantSystemPrompt,
@@ -269,7 +269,7 @@ describe('getExternalToolRuntimeErrorMessage', () => {
         },
         providerName: 'OpenAI',
       }),
-    ).toContain('COMPOSIO_API_KEY');
+    ).toContain('COMPOSIO_MCP_SERVER_URL or COMPOSIO_MCP_API_KEY');
   });
 
   it('returns explicit provider messaging when the selected provider cannot call tools', () => {
@@ -294,5 +294,136 @@ describe('getExternalToolRuntimeErrorMessage', () => {
         providerName: 'OpenAI',
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('streamText Composio and stream compatibility routing', () => {
+  afterEach(() => {
+    vi.doUnmock('ai');
+    vi.doUnmock('./composio');
+    vi.resetModules();
+  });
+
+  async function importStreamTextWithMocks({
+    generateTextResult,
+    nativeStreamError,
+    nativeStreamResult = {
+      mergeIntoDataStream: vi.fn(),
+      textStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    },
+  }: {
+    generateTextResult?: any;
+    nativeStreamError?: Error;
+    nativeStreamResult?: any;
+  }) {
+    vi.resetModules();
+
+    const getComposioTools = vi.fn();
+    const generateText = vi.fn().mockResolvedValue(
+      generateTextResult ?? {
+        files: [],
+        finishReason: 'stop',
+        providerMetadata: {},
+        reasoning: [],
+        request: { body: '{}' },
+        response: { id: 'resp-compat' },
+        sources: [],
+        steps: [],
+        text: 'hello from compatibility',
+        toolCalls: [],
+        toolResults: [],
+        usage: {
+          completionTokens: 3,
+          promptTokens: 4,
+          totalTokens: 7,
+        },
+        warnings: [],
+      },
+    );
+    const nativeStreamText = nativeStreamError
+      ? vi.fn().mockRejectedValue(nativeStreamError)
+      : vi.fn().mockResolvedValue(nativeStreamResult);
+
+    vi.doMock('ai', async () => {
+      const actual = await vi.importActual<typeof import('ai')>('ai');
+
+      return {
+        ...actual,
+        generateText,
+        streamText: nativeStreamText,
+      };
+    });
+
+    vi.doMock('./composio', () => {
+      return {
+        getComposioTools,
+      };
+    });
+
+    const module = await import('./stream-text');
+
+    return {
+      generateText,
+      getComposioTools,
+      nativeStreamResult,
+      nativeStreamText,
+      streamText: module.streamText,
+    };
+  }
+
+  it('does not resolve Composio tools for a plain hello prompt', async () => {
+    const { getComposioTools, nativeStreamResult, nativeStreamText, streamText } = await importStreamTextWithMocks({});
+
+    const result = await streamText({
+      chatMode: 'build',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    expect(result).toBe(nativeStreamResult);
+    expect(getComposioTools).not.toHaveBeenCalled();
+    expect(nativeStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: {},
+      }),
+    );
+  });
+
+  it('retries successful-response stream format failures through generateText compatibility packaging', async () => {
+    const nativeStreamError = new Error('Failed to process successful response');
+    (nativeStreamError as any).cause = new TypeError(
+      "First parameter has member 'readable' that is not a ReadableStream.",
+    );
+    const { generateText, nativeStreamText, streamText } = await importStreamTextWithMocks({ nativeStreamError });
+
+    const result = await streamText({
+      chatMode: 'discuss',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    expect(nativeStreamText).toHaveBeenCalledTimes(1);
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(await new Response(result.textStream).text()).toBe('hello from compatibility');
   });
 });

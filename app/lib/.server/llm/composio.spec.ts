@@ -43,10 +43,15 @@ import {
 const originalComposioApiKey = process.env.COMPOSIO_API_KEY;
 
 describe('shouldEnableComposioTools', () => {
-  it('enables Composio for signed-in identities on supported tool-capable providers with API key configured', () => {
+  it('enables Composio for signed-in identities on supported tool-capable providers with MCP configured', () => {
+    const mcpEnv = {
+      COMPOSIO_MCP_API_KEY: 'mcp-key',
+      COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+    } as any;
+
     expect(
       shouldEnableComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
+        env: mcpEnv,
         providerName: 'Google',
         user: { isAuthenticated: true, uid: 'user_123' },
       }),
@@ -54,7 +59,7 @@ describe('shouldEnableComposioTools', () => {
 
     expect(
       shouldEnableComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
+        env: mcpEnv,
         providerName: 'OpenAI',
         user: { isAuthenticated: true, uid: 'user_123' },
       }),
@@ -62,7 +67,7 @@ describe('shouldEnableComposioTools', () => {
 
     expect(
       shouldEnableComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
+        env: mcpEnv,
         providerName: 'Ollama',
         user: { isAuthenticated: true, uid: 'user_123' },
       }),
@@ -70,7 +75,7 @@ describe('shouldEnableComposioTools', () => {
 
     expect(
       shouldEnableComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
+        env: mcpEnv,
         providerName: 'Google',
         user: { isAuthenticated: false, composioUserId: 'guest_123', hasComposioIdentity: true },
       }),
@@ -81,7 +86,8 @@ describe('shouldEnableComposioTools', () => {
     expect(
       shouldEnableComposioTools({
         env: {
-          COMPOSIO_API_KEY: 'test-key',
+          COMPOSIO_MCP_API_KEY: 'mcp-key',
+          COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
           FEATURE_COMPOSIO_TOOLS: 'false',
         } as any,
         providerName: 'Google',
@@ -109,7 +115,8 @@ describe('getComposioTools', () => {
       getComposioTools({
         env: {
           FEATURE_COMPOSIO_TOOLS: 'false',
-          COMPOSIO_API_KEY: 'test-key',
+          COMPOSIO_MCP_API_KEY: 'mcp-key',
+          COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
         } as any,
         providerName: 'Google',
         user: { isAuthenticated: true, uid: 'user_123' },
@@ -126,7 +133,10 @@ describe('getComposioTools', () => {
   it('reports missing identity separately from configuration issues', async () => {
     await expect(
       getComposioTools({
-        env: { COMPOSIO_API_KEY: 'test-key' } as any,
+        env: {
+          COMPOSIO_MCP_API_KEY: 'mcp-key',
+          COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+        } as any,
         providerName: 'Google',
         user: { isAuthenticated: false },
       }),
@@ -139,7 +149,7 @@ describe('getComposioTools', () => {
     });
   });
 
-  it('reports missing Composio API key as a runtime blocker', async () => {
+  it('reports missing Composio MCP configuration as a runtime blocker', async () => {
     delete process.env.COMPOSIO_API_KEY;
 
     await expect(
@@ -157,15 +167,7 @@ describe('getComposioTools', () => {
     });
   });
 
-  it('creates a Composio Vercel-provider session and returns session tools for a signed-in user', async () => {
-    const tools = vi.fn().mockResolvedValue({
-      COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
-    });
-
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
-      tools,
-    });
-
+  it('does not fall back to a native Composio session when only the legacy API key is configured', async () => {
     const resolution = await getComposioTools({
       env: {
         COMPOSIO_API_KEY: 'test-key',
@@ -176,14 +178,15 @@ describe('getComposioTools', () => {
       userPrompt: 'read my gmail account',
     });
 
-    expect(resolution.status).toBe('available');
-    expect(resolution.resolvedUserId).toBe('user_123');
-    expect(resolution.tools).toEqual({
-      COMPOSIO_SEARCH_TOOLS: { description: 'Search Composio tools' },
+    expect(resolution).toEqual({
+      configured: false,
+      hasIdentity: true,
+      resolvedUserId: 'user_123',
+      status: 'missing_api_key',
+      tools: {},
     });
-    expect(composioState.createComposioSessionFromApiKey).toHaveBeenCalledWith('test-key', 'user_123');
-    expect(tools).toHaveBeenCalledWith();
-    expect(resolution.cleanup).toBeUndefined();
+    expect(composioState.createComposioSessionFromApiKey).not.toHaveBeenCalled();
+    expect(mcpState.createMCPClient).not.toHaveBeenCalled();
   });
 
   it('prefers the remote MCP tool router when MCP env is configured', async () => {
@@ -239,14 +242,18 @@ describe('getComposioTools', () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it('returns a resolution failure with the real session.tools() error message', async () => {
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+  it('returns a resolution failure with the real MCP tools error message', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    mcpState.createMCPClient.mockResolvedValue({
+      close,
       tools: vi.fn().mockRejectedValue(new Error('No connected accounts found for toolkit gmail')),
     });
 
     const resolution = await getComposioTools({
       env: {
-        COMPOSIO_API_KEY: 'test-key',
+        COMPOSIO_MCP_API_KEY: 'mcp-key',
+        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
       } as any,
       providerName: 'Google',
       requestOrigin: 'https://cryzo-v5-blue.vercel.app',
@@ -262,13 +269,20 @@ describe('getComposioTools', () => {
       status: 'resolution_failed',
       tools: {},
     });
+    expect(close).toHaveBeenCalled();
   });
 });
 
 describe('Composio tool normalization and confirmation safety', () => {
   afterEach(() => {
     composioState.createComposioSessionFromApiKey.mockReset();
+    mcpState.createMCPClient.mockReset();
   });
+
+  const mcpEnv = {
+    COMPOSIO_MCP_API_KEY: 'mcp-key',
+    COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+  } as any;
 
   it('normalizes Composio Vercel inputSchema to AI SDK v4 parameters while preserving execute', () => {
     const execute = vi.fn();
@@ -300,7 +314,8 @@ describe('Composio tool normalization and confirmation safety', () => {
   it('lets read tools execute immediately', async () => {
     const execute = vi.fn().mockResolvedValue({ items: [] });
 
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+    mcpState.createMCPClient.mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
       tools: vi.fn().mockResolvedValue({
         COMPOSIO_SEARCH_TOOLS: {
           description: 'Search Composio tools',
@@ -316,9 +331,7 @@ describe('Composio tool normalization and confirmation safety', () => {
     });
 
     const resolution = await getComposioTools({
-      env: {
-        COMPOSIO_API_KEY: 'test-key',
-      } as any,
+      env: mcpEnv,
       providerName: 'Google',
       user: { isAuthenticated: true, uid: 'user_123' },
       userPrompt: 'summarize my emails from today',
@@ -337,7 +350,8 @@ describe('Composio tool normalization and confirmation safety', () => {
   it('requires confirmation before executing write tools', async () => {
     const execute = vi.fn().mockResolvedValue({ ok: true });
 
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+    mcpState.createMCPClient.mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
       tools: vi.fn().mockResolvedValue({
         GITHUB_CREATE_ISSUE: {
           description: 'Create an issue',
@@ -354,7 +368,7 @@ describe('Composio tool normalization and confirmation safety', () => {
 
     const resolution = await getComposioTools({
       env: {
-        COMPOSIO_API_KEY: 'test-key',
+        ...mcpEnv,
         COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
       } as any,
       providerName: 'Google',
@@ -382,7 +396,8 @@ describe('Composio tool normalization and confirmation safety', () => {
       userId: 'user_123',
     });
 
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+    mcpState.createMCPClient.mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
       tools: vi.fn().mockResolvedValue({
         GITHUB_CREATE_ISSUE: {
           description: 'Create an issue',
@@ -399,7 +414,7 @@ describe('Composio tool normalization and confirmation safety', () => {
 
     const resolution = await getComposioTools({
       env: {
-        COMPOSIO_API_KEY: 'test-key',
+        ...mcpEnv,
         COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
       } as any,
       providerName: 'Google',
@@ -426,7 +441,8 @@ describe('Composio tool normalization and confirmation safety', () => {
       userId: 'user_123',
     });
 
-    composioState.createComposioSessionFromApiKey.mockResolvedValue({
+    mcpState.createMCPClient.mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
       tools: vi.fn().mockResolvedValue({
         GITHUB_CREATE_ISSUE: {
           description: 'Create an issue',
@@ -437,7 +453,7 @@ describe('Composio tool normalization and confirmation safety', () => {
 
     const resolution = await getComposioTools({
       env: {
-        COMPOSIO_API_KEY: 'test-key',
+        ...mcpEnv,
         COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
       } as any,
       providerName: 'Google',
@@ -459,7 +475,7 @@ describe('Composio tool normalization and confirmation safety', () => {
 
     const expiredResolution = await getComposioTools({
       env: {
-        COMPOSIO_API_KEY: 'test-key',
+        ...mcpEnv,
         COMPOSIO_CONFIRMATION_SECRET: 'test-confirmation-secret',
       } as any,
       providerName: 'Google',

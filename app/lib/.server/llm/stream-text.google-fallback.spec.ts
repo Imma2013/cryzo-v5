@@ -23,6 +23,17 @@ vi.mock('./composio', () => {
 
 import { createGoogleGenerateFallbackResult, streamText as streamTextUnderTest } from './stream-text';
 
+function createNativeStreamResult() {
+  return {
+    mergeIntoDataStream: vi.fn(),
+    textStream: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      },
+    }),
+  };
+}
+
 describe('createGoogleGenerateFallbackResult', () => {
   const mockedGenerateText = vi.mocked(generateText);
   const mockedNativeStreamText = vi.mocked(nativeStreamText);
@@ -30,6 +41,7 @@ describe('createGoogleGenerateFallbackResult', () => {
   beforeEach(() => {
     mockedGenerateText.mockReset();
     mockedNativeStreamText.mockReset();
+    mockedNativeStreamText.mockResolvedValue(createNativeStreamResult() as any);
     composioState.getComposioTools.mockReset();
     composioState.getComposioTools.mockResolvedValue({
       configured: false,
@@ -372,7 +384,7 @@ describe('createGoogleGenerateFallbackResult', () => {
     ]);
   });
 
-  it('routes normal Google discuss requests through generateText compatibility packaging', async () => {
+  it('routes normal discuss requests through native streaming', async () => {
     mockedGenerateText.mockResolvedValue({
       files: [],
       finishReason: 'stop',
@@ -396,7 +408,7 @@ describe('createGoogleGenerateFallbackResult', () => {
     const result = await streamTextUnderTest({
       chatMode: 'discuss',
       env: {
-        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+        OPENAI_API_KEY: 'test-openai-key',
       } as any,
       messages: [
         {
@@ -407,9 +419,8 @@ describe('createGoogleGenerateFallbackResult', () => {
       options: {},
     });
 
-    expect(mockedNativeStreamText).not.toHaveBeenCalled();
-    expect(mockedGenerateText).toHaveBeenCalledTimes(1);
-    expect(mockedGenerateText).toHaveBeenCalledWith(
+    expect(mockedNativeStreamText).toHaveBeenCalledTimes(1);
+    expect(mockedNativeStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [
           {
@@ -420,12 +431,12 @@ describe('createGoogleGenerateFallbackResult', () => {
         tools: {},
       }),
     );
+    expect(mockedGenerateText).not.toHaveBeenCalled();
     expect(composioState.getComposioTools).not.toHaveBeenCalled();
-
-    expect(await new Response(result.textStream).text()).toBe('hello from compat');
+    expect(result).toBeDefined();
   });
 
-  it('injects Composio session tools into Google requests for external app prompts', async () => {
+  it('injects Composio tools into external app prompts', async () => {
     const composioTools = {
       COMPOSIO_SEARCH_TOOLS: {
         description: 'Search Composio tools',
@@ -462,8 +473,9 @@ describe('createGoogleGenerateFallbackResult', () => {
     await streamTextUnderTest({
       chatMode: 'discuss',
       env: {
-        COMPOSIO_API_KEY: 'test-composio-key',
-        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+        COMPOSIO_MCP_API_KEY: 'test-mcp-key',
+        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+        OPENAI_API_KEY: 'test-openai-key',
       } as any,
       messages: [
         {
@@ -483,25 +495,26 @@ describe('createGoogleGenerateFallbackResult', () => {
     expect(composioState.getComposioTools).toHaveBeenCalledWith(
       expect.objectContaining({
         env: expect.objectContaining({
-          COMPOSIO_API_KEY: 'test-composio-key',
+          COMPOSIO_MCP_API_KEY: 'test-mcp-key',
         }),
-        providerName: 'Google',
+        providerName: 'OpenAI',
         user: expect.objectContaining({
           uid: 'user_123',
         }),
         userPrompt: 'Check my Gmail inbox',
       }),
     );
-    expect(mockedGenerateText).toHaveBeenCalledWith(
+    expect(mockedNativeStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
         maxSteps: 10,
         toolChoice: 'required',
         tools: composioTools,
       }),
     );
+    expect(mockedGenerateText).not.toHaveBeenCalled();
   });
 
-  it('injects Composio session tools for Vercel and Supabase app-action prompts', async () => {
+  it('injects Composio tools for Vercel and Supabase app-action prompts', async () => {
     const composioTools = {
       COMPOSIO_SEARCH_TOOLS: {
         description: 'Search Composio tools',
@@ -538,8 +551,9 @@ describe('createGoogleGenerateFallbackResult', () => {
     await streamTextUnderTest({
       chatMode: 'discuss',
       env: {
-        COMPOSIO_API_KEY: 'test-composio-key',
-        GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-key',
+        COMPOSIO_MCP_API_KEY: 'test-mcp-key',
+        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+        OPENAI_API_KEY: 'test-openai-key',
       } as any,
       messages: [
         {
@@ -558,17 +572,18 @@ describe('createGoogleGenerateFallbackResult', () => {
 
     expect(composioState.getComposioTools).toHaveBeenCalledWith(
       expect.objectContaining({
-        providerName: 'Google',
+        providerName: 'OpenAI',
         userPrompt: 'Redeploy my Vercel project and list my Supabase projects',
       }),
     );
-    expect(mockedGenerateText).toHaveBeenCalledWith(
+    expect(mockedNativeStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
         maxSteps: 10,
         toolChoice: 'required',
         tools: composioTools,
       }),
     );
+    expect(mockedGenerateText).not.toHaveBeenCalled();
   });
 
 });
