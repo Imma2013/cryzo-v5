@@ -1,4 +1,4 @@
-import { createComposioSessionFromApiKey, resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
+import { resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -374,19 +374,6 @@ function sanitizeJsonSchemaForGemini(schema: any): any {
   return sanitized;
 }
 
-function normalizeToolResult(result: unknown): unknown {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'readable' in (result as Record<string, unknown>) &&
-    typeof (result as any).pipe === 'function'
-  ) {
-    return { error: 'Tool returned a Node.js stream instead of a JSON result.' };
-  }
-
-  return result;
-}
-
 export function normalizeComposioToolForAiSdkV4(tool: any) {
   if (!tool || typeof tool !== 'object') {
     return tool;
@@ -412,17 +399,12 @@ export function wrapComposioToolWithConfirmation(tool: any, context: ComposioToo
   }
 
   const description = typeof normalizedTool.description === 'string' ? normalizedTool.description : undefined;
-  const execute = normalizedTool.execute.bind(normalizedTool);
 
   if (!isLikelyMutatingComposioTool(context.toolName, description)) {
-    return {
-      ...normalizedTool,
-      async execute(args: unknown, executeOptions?: unknown) {
-        const result = await execute(args, executeOptions);
-        return normalizeToolResult(result);
-      },
-    };
+    return normalizedTool;
   }
+
+  const execute = normalizedTool.execute.bind(normalizedTool);
 
   return {
     ...normalizedTool,
@@ -435,8 +417,7 @@ export function wrapComposioToolWithConfirmation(tool: any, context: ComposioToo
           args: strippedArgs,
         })
       ) {
-        const result = await execute(strippedArgs, executeOptions);
-        return normalizeToolResult(result);
+        return execute(strippedArgs, executeOptions);
       }
 
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -563,31 +544,15 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
       };
     }
 
-    const session = await createComposioSessionFromApiKey(apiKey!, composioUserId);
-
-    console.info('[llm.composio] session created', {
-      userId: composioUserId,
-    });
-
-    const tools = normalizeAndWrapComposioTools((await session.tools()) || {}, {
-      confirmationSecret,
-      userId: composioUserId,
-      userPrompt: options.userPrompt,
-    });
-    const toolNames = Object.keys(tools || {});
-
-    console.info('[llm.composio] session tools resolved', {
-      toolCount: toolNames.length,
-      toolNames: toolNames.slice(0, 10),
-      userId: composioUserId,
-    });
+    console.warn('[llm.composio] MCP not configured, direct SDK path disabled (incompatible with Vercel serverless runtime)');
 
     return {
       configured: true,
+      errorMessage: 'Composio MCP server not configured. Set COMPOSIO_MCP_SERVER_URL and COMPOSIO_MCP_API_KEY.',
       hasIdentity: true,
       resolvedUserId: composioUserId,
-      status: 'available',
-      tools,
+      status: 'resolution_failed',
+      tools: {},
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
