@@ -362,7 +362,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               messageSliceId,
             });
 
-            result.mergeIntoDataStream(dataStream);
+            await result.mergeIntoDataStream(dataStream);
 
             (async () => {
               for await (const part of result.fullStream) {
@@ -427,7 +427,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           }
           streamRecovery.stop();
         })();
-        result.mergeIntoDataStream(dataStream);
+        await result.mergeIntoDataStream(dataStream);
       },
       onError: (error: any) => {
         // Provide more specific error messages for common issues

@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai';
+import { parseDataStreamPart, type ToolSet } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BUILD_IMAGE_SOURCE_GUIDANCE,
@@ -375,6 +375,13 @@ describe('streamText Composio and stream compatibility routing', () => {
     };
   }
 
+  function createReadableStreamFormatError() {
+    const error = new Error('Failed to process successful response');
+    (error as any).cause = new TypeError("First parameter has member 'readable' that is not a ReadableStream.");
+
+    return error;
+  }
+
   it('does not resolve Composio tools for a plain hello prompt', async () => {
     const { getComposioTools, nativeStreamResult, nativeStreamText, streamText } = await importStreamTextWithMocks({});
 
@@ -402,10 +409,7 @@ describe('streamText Composio and stream compatibility routing', () => {
   });
 
   it('retries successful-response stream format failures through generateText compatibility packaging', async () => {
-    const nativeStreamError = new Error('Failed to process successful response');
-    (nativeStreamError as any).cause = new TypeError(
-      "First parameter has member 'readable' that is not a ReadableStream.",
-    );
+    const nativeStreamError = createReadableStreamFormatError();
     const { generateText, nativeStreamText, streamText } = await importStreamTextWithMocks({ nativeStreamError });
 
     const result = await streamText({
@@ -425,5 +429,110 @@ describe('streamText Composio and stream compatibility routing', () => {
     expect(nativeStreamText).toHaveBeenCalledTimes(1);
     expect(generateText).toHaveBeenCalledTimes(1);
     expect(await new Response(result.textStream).text()).toBe('hello from compatibility');
+  });
+
+  it('retries merge-time successful-response stream format failures through generateText compatibility packaging', async () => {
+    const nativeMerge = vi.fn(() => {
+      throw createReadableStreamFormatError();
+    });
+    const nativeStreamResult = {
+      mergeIntoDataStream: nativeMerge,
+      textStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    };
+    const { generateText, getComposioTools, nativeStreamText, streamText } = await importStreamTextWithMocks({
+      nativeStreamResult,
+    });
+
+    const result = await streamText({
+      chatMode: 'build',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    const writes: string[] = [];
+    await result.mergeIntoDataStream({
+      write(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    const parsedParts = writes.map((chunk) => parseDataStreamPart(chunk));
+
+    expect(nativeStreamText).toHaveBeenCalledTimes(1);
+    expect(nativeMerge).toHaveBeenCalledTimes(1);
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(getComposioTools).not.toHaveBeenCalled();
+    expect(parsedParts).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'text',
+          value: 'hello from compatibility',
+        },
+      ]),
+    );
+  });
+
+  it('does not append compatibility output after native merge has already written chunks', async () => {
+    const nativeMerge = vi.fn((writer: { write: (chunk: string) => void }) => {
+      writer.write('native-start');
+      throw createReadableStreamFormatError();
+    });
+    const nativeStreamResult = {
+      mergeIntoDataStream: nativeMerge,
+      textStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    };
+    const { generateText, streamText } = await importStreamTextWithMocks({
+      nativeStreamResult,
+    });
+
+    const result = await streamText({
+      chatMode: 'discuss',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    const writes: string[] = [];
+    let caughtError: unknown;
+
+    try {
+      await result.mergeIntoDataStream({
+        write(chunk: string) {
+          writes.push(chunk);
+        },
+      });
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toEqual(expect.any(Error));
+    expect((caughtError as Error).message).toBe(
+      'The AI provider returned a response this app could not stream. Please retry in a moment.',
+    );
+    expect(generateText).not.toHaveBeenCalled();
+    expect(writes).toEqual(['native-start']);
   });
 });

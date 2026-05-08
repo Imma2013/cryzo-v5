@@ -106,6 +106,125 @@ function withFirstOutputTiming<T extends Record<string, any>>(result: T, details
   return result;
 }
 
+function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
+  result: T,
+  {
+    assistantMode,
+    modelName,
+    onFinish,
+    providerName,
+    startedAt,
+    streamParams,
+  }: {
+    assistantMode: string;
+    modelName: string;
+    onFinish?: StreamingOptions['onFinish'];
+    providerName: string;
+    startedAt: number;
+    streamParams: Parameters<typeof generateText>[0];
+  },
+): T {
+  if (typeof result.mergeIntoDataStream !== 'function') {
+    return result;
+  }
+
+  const originalMergeIntoDataStream = result.mergeIntoDataStream.bind(result);
+
+  const retryWithCompatibility = async (writer: { write: (chunk: string) => void }) => {
+    logger.warn(
+      'Native streaming merge response format failed before output; retrying with generateText compatibility packaging',
+      JSON.stringify({
+        assistantMode,
+        model: modelName,
+        provider: providerName,
+      }),
+    );
+
+    try {
+      const compatResult = await createGenerateTextCompatResultFromParams({
+        onFinish,
+        streamParams,
+      });
+
+      logTiming('Compatibility response ready after native merge stream format failure', startedAt, {
+        assistantMode,
+        model: modelName,
+        provider: providerName,
+      });
+
+      return compatResult.mergeIntoDataStream(writer);
+    } catch (compatError) {
+      logger.warn(
+        'Compatibility retry failed after native merge stream format failure',
+        JSON.stringify({
+          assistantMode,
+          errorMessage: compatError instanceof Error ? compatError.message : String(compatError),
+          model: modelName,
+          provider: providerName,
+        }),
+      );
+
+      throw new Error(
+        'The AI provider returned a response this app could not stream, and the compatibility retry also failed. Please retry in a moment.',
+        { cause: compatError },
+      );
+    }
+  };
+
+  const sanitizePartialNativeFailure = (error: unknown) => {
+    logger.warn(
+      'Native streaming merge response format failed after output; compatibility retry skipped',
+      JSON.stringify({
+        assistantMode,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        model: modelName,
+        provider: providerName,
+      }),
+    );
+
+    throw new Error('The AI provider returned a response this app could not stream. Please retry in a moment.', {
+      cause: error,
+    });
+  };
+
+  (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
+    let wroteNativeChunk = false;
+    const nativeWriter = {
+      ...(writer as any),
+      write(chunk: string) {
+        wroteNativeChunk = true;
+        writer.write(chunk);
+      },
+    };
+
+    const handleMergeError = (error: unknown) => {
+      if (!isSuccessfulResponseStreamFormatError(error)) {
+        throw error;
+      }
+
+      if (wroteNativeChunk) {
+        return sanitizePartialNativeFailure(error);
+      }
+
+      return retryWithCompatibility(writer);
+    };
+
+    try {
+      const mergeResult = originalMergeIntoDataStream(nativeWriter);
+
+      if (mergeResult && typeof mergeResult.then === 'function') {
+        return mergeResult.catch(handleMergeError);
+      }
+
+      return mergeResult;
+    } catch (error) {
+      return handleMergeError(error);
+    }
+  };
+
+  return result;
+}
+
 function getAuthorPrompt(messages: Omit<Message, 'id'>[]) {
   return messages
     .filter(
@@ -1562,6 +1681,10 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
         });
       }
 
+      const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
+        onFinish?: StreamingOptions['onFinish'];
+      };
+
       try {
         const result = await _streamText(streamParams);
         logTiming('Native streaming response initialized', attemptStartedAt, {
@@ -1570,11 +1693,21 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
           provider: provider.name,
         });
 
-        return withFirstOutputTiming(result, {
-          assistantMode,
-          model: modelName,
-          path: 'native',
-        });
+        return withFirstOutputTiming(
+          withMergeTimeStreamFormatFallback(result, {
+            assistantMode,
+            modelName,
+            onFinish,
+            providerName: provider.name,
+            startedAt: attemptStartedAt,
+            streamParams: nonStreamingStreamParams,
+          }),
+          {
+            assistantMode,
+            model: modelName,
+            path: 'native',
+          },
+        );
       } catch (streamError) {
         if (!isSuccessfulResponseStreamFormatError(streamError)) {
           throw streamError;
@@ -1588,10 +1721,6 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
             provider: provider.name,
           }),
         );
-
-        const { onFinish, ...nonStreamingStreamParams } = streamParams as typeof streamParams & {
-          onFinish?: StreamingOptions['onFinish'];
-        };
 
         try {
           const result = await createGenerateTextCompatResultFromParams({
