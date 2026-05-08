@@ -374,13 +374,26 @@ function sanitizeJsonSchemaForGemini(schema: any): any {
   return sanitized;
 }
 
+function normalizeToolResult(result: unknown): unknown {
+  if (
+    result &&
+    typeof result === 'object' &&
+    'readable' in (result as Record<string, unknown>) &&
+    typeof (result as any).pipe === 'function'
+  ) {
+    return { error: 'Tool returned a Node.js stream instead of a JSON result.' };
+  }
+
+  return result;
+}
+
 export function normalizeComposioToolForAiSdkV4(tool: any) {
   if (!tool || typeof tool !== 'object') {
     return tool;
   }
 
   let parameters = tool.parameters || tool.inputSchema;
-  
+
   if (parameters) {
     parameters = sanitizeJsonSchemaForGemini(parameters);
   }
@@ -399,12 +412,17 @@ export function wrapComposioToolWithConfirmation(tool: any, context: ComposioToo
   }
 
   const description = typeof normalizedTool.description === 'string' ? normalizedTool.description : undefined;
+  const execute = normalizedTool.execute.bind(normalizedTool);
 
   if (!isLikelyMutatingComposioTool(context.toolName, description)) {
-    return normalizedTool;
+    return {
+      ...normalizedTool,
+      async execute(args: unknown, executeOptions?: unknown) {
+        const result = await execute(args, executeOptions);
+        return normalizeToolResult(result);
+      },
+    };
   }
-
-  const execute = normalizedTool.execute.bind(normalizedTool);
 
   return {
     ...normalizedTool,
@@ -417,7 +435,8 @@ export function wrapComposioToolWithConfirmation(tool: any, context: ComposioToo
           args: strippedArgs,
         })
       ) {
-        return execute(strippedArgs, executeOptions);
+        const result = await execute(strippedArgs, executeOptions);
+        return normalizeToolResult(result);
       }
 
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);

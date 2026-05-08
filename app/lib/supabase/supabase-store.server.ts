@@ -162,40 +162,27 @@ export async function upsertCurrentUserChat(
 ) {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
-  const existing = await getCurrentChatRow(supabase, userId, payload.routeId);
   const parsedMessages = parseMessages(parseJsonString(payload.messagesJson));
   const parsedSnapshot = parseJsonString(payload.snapshotJson);
-  const payloadData = {
-    description: payload.description ?? null,
-    last_updated_at: now,
-    messages_json: Array.isArray(parsedMessages) ? parsedMessages : [],
-    metadata: payload.metadata ?? null,
-    snapshot_json: parsedSnapshot ?? null,
-    timestamp: payload.timestamp,
-    updated_at: nowIso,
-  };
 
-  if (existing) {
-    const { error } = await supabase
-      .from('user_chats')
-      .update(payloadData)
-      .eq('user_id', userId)
-      .eq('route_id', payload.routeId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-  } else {
-    const { error } = await supabase.from('user_chats').insert({
-      ...payloadData,
-      created_at: payload.timestamp,
-      route_id: payload.routeId,
+  const { error } = await supabase.from('user_chats').upsert(
+    {
       user_id: userId,
-    });
+      route_id: payload.routeId,
+      created_at: payload.timestamp,
+      description: payload.description ?? null,
+      last_updated_at: now,
+      messages_json: Array.isArray(parsedMessages) ? parsedMessages : [],
+      metadata: payload.metadata ?? null,
+      snapshot_json: parsedSnapshot ?? null,
+      timestamp: payload.timestamp,
+      updated_at: nowIso,
+    },
+    { onConflict: 'user_id,route_id', ignoreDuplicates: false },
+  );
 
-    if (error) {
-      throw new Error(error.message);
-    }
+  if (error) {
+    throw new Error(error.message);
   }
 
   const next = await getCurrentChatRow(supabase, userId, payload.routeId);
