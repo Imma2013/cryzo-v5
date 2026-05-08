@@ -1,6 +1,7 @@
 import { cloudflareDevProxyVitePlugin as remixCloudflareDevProxy, vitePlugin as remixVitePlugin } from '@remix-run/dev';
 import UnoCSS from 'unocss/vite';
 import { defineConfig, type ViteDevServer } from 'vite';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
@@ -21,6 +22,15 @@ export default defineConfig((config) => {
       target: 'esnext',
     },
     plugins: [
+      nodePolyfills({
+        include: ['buffer', 'process'],
+        globals: {
+          Buffer: true,
+          process: true,
+        },
+        protocolImports: true,
+        exclude: ['child_process', 'fs', 'path', 'stream', 'util'],
+      }),
       {
         name: 'buffer-polyfill',
         transform(code, id) {
