@@ -214,7 +214,6 @@ export class MCPService {
       throw new Error(`provided "type" is invalid, only "stdio", "sse" or "streamable-http" are valid options.`);
     }
 
-    // Check for type/field mismatch
     if (config.type === 'stdio' && !hasStdioField) {
       throw new Error(`missing "command" field.`);
     }
@@ -461,7 +460,6 @@ export class MCPService {
 
     const processedParts = await Promise.all(
       parts.map(async (part) => {
-        // Only process tool invocations parts
         if (part.type !== 'tool-invocation') {
           return part;
         }
@@ -469,7 +467,6 @@ export class MCPService {
         const { toolInvocation } = part;
         const { toolName, toolCallId } = toolInvocation;
 
-        // return part as-is if tool does not exist, or if it's not a tool call result
         if (!this.isValidToolName(toolName) || toolInvocation.state !== 'result') {
           return part;
         }
@@ -497,11 +494,9 @@ export class MCPService {
         } else if (toolInvocation.result === TOOL_EXECUTION_APPROVAL.REJECT) {
           result = TOOL_EXECUTION_DENIED;
         } else {
-          // For any unhandled responses, return the original part.
           return part;
         }
 
-        // Forward updated tool result to the client.
         dataStream.write(
           formatDataStreamPart('tool_result', {
             toolCallId,
@@ -509,7 +504,6 @@ export class MCPService {
           }),
         );
 
-        // Return updated toolInvocation with the actual result.
         return {
           ...part,
           toolInvocation: {
@@ -520,7 +514,6 @@ export class MCPService {
       }),
     );
 
-    // Finally return the processed messages
     return [...messages.slice(0, -1), { ...lastMessage, parts: processedParts }];
   }
 
