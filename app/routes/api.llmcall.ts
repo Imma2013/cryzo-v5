@@ -7,15 +7,7 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
-import {
-  GOOGLE_PROVIDER_NAME,
-  logGoogleServerKeyResolution,
-} from '~/lib/llm/provider-setup';
-import {
-  getGoogleProviderSetupPayloadForRuntime,
-  resolveGoogleServerApiKeyForRuntime,
-} from '~/lib/llm/google-server-runtime';
-import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -82,10 +74,8 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     streamOutput?: boolean;
   }>();
 
-  const { name: requestedProviderName } = provider;
-  void requestedProviderName;
-  const providerName = GOOGLE_PROVIDER_NAME;
-  const selectedModel = normalizeGoogleChatModel(model);
+  const providerName = DEFAULT_PROVIDER.name;
+  const selectedModel = model || DEFAULT_MODEL;
 
   // validate 'model' and 'provider' fields
   if (!model || typeof model !== 'string') {
@@ -102,16 +92,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     });
   }
 
-  logGoogleServerKeyResolution('api.llmcall', resolveGoogleServerApiKeyForRuntime(serverEnv));
-  const setupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
-
-  if (setupPayload) {
-    return new Response(JSON.stringify(setupPayload), {
-      status: setupPayload.statusCode,
-      headers: { 'Content-Type': 'application/json' },
-      statusText: 'Service Unavailable',
-    });
-  }
 
   if (streamOutput) {
     try {
@@ -138,16 +118,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       console.log(error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
-
-        if (googleSetupPayload) {
-          return new Response(JSON.stringify(googleSetupPayload), {
-            status: googleSetupPayload.statusCode,
-            headers: { 'Content-Type': 'application/json' },
-            statusText: 'Service Unavailable',
-          });
-        }
-
         throw new Response('Invalid or missing API key', {
           status: 401,
           statusText: 'Unauthorized',
@@ -179,13 +149,13 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   } else {
     try {
       const models = await getModelList({ serverEnv: serverEnv as Record<string, string> });
-      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(GOOGLE_PROVIDER_NAME);
+      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(DEFAULT_PROVIDER.name);
 
       if (!providerInfo) {
         throw new Error('Provider not found');
       }
 
-      const modelsToTry = [selectedModel, ...getGoogleTextModelFallbackOrder().filter((modelName) => modelName !== selectedModel)];
+      const modelsToTry = [selectedModel];
       let lastError: unknown;
 
       for (const modelName of modelsToTry) {
@@ -208,7 +178,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             });
           }
 
-          logger.info(`Generating response Provider: ${GOOGLE_PROVIDER_NAME}, Model: ${modelDetails.name}`);
+          logger.info(`Generating response Provider: ${providerName}, Model: ${modelDetails.name}`);
 
           // DEBUG: Log reasoning model detection
           const isReasoning = isReasoningModel(modelDetails.name);
@@ -261,7 +231,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
           const result = await generateText(finalParams);
 
           if (!result.text?.trim() && (result.toolCalls?.length || 0) === 0 && (result.toolResults?.length || 0) === 0) {
-            throw new Error(`Google model ${modelDetails.name} returned an empty response`);
+            throw new Error(`Model ${modelDetails.name} returned an empty response`);
           }
 
           logger.info(`Generated response`);
@@ -291,23 +261,10 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       };
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
-
-        if (googleSetupPayload) {
-          const payload =
-            googleSetupPayload;
-
-          return new Response(JSON.stringify(payload), {
-            status: payload.statusCode,
-            headers: { 'Content-Type': 'application/json' },
-            statusText: 'Service Unavailable',
-          });
-        }
-
-        return new Response(JSON.stringify({ ...errorResponse, provider: providerName }), {
-          status: 503,
+        return new Response(JSON.stringify({ ...errorResponse, message: 'Invalid or missing API key', provider: providerName }), {
+          status: 401,
           headers: { 'Content-Type': 'application/json' },
-          statusText: 'Service Unavailable',
+          statusText: 'Unauthorized',
         });
       }
 

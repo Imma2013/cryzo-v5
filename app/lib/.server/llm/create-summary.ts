@@ -4,7 +4,6 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 import { extractCurrentContext, extractPropertiesFromMessage, simplifyBoltActions } from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { LLMManager } from '~/lib/modules/llm/manager';
-import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 const logger = createScopedLogger('create-summary');
 
@@ -28,7 +27,7 @@ export async function createSummary(props: {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
       void provider;
-      currentModel = normalizeGoogleChatModel(model);
+      currentModel = model || DEFAULT_MODEL;
 
       return { ...message, content };
     } else if (message.role == 'assistant') {
@@ -166,7 +165,7 @@ Please provide a summary of the chat till now including the hitorical summary of
 
   let resp: Awaited<ReturnType<typeof generateText>> | undefined;
   let lastError: unknown;
-  const modelsToTry = [currentModel, ...getGoogleTextModelFallbackOrder().filter((model) => model !== currentModel)];
+  const modelsToTry = [currentModel];
 
   for (const modelName of modelsToTry) {
     try {

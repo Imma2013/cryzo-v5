@@ -6,7 +6,6 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 import { createFilesContext, extractCurrentContext, extractPropertiesFromMessage, simplifyBoltActions } from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { LLMManager } from '~/lib/modules/llm/manager';
-import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 // Common patterns to ignore, similar to .gitignore
 
@@ -35,7 +34,7 @@ export async function selectContext(props: {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
       void provider;
-      currentModel = normalizeGoogleChatModel(model);
+      currentModel = model || DEFAULT_MODEL;
 
       return { ...message, content };
     } else if (message.role == 'assistant') {
@@ -155,7 +154,7 @@ export async function selectContext(props: {
 
   let resp: Awaited<ReturnType<typeof generateText>> | undefined;
   let lastError: unknown;
-  const modelsToTry = [currentModel, ...getGoogleTextModelFallbackOrder().filter((model) => model !== currentModel)];
+  const modelsToTry = [currentModel];
 
   for (const modelName of modelsToTry) {
     try {

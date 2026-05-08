@@ -14,14 +14,6 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { getServerEnv } from '~/lib/server-env';
-import {
-  GOOGLE_PROVIDER_NAME,
-  logGoogleServerKeyResolution,
-} from '~/lib/llm/provider-setup';
-import {
-  getGoogleProviderSetupPayloadForRuntime,
-  resolveGoogleServerApiKeyForRuntime,
-} from '~/lib/llm/google-server-runtime';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -124,7 +116,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
 
   const lastUserMessage = messages.filter((message) => message.role === 'user').slice(-1)[0];
-  const runtimeProviderName = GOOGLE_PROVIDER_NAME;
+  const runtimeProviderName = DEFAULT_PROVIDER.name;
 
   const stream = new SwitchableStream();
 
@@ -139,16 +131,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
-    logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
-    const setupPayload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
-
-    if (setupPayload) {
-      return new Response(JSON.stringify(setupPayload), {
-        status: setupPayload.statusCode,
-        headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
-        statusText: 'Service Unavailable',
-      });
-    }
 
     let lastChunk: string | undefined = undefined;
 
@@ -438,7 +420,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const errorMessage = error.message || 'Unknown error';
         const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
 
-        logger.error('Google stream failure diagnostics', {
+        logger.error('LLM stream failure diagnostics', {
           causeMessage: errorCauseMessage,
           errorMessage,
           provider: runtimeProviderName,
@@ -463,7 +445,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           errorMessage.includes('unauthorized') ||
           errorMessage.includes('authentication')
         ) {
-          return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
+          return 'Custom error: API key is missing or invalid. Check your provider environment variables on Vercel and redeploy.';
         }
 
         if (errorMessage.toLowerCase().includes('sign in before')) {
@@ -550,34 +532,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     };
 
     if (error.message?.includes('API key')) {
-      const payload = getGoogleProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
-
-      if (payload) {
-        const setupResponse =
-          payload ??
-          {
-            error: true,
-            errorType: 'setup' as const,
-            isRetryable: false,
-            message:
-              'Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.',
-            provider: runtimeProviderName || 'Google',
-            setupKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
-            setupSource: 'server_env' as const,
-            statusCode: 503,
-          };
-
-        return new Response(JSON.stringify(setupResponse), {
-          status: setupResponse.statusCode,
-          headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
-          statusText: 'Service Unavailable',
-        });
-      }
-
       return new Response(
         JSON.stringify({
           ...errorResponse,
-          message: 'Invalid or missing API key',
+          message: 'Invalid or missing API key. Check your provider environment variables on Vercel and redeploy.',
           statusCode: 401,
           isRetryable: false,
         }),
