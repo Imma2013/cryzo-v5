@@ -3,6 +3,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { fetch as undiciFetch } from 'undici';
 
 export default class OpenAIProvider extends BaseProvider {
   name = 'OpenAI';
@@ -174,6 +175,7 @@ export default class OpenAIProvider extends BaseProvider {
 
     const openai = createOpenAI({
       apiKey,
+      fetch: undiciFetch as unknown as typeof globalThis.fetch,
     });
 
     return openai(model);

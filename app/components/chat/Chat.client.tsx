@@ -431,9 +431,6 @@ export const ChatImpl = memo(
         finalMessageContent = messageContent + elementInfo;
       }
 
-      if (isExternalToolRequest && chatMode !== 'discuss') {
-        setChatMode('discuss');
-      }
 
       runAnimation();
 

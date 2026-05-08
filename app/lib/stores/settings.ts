@@ -92,7 +92,7 @@ function createDefaultProviderSettings(): ProviderSetting {
     initialSettings[provider.name] = {
       ...provider,
       settings: {
-        enabled: DEFAULT_ENABLED_PROVIDERS.has(provider.name),
+        enabled: true,
       },
     };
   });
