@@ -196,8 +196,19 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
         case 'finish_message':
         case 'finish_step':
         case 'message_annotations':
+        case 'reasoning':
+        case 'reasoning_signature':
+        case 'redacted_reasoning':
         case 'start_step':
           return 'structural';
+        case 'file':
+        case 'source':
+        case 'text':
+        case 'tool_call':
+        case 'tool_call_delta':
+        case 'tool_call_streaming_start':
+        case 'tool_result':
+          return 'visible';
         default:
           return 'visible';
       }

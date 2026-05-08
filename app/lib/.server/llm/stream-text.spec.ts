@@ -542,6 +542,119 @@ describe('streamText Composio and stream compatibility routing', () => {
     );
   });
 
+  it('retries after only native reasoning chunks and does not forward them before compatibility output', async () => {
+    const nativeReasoning = formatDataStreamPart('reasoning', 'thinking before answer');
+    const nativeMerge = vi.fn((writer: { write: (chunk: string) => void }) => {
+      writer.write(nativeReasoning);
+      throw createReadableStreamFormatError();
+    });
+    const nativeStreamResult = {
+      mergeIntoDataStream: nativeMerge,
+      textStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    };
+    const { generateText, streamText } = await importStreamTextWithMocks({
+      nativeStreamResult,
+    });
+
+    const result = await streamText({
+      chatMode: 'discuss',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    const writes: string[] = [];
+    await result.mergeIntoDataStream({
+      write(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    const parsedParts = writes.map((chunk) => parseDataStreamPart(chunk));
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(writes).not.toContain(nativeReasoning);
+    expect(parsedParts[0]).toMatchObject({
+      type: 'start_step',
+      value: { messageId: 'msg-google-compat' },
+    });
+    expect(parsedParts).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'text',
+          value: 'hello from compatibility',
+        },
+      ]),
+    );
+  });
+
+  it('retries after native start_step plus reasoning chunks before answer output', async () => {
+    const nativeStartStep = formatDataStreamPart('start_step', { messageId: 'native-msg' });
+    const nativeReasoning = formatDataStreamPart('reasoning', 'thinking before answer');
+    const nativeMerge = vi.fn((writer: { write: (chunk: string) => void }) => {
+      writer.write(nativeStartStep);
+      writer.write(nativeReasoning);
+      throw createReadableStreamFormatError();
+    });
+    const nativeStreamResult = {
+      mergeIntoDataStream: nativeMerge,
+      textStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    };
+    const { generateText, streamText } = await importStreamTextWithMocks({
+      nativeStreamResult,
+    });
+
+    const result = await streamText({
+      chatMode: 'discuss',
+      env: {
+        OPENAI_API_KEY: 'test-openai-key',
+      } as any,
+      messages: [
+        {
+          content: 'hello',
+          role: 'user',
+        },
+      ],
+      options: {},
+    });
+
+    const writes: string[] = [];
+    await result.mergeIntoDataStream({
+      write(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    const parsedParts = writes.map((chunk) => parseDataStreamPart(chunk));
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(writes).not.toContain(nativeStartStep);
+    expect(writes).not.toContain(nativeReasoning);
+    expect(parsedParts).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'text',
+          value: 'hello from compatibility',
+        },
+      ]),
+    );
+  });
+
   it('does not append compatibility output after native merge has written visible text', async () => {
     const nativeText = formatDataStreamPart('text', 'native text');
     const nativeMerge = vi.fn((writer: { write: (chunk: string) => void }) => {
