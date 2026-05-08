@@ -211,7 +211,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           messageSliceId = processedMessages.length - 3;
         }
 
-        if (filePaths.length > 0 && contextOptimization) {
+        if (filePaths.length > 0 && contextOptimization && processedMessages.length > 5) {
           logger.debug('Generating Chat Summary');
           dataStream.writeData({
             type: 'progress',
@@ -345,7 +345,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               } satisfies ProgressAnnotation);
               await new Promise((resolve) => setTimeout(resolve, 0));
 
-              // stream.close();
+              stream.close();
               return;
             }
 
