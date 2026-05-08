@@ -1,4 +1,5 @@
 import { atom } from 'nanostores';
+import { create } from 'zustand';
 
 export type McpServerTransport =
   | { type: 'streamable-http'; url: string; headers?: Record<string, string> }
@@ -76,3 +77,28 @@ export function setMcpServerStatus(name: string, status: McpServerStatus) {
   const current = mcpServerStatusStore.get();
   mcpServerStatusStore.set({ ...current, [name]: status });
 }
+
+type MCPStoreState = {
+  settings: {
+    maxLLMSteps: number;
+    mcpConfig: McpConfig;
+  };
+  setMaxLLMSteps: (steps: number) => void;
+  setMcpConfig: (config: McpConfig) => void;
+};
+
+export const useMCPStore = create<MCPStoreState>((set) => ({
+  settings: {
+    maxLLMSteps: loadMaxSteps(),
+    mcpConfig: loadFromStorage(),
+  },
+  setMaxLLMSteps: (steps) => {
+    const clamped = Math.max(1, Math.min(20, steps));
+    set((s) => ({ settings: { ...s.settings, maxLLMSteps: clamped } }));
+    updateMcpMaxSteps(clamped);
+  },
+  setMcpConfig: (config) => {
+    set((s) => ({ settings: { ...s.settings, mcpConfig: config } }));
+    updateMcpConfig(config);
+  },
+}))
