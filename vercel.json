@@ -1,13 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "remix",
-  "buildCommand": "npm run build",
-  "functions": {
-    "app/routes/api.chat.ts": {
-      "maxDuration": 120
-    },
-    "app/routes/api.llmcall.ts": {
-      "maxDuration": 60
-    }
-  }
+  "buildCommand": "npm run build"
 }
