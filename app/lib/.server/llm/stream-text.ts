@@ -627,6 +627,12 @@ ${getBuildWithToolsSystemPrompt({
 })}`;
   }
 
+  if (toolsAvailable) {
+    return `${systemPrompt}
+
+Connected-app tools (Gmail, Slack, GitHub, Vercel, Supabase, etc.) are available. Use them when the user asks about personal data or external app actions. Otherwise, focus on your primary task.`;
+  }
+
   return systemPrompt;
 }
 
@@ -654,7 +660,9 @@ export function getAssistantToolRuntimeSettings({
     };
   }
 
-  return {};
+  return {
+    maxSteps: 5,
+  };
 }
 
 export function getExternalToolRuntimeErrorMessage({
@@ -972,7 +980,7 @@ export async function streamText(props: {
   });
   const latestUserPrompt = getAuthorPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
-  const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
+  const shouldInjectComposioTools = true;
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
   const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
@@ -1340,7 +1348,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
   const instrumentedOnStepFinish = async (step: any) => {
     const toolCalls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
 
-    if ((assistantMode === 'external-tool' || assistantMode === 'build-with-tools') && toolCalls.length > 0) {
+    if (toolCalls.length > 0) {
       usedToolCall = true;
       logger.info(
         'Composio tool step finished',
