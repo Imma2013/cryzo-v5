@@ -23,7 +23,7 @@ export default defineConfig((config) => {
     },
     plugins: [
       nodePolyfills({
-        include: ['buffer', 'process', 'util', 'stream'],
+        include: ['buffer', 'process', 'util'],
         globals: {
           Buffer: true,
           process: true,
