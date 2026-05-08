@@ -1,4 +1,5 @@
 import { PROVIDER_BASE_URL_ENV_KEYS, PROVIDER_METADATA } from '~/lib/modules/llm/provider-metadata';
+import { DEFAULT_LLM_PROVIDER_NAME, DEFAULT_OPENAI_MODEL } from '~/lib/llm/provider-defaults';
 import type { Template } from '~/types/template';
 
 export const WORK_DIR_NAME = 'project';
@@ -6,7 +7,7 @@ export const WORK_DIR = `/home/${WORK_DIR_NAME}`;
 export const MODIFICATIONS_TAG_NAME = 'bolt_file_modifications';
 export const MODEL_REGEX = /^\[Model: (.*?)\]\n\n/;
 export const PROVIDER_REGEX = /\[Provider: (.*?)\]\n\n/;
-export const DEFAULT_MODEL = 'gpt-5.4';
+export const DEFAULT_MODEL = DEFAULT_OPENAI_MODEL;
 export const PROMPT_COOKIE_KEY = 'cachedPrompt';
 export const TOOL_EXECUTION_APPROVAL = {
   APPROVE: 'Yes, approved.',
@@ -17,7 +18,7 @@ export const TOOL_EXECUTION_DENIED = 'Error: User denied access to tool executio
 export const TOOL_EXECUTION_ERROR = 'Error: An error occured while calling tool';
 
 export const PROVIDER_LIST = PROVIDER_METADATA;
-export const DEFAULT_PROVIDER = PROVIDER_METADATA.find((provider) => provider.name === 'OpenAI') || PROVIDER_METADATA[0];
+export const DEFAULT_PROVIDER = PROVIDER_METADATA.find((provider) => provider.name === DEFAULT_LLM_PROVIDER_NAME) || PROVIDER_METADATA[0];
 export const providerBaseUrlEnvKeys = PROVIDER_BASE_URL_ENV_KEYS;
 
 // starter Templates

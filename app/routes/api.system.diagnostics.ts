@@ -21,8 +21,11 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
   const envVars = {
     hasComposioApiKey: Boolean(composioApiKey),
     hasComposioFeatureFlag: Boolean(serverEnv.FEATURE_COMPOSIO_TOOLS),
+    hasComposioMcpApiKey: Boolean(serverEnv.COMPOSIO_MCP_API_KEY),
+    hasComposioMcpServerUrl: Boolean(serverEnv.COMPOSIO_MCP_SERVER_URL || serverEnv.COMPOSIO_MCP_URL),
     hasGithubToken: Boolean(serverEnv.GITHUB_ACCESS_TOKEN || context.env?.GITHUB_ACCESS_TOKEN),
     hasNetlifyToken: Boolean(serverEnv.NETLIFY_TOKEN || context.env?.NETLIFY_TOKEN),
+    hasOpenAiApiKey: Boolean(serverEnv.OPENAI_API_KEY),
     nodeEnv: process.env.NODE_ENV,
   };
 

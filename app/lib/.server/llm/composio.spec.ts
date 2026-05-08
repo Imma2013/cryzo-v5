@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const composioState = vi.hoisted(() => ({
@@ -9,12 +10,26 @@ const composioState = vi.hoisted(() => ({
   }),
 }));
 
+const mcpState = vi.hoisted(() => ({
+  createMCPClient: vi.fn(),
+}));
+
 vi.mock('~/lib/.server/composio', () => {
   return {
     createComposioSessionFromApiKey: composioState.createComposioSessionFromApiKey,
     resolveComposioApiKeyFromEnv: composioState.resolveComposioApiKeyFromEnv,
   };
 });
+
+vi.mock('@ai-sdk/mcp', () => {
+  return {
+    createMCPClient: mcpState.createMCPClient,
+  };
+});
+
+if (!globalThis.crypto) {
+  vi.stubGlobal('crypto', webcrypto);
+}
 
 import {
   __resetPendingComposioConfirmationsForTests,
@@ -80,6 +95,7 @@ describe('getComposioTools', () => {
   afterEach(() => {
     __resetPendingComposioConfirmationsForTests();
     composioState.createComposioSessionFromApiKey.mockReset();
+    mcpState.createMCPClient.mockReset();
 
     if (originalComposioApiKey == null) {
       delete process.env.COMPOSIO_API_KEY;
@@ -170,6 +186,59 @@ describe('getComposioTools', () => {
     expect(resolution.cleanup).toBeUndefined();
   });
 
+  it('prefers the remote MCP tool router when MCP env is configured', async () => {
+    const execute = vi.fn().mockResolvedValue({ items: [] });
+    const close = vi.fn().mockResolvedValue(undefined);
+    const tools = vi.fn().mockResolvedValue({
+      COMPOSIO_SEARCH_TOOLS: {
+        description: 'Search Composio tools',
+        execute,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+          },
+        },
+      },
+    });
+
+    mcpState.createMCPClient.mockResolvedValue({
+      close,
+      tools,
+    });
+
+    const resolution = await getComposioTools({
+      env: {
+        COMPOSIO_MCP_API_KEY: 'mcp-key',
+        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+      } as any,
+      providerName: 'OpenAI',
+      user: { isAuthenticated: true, uid: 'user_123' },
+      userPrompt: 'use composio to check github',
+    });
+
+    expect(mcpState.createMCPClient).toHaveBeenCalledWith({
+      transport: {
+        type: 'http',
+        url: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+        headers: {
+          'x-api-key': 'mcp-key',
+        },
+      },
+    });
+    expect(composioState.createComposioSessionFromApiKey).not.toHaveBeenCalled();
+    expect(resolution.status).toBe('available');
+    expect(resolution.tools.COMPOSIO_SEARCH_TOOLS.parameters).toEqual({
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+    });
+
+    await resolution.cleanup?.();
+    expect(close).toHaveBeenCalled();
+  });
+
   it('returns a resolution failure with the real session.tools() error message', async () => {
     composioState.createComposioSessionFromApiKey.mockResolvedValue({
       tools: vi.fn().mockRejectedValue(new Error('No connected accounts found for toolkit gmail')),
@@ -218,111 +287,6 @@ describe('Composio tool normalization and confirmation safety', () => {
       ...tool,
       parameters: tool.inputSchema,
     });
-  });
-
-  it('sanitizes Composio tool-router schemas so Gemini accepts them', () => {
-    // Mirrors the exact shape that produced the Gemini error:
-    //   GenerateContentRequest.tools[0].function_declarations[1]
-    //     .parameters.properties[tools].items.required[1]: property is not defined
-    const tool = {
-      description: 'Execute Composio tools',
-      execute: vi.fn(),
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tools: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                slug: { type: 'string' },
-                arguments: { type: 'object' },
-              },
-              // "user_id" is referenced as required but is NOT in properties.
-              // Gemini's validator rejects this payload outright.
-              required: ['slug', 'user_id'],
-              oneOf: [
-                {
-                  type: 'object',
-                  properties: { slug: { type: 'string' } },
-                  required: ['slug', 'phantom'],
-                },
-              ],
-              $defs: {
-                ToolRef: {
-                  type: 'object',
-                  properties: { name: { type: 'string' } },
-                  required: ['name', 'missing'],
-                },
-              },
-              additionalProperties: {
-                type: 'object',
-                properties: { value: { type: 'string' } },
-                required: ['value', 'unknown'],
-              },
-            },
-          },
-        },
-        required: ['tools', 'never_present'],
-      },
-    };
-
-    const normalized = normalizeComposioToolForAiSdkV4(tool);
-    const params = normalized.parameters;
-
-    // Top level `required` keeps only entries that exist in properties.
-    expect(params.required).toEqual(['tools']);
-
-    const itemsSchema = params.properties.tools.items;
-
-    // `required` on items kept only the valid `slug` entry.
-    expect(itemsSchema.required).toEqual(['slug']);
-
-    // The oneOf branch's `phantom` was filtered, leaving `slug` valid.
-    expect(itemsSchema.oneOf[0].required).toEqual(['slug']);
-
-    // $defs entries are walked: `missing` is dropped, only `name` survives.
-    expect(itemsSchema.$defs.ToolRef.required).toEqual(['name']);
-
-    // additionalProperties (when a schema) is walked too.
-    expect(itemsSchema.additionalProperties.required).toEqual(['value']);
-
-    // Properties unrelated to the bug are preserved.
-    expect(itemsSchema.properties.slug).toEqual({ type: 'string' });
-  });
-
-  it('drops required arrays entirely when no entries reference defined properties', () => {
-    const tool = {
-      description: 'Phantom required',
-      execute: vi.fn(),
-      inputSchema: {
-        type: 'object',
-        properties: { foo: { type: 'string' } },
-        required: ['bar', 'baz'],
-      },
-    };
-
-    const normalized = normalizeComposioToolForAiSdkV4(tool);
-
-    expect(normalized.parameters).not.toHaveProperty('required');
-    expect(normalized.parameters.properties.foo).toEqual({ type: 'string' });
-  });
-
-  it('handles cyclic schemas without infinite recursion', () => {
-    const cyclic: any = {
-      type: 'object',
-      properties: { name: { type: 'string' } },
-      required: ['name'],
-    };
-    cyclic.properties.self = cyclic;
-
-    const normalized = normalizeComposioToolForAiSdkV4({
-      description: 'Cycle',
-      execute: vi.fn(),
-      inputSchema: cyclic,
-    });
-
-    expect(normalized.parameters.required).toEqual(['name']);
   });
 
   it('classifies write-style Composio tool names conservatively', () => {

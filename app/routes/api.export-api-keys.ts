@@ -2,6 +2,7 @@ import type { LoaderFunction } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { getApiKeysFromCookie } from '~/lib/api/cookies';
 import { getServerEnv } from '~/lib/server-env';
+import { SERVER_MANAGED_PROVIDER_NAMES } from '~/lib/llm/provider-defaults';
 
 export const loader: LoaderFunction = async ({ context, request }) => {
   // Get API keys from cookie
@@ -24,7 +25,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
       continue;
     }
 
-    if (provider.name === 'Google') {
+    if (SERVER_MANAGED_PROVIDER_NAMES.has(provider.name)) {
       continue;
     }
 

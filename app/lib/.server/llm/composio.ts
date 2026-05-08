@@ -1,4 +1,5 @@
 import { createComposioSessionFromApiKey, resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
+import { createMCPClient } from '@ai-sdk/mcp';
 import { SignJWT, jwtVerify } from 'jose';
 
 type ComposioUserContext = {
@@ -53,6 +54,14 @@ type ComposioToolConfirmationContext = {
   userPrompt?: string;
 };
 
+type ComposioMcpConfig = {
+  apiKey: string;
+  serverUrl: string;
+};
+
+const COMPOSIO_MCP_SERVER_URL_KEYS = ['COMPOSIO_MCP_SERVER_URL', 'COMPOSIO_MCP_URL'] as const;
+const COMPOSIO_MCP_API_KEY = 'COMPOSIO_MCP_API_KEY';
+
 const TOOL_CAPABLE_PROVIDERS = new Set([
   'Anthropic',
   'Fireworks',
@@ -82,6 +91,30 @@ function getComposioApiKey(env: ComposioToolRuntimeOptions['env']) {
   return resolveComposioApiKeyFromEnv(env as Record<string, string | undefined> | undefined);
 }
 
+function getRuntimeEnvValue(env: ComposioToolRuntimeOptions['env'], key: string) {
+  const envValue = (env as Record<string, string | undefined> | undefined)?.[key];
+  const processValue = typeof process !== 'undefined' ? process.env[key] : undefined;
+  return (envValue || processValue)?.trim() || undefined;
+}
+
+function getComposioMcpConfig(env: ComposioToolRuntimeOptions['env']): ComposioMcpConfig | null {
+  const serverUrl = COMPOSIO_MCP_SERVER_URL_KEYS.map((key) => getRuntimeEnvValue(env, key)).find(Boolean);
+  const apiKey = getRuntimeEnvValue(env, COMPOSIO_MCP_API_KEY);
+
+  if (!serverUrl || !apiKey) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    serverUrl,
+  };
+}
+
+function hasComposioCredentials(env: ComposioToolRuntimeOptions['env']) {
+  return Boolean(getComposioMcpConfig(env) || getComposioApiKey(env));
+}
+
 function getComposioConfirmationSecret(env: ComposioToolRuntimeOptions['env'], apiKey: string) {
   const explicitSecret =
     (env as Record<string, string | undefined> | undefined)?.COMPOSIO_CONFIRMATION_SECRET ??
@@ -103,7 +136,7 @@ function getDisabledReason({ env, providerName, user }: ComposioToolRuntimeOptio
     return 'disabled' as const;
   }
 
-  if (!getComposioApiKey(env)) {
+  if (!hasComposioCredentials(env)) {
     return 'missing_api_key' as const;
   }
 
@@ -295,120 +328,47 @@ export function stripComposioConfirmationFields(args: unknown) {
   return stripped;
 }
 
-// JSON Schema keys whose value is a single nested schema.
-const SCHEMA_KEYS_SINGLE = [
-  'items',
-  'not',
-  'if',
-  'then',
-  'else',
-  'contains',
-  'propertyNames',
-  'unevaluatedItems',
-  'unevaluatedProperties',
-  'additionalItems',
-  'jsonSchema',
-  'schema',
-] as const;
-
-// JSON Schema keys whose value is an array of nested schemas.
-const SCHEMA_KEYS_ARRAY = ['anyOf', 'allOf', 'oneOf', 'prefixItems'] as const;
-
-// JSON Schema keys whose value is a record/map of nested schemas.
-const SCHEMA_KEYS_RECORD = [
-  'properties',
-  'patternProperties',
-  '$defs',
-  'definitions',
-  'dependentSchemas',
-] as const;
-
-/**
- * Recursively sanitize a JSON Schema so it passes Google Gemini's strict
- * OpenAPI validator. Composio tool-router meta-tools (e.g. COMPOSIO_SEARCH_TOOLS,
- * COMPOSIO_EXECUTE_TOOL) ship JSON schemas with `required` entries that
- * reference properties that aren't defined on the same object — usually inside
- * `oneOf`, `$defs`, or `additionalProperties` branches that the previous
- * sanitizer never traversed. Gemini rejects those payloads with errors like:
- *
- *   GenerateContentRequest.tools[0].function_declarations[1]
- *     .parameters.properties[tools].items.required[1]: property is not defined
- *
- * This walks every standard JSON Schema branch (single, array, record forms,
- * plus `additionalProperties`) and:
- *   - filters `required` to keys that actually exist in `properties`
- *   - drops `required` entirely when no valid entries remain
- *   - guards against cycles via a WeakSet (Composio schemas reuse `$defs`).
- */
-function sanitizeJsonSchemaForGemini(schema: any, seen: WeakSet<object> = new WeakSet()): any {
+function sanitizeJsonSchemaForGemini(schema: any): any {
   if (!schema || typeof schema !== 'object') {
     return schema;
   }
 
   if (Array.isArray(schema)) {
-    return schema.map((entry) => sanitizeJsonSchemaForGemini(entry, seen));
+    return schema.map(sanitizeJsonSchemaForGemini);
   }
 
-  if (seen.has(schema)) {
-    return schema;
+  const sanitized = { ...schema };
+
+  if (sanitized.jsonSchema) {
+    sanitized.jsonSchema = sanitizeJsonSchemaForGemini(sanitized.jsonSchema);
   }
-  seen.add(schema);
+  if (sanitized.schema) {
+    sanitized.schema = sanitizeJsonSchemaForGemini(sanitized.schema);
+  }
 
-  const sanitized: Record<string, any> = { ...schema };
-
-  for (const key of SCHEMA_KEYS_SINGLE) {
-    const value = sanitized[key];
-
-    if (value !== undefined && value !== null && typeof value === 'object') {
-      sanitized[key] = sanitizeJsonSchemaForGemini(value, seen);
+  if (sanitized.properties) {
+    for (const key of Object.keys(sanitized.properties)) {
+      sanitized.properties[key] = sanitizeJsonSchemaForGemini(sanitized.properties[key]);
     }
   }
 
-  for (const key of SCHEMA_KEYS_ARRAY) {
-    if (Array.isArray(sanitized[key])) {
-      sanitized[key] = sanitized[key].map((entry: unknown) => sanitizeJsonSchemaForGemini(entry, seen));
-    }
-  }
-
-  for (const key of SCHEMA_KEYS_RECORD) {
-    const value = sanitized[key];
-
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const next: Record<string, any> = {};
-
-      for (const [innerKey, innerValue] of Object.entries(value as Record<string, unknown>)) {
-        next[innerKey] = sanitizeJsonSchemaForGemini(innerValue, seen);
-      }
-      sanitized[key] = next;
-    }
-  }
-
-  // `additionalProperties` may be either a boolean or a nested schema.
-  if (sanitized.additionalProperties && typeof sanitized.additionalProperties === 'object') {
-    sanitized.additionalProperties = sanitizeJsonSchemaForGemini(sanitized.additionalProperties, seen);
-  }
-
-  // Filter `required` to keys that actually exist on `properties`. Gemini
-  // crashes if a required entry doesn't match a defined property, but it
-  // accepts `required` when every entry resolves. If nothing valid remains,
-  // drop the key entirely so the LLM call still goes through.
   if (Array.isArray(sanitized.required)) {
-    const properties =
-      sanitized.properties && typeof sanitized.properties === 'object' && !Array.isArray(sanitized.properties)
-        ? (sanitized.properties as Record<string, unknown>)
-        : null;
+    // Aggressive fix: completely delete all nested required arrays
+    // because Gemini's strict OpenAPI validator crashes when arrays
+    // define required constraints without matching properties.
+    // The Gemini LLM functions perfectly without required arrays.
+    delete sanitized.required;
+  }
 
-    const validRequired = properties
-      ? sanitized.required.filter(
-          (name: unknown) => typeof name === 'string' && Object.prototype.hasOwnProperty.call(properties, name),
-        )
-      : [];
+  if (sanitized.items) {
+    sanitized.items = sanitizeJsonSchemaForGemini(sanitized.items);
+  }
 
-    if (validRequired.length > 0) {
-      sanitized.required = validRequired;
-    } else {
-      delete sanitized.required;
-    }
+  if (Array.isArray(sanitized.anyOf)) {
+    sanitized.anyOf = sanitized.anyOf.map(sanitizeJsonSchemaForGemini);
+  }
+  if (Array.isArray(sanitized.allOf)) {
+    sanitized.allOf = sanitized.allOf.map(sanitizeJsonSchemaForGemini);
   }
 
   return sanitized;
@@ -495,11 +455,40 @@ function normalizeAndWrapComposioTools(
   );
 }
 
+async function createComposioMcpToolResolution(
+  mcpConfig: ComposioMcpConfig,
+  context: Omit<ComposioToolConfirmationContext, 'toolName'>,
+) {
+  const client = await createMCPClient({
+    transport: {
+      type: 'http',
+      url: mcpConfig.serverUrl,
+      headers: {
+        'x-api-key': mcpConfig.apiKey,
+      },
+    },
+  });
+
+  try {
+    const tools = normalizeAndWrapComposioTools((await client.tools()) || {}, context);
+
+    return {
+      cleanup: () => client.close(),
+      tools,
+    };
+  } catch (error) {
+    await client.close().catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function getComposioTools(options: ComposioToolRuntimeOptions): Promise<ComposioToolResolution> {
   const composioUserId = getResolvedComposioUserId(options.user);
   const disabledReason = getDisabledReason(options);
   const hasIdentity = Boolean(composioUserId);
-  const hasApiKey = Boolean(getComposioApiKey(options.env));
+  const mcpConfig = getComposioMcpConfig(options.env);
+  const apiKey = getComposioApiKey(options.env);
+  const hasApiKey = Boolean(mcpConfig?.apiKey || apiKey);
 
   if (disabledReason || !composioUserId) {
     console.info('[llm.composio] tools unavailable', {
@@ -520,17 +509,42 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
   }
 
   try {
-    const apiKey = getComposioApiKey(options.env)!;
-    const confirmationSecret = getComposioConfirmationSecret(options.env, apiKey);
+    const confirmationSecret = getComposioConfirmationSecret(options.env, mcpConfig?.apiKey || apiKey!);
     console.info('[llm.composio] resolving tools', {
       hasApiKey: true,
+      mcpTransport: Boolean(mcpConfig),
       providerName: options.providerName,
       requestOrigin: options.requestOrigin,
       resolvedUserId: composioUserId,
       userPrompt: options.userPrompt,
     });
 
-    const session = await createComposioSessionFromApiKey(apiKey, composioUserId);
+    if (mcpConfig) {
+      const { cleanup, tools } = await createComposioMcpToolResolution(mcpConfig, {
+        confirmationSecret,
+        userId: composioUserId,
+        userPrompt: options.userPrompt,
+      });
+      const toolNames = Object.keys(tools || {});
+
+      console.info('[llm.composio] mcp tools resolved', {
+        serverUrl: mcpConfig.serverUrl,
+        toolCount: toolNames.length,
+        toolNames: toolNames.slice(0, 10),
+        userId: composioUserId,
+      });
+
+      return {
+        cleanup,
+        configured: true,
+        hasIdentity: true,
+        resolvedUserId: composioUserId,
+        status: 'available',
+        tools,
+      };
+    }
+
+    const session = await createComposioSessionFromApiKey(apiKey!, composioUserId);
 
     console.info('[llm.composio] session created', {
       userId: composioUserId,

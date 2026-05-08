@@ -3,7 +3,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { fetch as undiciFetch } from 'undici';
+import { getOpenAIChatModels } from '~/lib/llm/openai-catalog';
 
 export default class OpenAIProvider extends BaseProvider {
   name = 'OpenAI';
@@ -13,62 +13,7 @@ export default class OpenAIProvider extends BaseProvider {
     apiTokenKey: 'OPENAI_API_KEY',
   };
 
-  staticModels: ModelInfo[] = [
-    /*
-     * Essential fallback models - only the most stable/reliable ones
-     * Synced to dyad's current OpenAI catalog.
-     */
-    { name: 'gpt-5.4', label: 'GPT 5.4', provider: 'OpenAI', maxTokenAllowed: 400000, maxCompletionTokens: 128000 },
-    { name: 'gpt-5.2', label: 'GPT 5.2', provider: 'OpenAI', maxTokenAllowed: 400000, maxCompletionTokens: 128000 },
-
-    // GPT 5.1: flagship conversational model
-    {
-      name: 'gpt-5.1',
-      label: 'GPT 5.1',
-      provider: 'OpenAI',
-      maxTokenAllowed: 400000,
-      maxCompletionTokens: 128000,
-    },
-
-    // GPT 5.1 Codex: advanced coding workflows
-    {
-      name: 'gpt-5.1-codex',
-      label: 'GPT 5.1 Codex',
-      provider: 'OpenAI',
-      maxTokenAllowed: 400000,
-      maxCompletionTokens: 128000,
-    },
-
-    // GPT 5.1 Codex Mini: compact coding model
-    {
-      name: 'gpt-5.1-codex-mini',
-      label: 'GPT 5.1 Codex Mini',
-      provider: 'OpenAI',
-      maxTokenAllowed: 400000,
-      maxCompletionTokens: 128000,
-    },
-
-    // GPT 5: flagship model
-    { name: 'gpt-5', label: 'GPT 5', provider: 'OpenAI', maxTokenAllowed: 400000, maxCompletionTokens: 128000 },
-
-    // GPT 5 Codex: flagship coding model
-    {
-      name: 'gpt-5-codex',
-      label: 'GPT 5 Codex',
-      provider: 'OpenAI',
-      maxTokenAllowed: 400000,
-      maxCompletionTokens: 128000,
-    },
-
-    // GPT 5 Mini: lightweight model
-    {
-      name: 'gpt-5-mini',
-      label: 'GPT 5 Mini',
-      provider: 'OpenAI',
-      maxTokenAllowed: 400000,
-      maxCompletionTokens: 128000,
-    },
-  ];
+  staticModels: ModelInfo[] = getOpenAIChatModels();
 
   async getDynamicModels(
     apiKeys?: Record<string, string>,
@@ -175,7 +120,6 @@ export default class OpenAIProvider extends BaseProvider {
 
     const openai = createOpenAI({
       apiKey,
-      fetch: undiciFetch as unknown as typeof globalThis.fetch,
     });
 
     return openai(model);

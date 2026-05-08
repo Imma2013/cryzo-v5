@@ -34,7 +34,14 @@ function parseCookieJson<T>(value: string | undefined, fallback: T): T {
   }
 }
 
-const SERVER_MANAGED_API_KEY_ALIASES = new Set(['Google', 'GOOGLE_GENERATIVE_AI_API_KEY', 'google']);
+const SERVER_MANAGED_API_KEY_ALIASES = new Set([
+  'Google',
+  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'google',
+  'OpenAI',
+  'OPENAI_API_KEY',
+  'openai',
+]);
 
 export function stripServerManagedApiKeys(apiKeys: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(apiKeys).filter(([key]) => !SERVER_MANAGED_API_KEY_ALIASES.has(key)));

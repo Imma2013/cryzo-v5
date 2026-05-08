@@ -6,6 +6,7 @@ import { DEFAULT_TAB_CONFIG } from '~/components/@settings/core/constants';
 import { toggleTheme } from './theme';
 import { create } from 'zustand';
 import { applyProviderSettingsSnapshot, createProviderSettingsSnapshot } from '~/lib/llm/provider-preferences';
+import { DEFAULT_LLM_PROVIDER_NAME, GOOGLE_PROVIDER_NAME, SERVER_MANAGED_PROVIDER_NAMES } from '~/lib/llm/provider-defaults';
 
 export interface Shortcut {
   key: string;
@@ -26,8 +27,8 @@ export interface Shortcuts {
 
 export const URL_CONFIGURABLE_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
 export const LOCAL_PROVIDERS = ['OpenAILike', 'LMStudio', 'Ollama'];
-export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'OpenAI'];
-const DEFAULT_ENABLED_PROVIDERS = new Set<string>(['OpenAI']);
+export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, ...SERVER_MANAGED_PROVIDER_NAMES];
+const DEFAULT_ENABLED_PROVIDERS = new Set<string>();
 
 export type ProviderSetting = Record<string, IProviderConfig>;
 
@@ -92,7 +93,7 @@ function createDefaultProviderSettings(): ProviderSetting {
     initialSettings[provider.name] = {
       ...provider,
       settings: {
-        enabled: true,
+        enabled: DEFAULT_ENABLED_PROVIDERS.has(provider.name),
       },
     };
   });
@@ -155,6 +156,20 @@ const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?:
         }
       }
 
+      if ((name === DEFAULT_LLM_PROVIDER_NAME || name === GOOGLE_PROVIDER_NAME) && !isConfigured) {
+        const currentProvider = nextSettings[name];
+
+        if (currentProvider?.settings.enabled) {
+          nextSettings[name] = {
+            ...currentProvider,
+            settings: {
+              ...currentProvider.settings,
+              enabled: false,
+            },
+          };
+          hasChanges = true;
+        }
+      }
     });
 
     if (hasChanges) {

@@ -4,10 +4,10 @@ import type { IProviderSetting } from '~/types/model';
 import { createOpenAI } from '@ai-sdk/openai';
 import { LLMManager } from './manager';
 import { getProcessEnv } from '~/lib/server-env';
+import { SERVER_MANAGED_PROVIDER_NAMES } from '~/lib/llm/provider-defaults';
 
 /** Default timeout for model listing API calls (5 seconds) */
 const MODEL_FETCH_TIMEOUT = 5_000;
-const SERVER_MANAGED_PROVIDER_NAMES = new Set(['Google', 'OpenAI']);
 
 export abstract class BaseProvider implements ProviderInfo {
   abstract name: string;

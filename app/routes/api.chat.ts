@@ -1,5 +1,5 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
-import { createDataStreamResponse, generateId } from 'ai';
+import { createDataStream, generateId } from 'ai';
 import { MAX_RESPONSE_SEGMENTS, MAX_TOKENS, type FileMap } from '~/lib/.server/llm/constants';
 import { CONTINUE_PROMPT } from '~/lib/common/prompts/prompts';
 import { streamText, type Messages, type StreamingOptions } from '~/lib/.server/llm/stream-text';
@@ -14,6 +14,11 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { routeDesignReferences } from '~/lib/.server/design-system';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import { getServerEnv } from '~/lib/server-env';
+import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
+import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';
+import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
+import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
+import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -116,7 +121,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
 
   const lastUserMessage = messages.filter((message) => message.role === 'user').slice(-1)[0];
-  const runtimeProviderName = DEFAULT_PROVIDER.name;
+  const runtimeProviderName = lastUserMessage
+    ? extractPropertiesFromMessage(lastUserMessage).provider
+    : DEFAULT_PROVIDER.name;
 
   const stream = new SwitchableStream();
 
@@ -125,21 +132,30 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     promptTokens: 0,
     totalTokens: 0,
   };
+  const encoder: TextEncoder = new TextEncoder();
   let progressCounter: number = 1;
 
   try {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
-    return createDataStreamResponse({
-      headers: withSupabaseAuthHeaders(
-        {
-          'Content-Type': 'text/event-stream; charset=utf-8',
-          Connection: 'keep-alive',
-          'Cache-Control': 'no-cache',
-        },
-        authHeaders,
-      ),
+    if (runtimeProviderName === GOOGLE_PROVIDER_NAME) {
+      logGoogleServerKeyResolution('api.chat', resolveGoogleServerApiKeyForRuntime(serverEnv));
+    }
+
+    const setupPayload = getProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
+
+    if (setupPayload) {
+      return new Response(JSON.stringify(setupPayload), {
+        status: setupPayload.statusCode,
+        headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
+        statusText: 'Service Unavailable',
+      });
+    }
+
+    let lastChunk: string | undefined = undefined;
+
+    const dataStream = createDataStream({
       async execute(dataStream) {
         streamRecovery.startMonitoring();
 
@@ -425,7 +441,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const errorMessage = error.message || 'Unknown error';
         const errorCauseMessage = typeof error?.cause?.message === 'string' ? error.cause.message : undefined;
 
-        logger.error('LLM stream failure diagnostics', {
+        logger.error('Google stream failure diagnostics', {
           causeMessage: errorCauseMessage,
           errorMessage,
           provider: runtimeProviderName,
@@ -450,7 +466,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           errorMessage.includes('unauthorized') ||
           errorMessage.includes('authentication')
         ) {
-          return 'Custom error: API key is missing or invalid. Check your provider environment variables on Vercel and redeploy.';
+          return 'Custom error: Google is selected, but GOOGLE_GENERATIVE_AI_API_KEY is missing on the server. Add it to the Vercel project environment variables and redeploy before retrying.';
         }
 
         if (errorMessage.toLowerCase().includes('sign in before')) {
@@ -471,6 +487,55 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         return `Custom error: ${errorMessage}`;
       },
+    }).pipeThrough(
+      new TransformStream({
+        transform: (chunk, controller) => {
+          if (!lastChunk) {
+            lastChunk = ' ';
+          }
+
+          if (typeof chunk === 'string') {
+            if (chunk.startsWith('g') && !lastChunk.startsWith('g')) {
+              controller.enqueue(encoder.encode(`0: "<div class=\\"__boltThought__\\">"\n`));
+            }
+
+            if (lastChunk.startsWith('g') && !chunk.startsWith('g')) {
+              controller.enqueue(encoder.encode(`0: "</div>\\n"\n`));
+            }
+          }
+
+          lastChunk = chunk;
+
+          let transformedChunk = chunk;
+
+          if (typeof chunk === 'string' && chunk.startsWith('g')) {
+            let content = chunk.split(':').slice(1).join(':');
+
+            if (content.endsWith('\n')) {
+              content = content.slice(0, content.length - 1);
+            }
+
+            transformedChunk = `0:${content}\n`;
+          }
+
+          // Convert the string stream to a byte stream
+          const str = typeof transformedChunk === 'string' ? transformedChunk : JSON.stringify(transformedChunk);
+          controller.enqueue(encoder.encode(str));
+        },
+      }),
+    );
+
+    return new Response(dataStream, {
+      status: 200,
+      headers: withSupabaseAuthHeaders(
+        {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          Connection: 'keep-alive',
+          'Cache-Control': 'no-cache',
+          'Text-Encoding': 'chunked',
+        },
+        authHeaders,
+      ),
     });
   } catch (error: any) {
     if (error instanceof Response) {
@@ -488,10 +553,20 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     };
 
     if (error.message?.includes('API key')) {
+      const payload = getProviderSetupPayloadForRuntime(runtimeProviderName, serverEnv);
+
+      if (payload) {
+        return new Response(JSON.stringify(payload), {
+          status: payload.statusCode,
+          headers: withSupabaseAuthHeaders({ 'Content-Type': 'application/json' }, authHeaders),
+          statusText: 'Service Unavailable',
+        });
+      }
+
       return new Response(
         JSON.stringify({
           ...errorResponse,
-          message: 'Invalid or missing API key. Check your provider environment variables on Vercel and redeploy.',
+          message: 'Invalid or missing API key',
           statusCode: 401,
           isRetryable: false,
         }),

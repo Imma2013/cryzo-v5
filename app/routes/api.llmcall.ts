@@ -7,7 +7,9 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
+import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
+import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
+import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -74,8 +76,8 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     streamOutput?: boolean;
   }>();
 
-  const providerName = DEFAULT_PROVIDER.name;
-  const selectedModel = model || DEFAULT_MODEL;
+  const providerName = provider?.name;
+  const selectedModel = providerName === GOOGLE_PROVIDER_NAME ? normalizeGoogleChatModel(model) : model;
 
   // validate 'model' and 'provider' fields
   if (!model || typeof model !== 'string') {
@@ -92,6 +94,15 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     });
   }
 
+  const setupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+
+  if (setupPayload) {
+    return new Response(JSON.stringify(setupPayload), {
+      status: setupPayload.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Service Unavailable',
+    });
+  }
 
   if (streamOutput) {
     try {
@@ -102,7 +113,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         messages: [
           {
             role: 'user',
-            content: `${message}`,
+            content: `[Model: ${selectedModel}]\n\n[Provider: ${providerName}]\n\n${message}`,
           },
         ],
         env: serverEnv as any,
@@ -118,6 +129,16 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       console.log(error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
+        const googleSetupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+
+        if (googleSetupPayload) {
+          return new Response(JSON.stringify(googleSetupPayload), {
+            status: googleSetupPayload.statusCode,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Service Unavailable',
+          });
+        }
+
         throw new Response('Invalid or missing API key', {
           status: 401,
           statusText: 'Unauthorized',
@@ -149,18 +170,21 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   } else {
     try {
       const models = await getModelList({ serverEnv: serverEnv as Record<string, string> });
-      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(DEFAULT_PROVIDER.name);
+      const providerInfo = LLMManager.getInstance(serverEnv as Record<string, string>).getProvider(providerName);
 
       if (!providerInfo) {
         throw new Error('Provider not found');
       }
 
-      const modelsToTry = [selectedModel];
+      const modelsToTry =
+        providerName === GOOGLE_PROVIDER_NAME
+          ? [selectedModel, ...getGoogleTextModelFallbackOrder().filter((modelName) => modelName !== selectedModel)]
+          : [selectedModel];
       let lastError: unknown;
 
       for (const modelName of modelsToTry) {
         try {
-          const modelDetails = models.find((m: ModelInfo) => m.name === modelName);
+          const modelDetails = models.find((m: ModelInfo) => m.name === modelName && m.provider === providerName);
 
           if (!modelDetails) {
             throw new Error(`Model ${modelName} not found`);
@@ -231,7 +255,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
           const result = await generateText(finalParams);
 
           if (!result.text?.trim() && (result.toolCalls?.length || 0) === 0 && (result.toolResults?.length || 0) === 0) {
-            throw new Error(`Model ${modelDetails.name} returned an empty response`);
+            throw new Error(`${providerName} model ${modelDetails.name} returned an empty response`);
           }
 
           logger.info(`Generated response`);
@@ -244,11 +268,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
           });
         } catch (error) {
           lastError = error;
-          logger.warn(`LLM call model ${modelName} failed, trying next Gemini fallback if available. Error: ${error}`);
+          logger.warn(`LLM call model ${modelName} failed, trying next fallback if available. Error: ${error}`);
         }
       }
 
-      throw lastError instanceof Error ? lastError : new Error('Failed to generate response with Gemini fallback models');
+      throw lastError instanceof Error ? lastError : new Error(`Failed to generate response with ${providerName}`);
     } catch (error: unknown) {
       console.log(error);
 
@@ -261,10 +285,23 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       };
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        return new Response(JSON.stringify({ ...errorResponse, message: 'Invalid or missing API key', provider: providerName }), {
-          status: 401,
+        const googleSetupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+
+        if (googleSetupPayload) {
+          const payload =
+            googleSetupPayload;
+
+          return new Response(JSON.stringify(payload), {
+            status: payload.statusCode,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Service Unavailable',
+          });
+        }
+
+        return new Response(JSON.stringify({ ...errorResponse, provider: providerName }), {
+          status: 503,
           headers: { 'Content-Type': 'application/json' },
-          statusText: 'Unauthorized',
+          statusText: 'Service Unavailable',
         });
       }
 

@@ -3,7 +3,8 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
 import { getServerEnv } from '~/lib/server-env';
-import { DEFAULT_PROVIDER } from '~/utils/constants';
+import { DEFAULT_LLM_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
+import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
 
 interface ModelsResponse {
   modelList: ModelInfo[];
@@ -15,7 +16,7 @@ let cachedProviders: ProviderInfo[] | null = null;
 let cachedDefaultProvider: ProviderInfo | null = null;
 
 function getProviderInfo(llmManager: LLMManager) {
-  const eligibleProviders = llmManager.getAllProviders().filter((provider) => provider.name === DEFAULT_PROVIDER.name);
+  const eligibleProviders = llmManager.getAllProviders();
 
   if (!cachedProviders) {
     cachedProviders = eligibleProviders.map((provider) => ({
@@ -28,7 +29,10 @@ function getProviderInfo(llmManager: LLMManager) {
   }
 
   if (!cachedDefaultProvider) {
-    const defaultProvider = eligibleProviders[0] || llmManager.getDefaultProvider();
+    const defaultProvider =
+      eligibleProviders.find((provider) => provider.name === DEFAULT_LLM_PROVIDER_NAME) ||
+      eligibleProviders[0] ||
+      llmManager.getDefaultProvider();
     cachedDefaultProvider = {
       name: defaultProvider.name,
       staticModels: defaultProvider.staticModels,
@@ -64,8 +68,17 @@ export async function loader({
   if (params.provider) {
     // Only update models for the specific provider
     const provider = llmManager.getProvider(params.provider);
+    const setupPayload = getProviderSetupPayloadForRuntime(provider?.name, serverEnv);
 
-    if (provider?.name === DEFAULT_PROVIDER.name) {
+    if (setupPayload) {
+      return new Response(JSON.stringify(setupPayload), {
+        status: setupPayload.statusCode,
+        headers: { 'Content-Type': 'application/json' },
+        statusText: 'Service Unavailable',
+      });
+    }
+
+    if (provider) {
       modelList = await llmManager.getModelListFromProvider(provider, {
         serverEnv: serverEnv as Record<string, string>,
       });

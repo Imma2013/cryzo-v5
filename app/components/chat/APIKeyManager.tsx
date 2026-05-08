@@ -3,6 +3,7 @@ import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '~/types/model';
 import Cookies from 'js-cookie';
 import { stripServerManagedApiKeys } from '~/lib/api/cookies';
+import { SERVER_MANAGED_PROVIDER_NAMES } from '~/lib/llm/provider-defaults';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -40,7 +41,7 @@ export function getApiKeysFromCookies() {
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, setApiKey }) => {
-  const isServerManagedProvider = provider.name === 'Google';
+  const isServerManagedProvider = SERVER_MANAGED_PROVIDER_NAMES.has(provider.name);
   const [isEditing, setIsEditing] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [isEnvKeySet, setIsEnvKeySet] = useState(false);

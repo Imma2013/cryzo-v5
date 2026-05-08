@@ -1,5 +1,5 @@
 import type { IProviderConfig, IProviderSetting } from '~/types/model';
-import { GOOGLE_PROVIDER_NAME } from './provider-setup';
+import { DEFAULT_LLM_PROVIDER_NAME } from './provider-defaults';
 
 export interface SyncedLlmPreferences {
   providerSettings?: Record<string, IProviderSetting>;
@@ -14,7 +14,7 @@ export function createProviderSettingsSnapshot(
     Object.entries(providers).map(([providerName, provider]) => [
       providerName,
       {
-        enabled: providerName === GOOGLE_PROVIDER_NAME,
+        enabled: providerName === DEFAULT_LLM_PROVIDER_NAME,
         baseUrl: provider.settings.baseUrl,
         OPENAI_LIKE_API_MODELS: provider.settings.OPENAI_LIKE_API_MODELS,
       },
@@ -45,7 +45,7 @@ export function applyProviderSettingsSnapshot(
           settings: {
             ...provider.settings,
             ...syncedSettings,
-            enabled: providerName === GOOGLE_PROVIDER_NAME,
+            enabled: syncedSettings.enabled ?? providerName === DEFAULT_LLM_PROVIDER_NAME,
           },
         },
       ];

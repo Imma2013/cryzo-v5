@@ -5,7 +5,10 @@ export type ServerEnvSourceName = 'meta' | 'process' | 'context' | 'cloudflare';
 export type ServerEnvDiagnostics = {
   keys: Record<
     | 'COMPOSIO_API_KEY'
+    | 'COMPOSIO_MCP_API_KEY'
+    | 'COMPOSIO_MCP_SERVER_URL'
     | 'FEATURE_COMPOSIO_TOOLS'
+    | 'OPENAI_API_KEY'
     | 'SUPABASE_ANON_KEY'
     | 'SUPABASE_URL'
     | 'VITE_COMPOSIO_API_KEY'
@@ -52,7 +55,10 @@ function hasAnyServerEnvValue(record: ServerEnvRecord) {
 function buildKeyDiagnostics(record: ServerEnvRecord): ServerEnvDiagnostics['keys'] {
   return {
     COMPOSIO_API_KEY: Boolean(record.COMPOSIO_API_KEY),
+    COMPOSIO_MCP_API_KEY: Boolean(record.COMPOSIO_MCP_API_KEY),
+    COMPOSIO_MCP_SERVER_URL: Boolean(record.COMPOSIO_MCP_SERVER_URL),
     FEATURE_COMPOSIO_TOOLS: Boolean(record.FEATURE_COMPOSIO_TOOLS),
+    OPENAI_API_KEY: Boolean(record.OPENAI_API_KEY),
     SUPABASE_ANON_KEY: Boolean(record.SUPABASE_ANON_KEY),
     SUPABASE_URL: Boolean(record.SUPABASE_URL),
     VITE_COMPOSIO_API_KEY: Boolean(record.VITE_COMPOSIO_API_KEY),

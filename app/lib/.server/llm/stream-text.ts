@@ -27,7 +27,7 @@ import { buildCanonicalDesignPreamble, buildCompiledReferenceBlock } from '~/lib
 import type { GoogleToolCallMetadataAnnotation } from '~/types/context';
 import { summarizeGoogleHistoryForDiagnostics } from './google-tool-runtime';
 import { writeGoogleToolMetadataAnnotations } from './google-tool-metadata';
-import { experimental_createMCPClient as createMCPClient } from 'ai';
+import { getComposioTools } from './composio';
 import {
   getBuildWithToolsSystemPrompt,
   getExternalToolSystemPrompt,
@@ -954,9 +954,8 @@ export async function streamText(props: {
 
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
-      void provider;
-      currentModel = model || DEFAULT_MODEL;
-      currentProvider = DEFAULT_PROVIDER.name;
+      currentProvider = provider || DEFAULT_PROVIDER.name;
+      currentModel = currentProvider === 'Google' ? normalizeGoogleChatModel(model) : model;
       newMessage.content = sanitizeText(content);
     } else if (message.role == 'assistant') {
       newMessage.content = sanitizeText(message.content);
@@ -976,13 +975,14 @@ export async function streamText(props: {
   const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
-  const provider = llmManager.getProvider(DEFAULT_PROVIDER.name);
+  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
 
   if (!provider) {
     throw new Error(`Provider ${currentProvider} not found`);
   }
 
-  const effectiveModelName = currentProvider === 'Google' ? normalizeGoogleChatModel(currentModel) : currentModel;
+  currentProvider = provider.name;
+  const effectiveModelName = provider.name === 'Google' ? normalizeGoogleChatModel(currentModel) : currentModel;
   const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === effectiveModelName);
 
@@ -1190,40 +1190,67 @@ export async function streamText(props: {
           ),
         )
       : options || {};
-  let composioTools: Record<string, any> = {};
-  let mcpClient: any = null;
-
-  if (shouldInjectComposioTools) {
-    try {
-      mcpClient = await createMCPClient({
-        transport: {
-          type: 'sse',
-          url: 'https://backend.composio.dev/tool_router/trs_3dvKvFzgd8Xr/mcp',
-          headers: { 'x-api-key': 'ak_YStEK8gqNq9VWIfwSCpt' },
-        },
-      });
-      composioTools = await mcpClient.tools();
-      logger.info('MCP tools resolved', JSON.stringify({ toolCount: Object.keys(composioTools).length }));
-    } catch (error) {
-      logger.error('MCP tool resolution failed', String(error));
-    }
-  }
-
+  const composioToolResolution = shouldInjectComposioTools
+    ? await getComposioTools({
+        env: serverEnv as unknown as Record<string, string | undefined>,
+        providerName: provider.name,
+        requestOrigin,
+        user,
+        userPrompt: latestUserPrompt || undefined,
+      })
+    : {
+        configured: false,
+        hasIdentity: Boolean(user?.uid || user?.composioUserId),
+        resolvedUserId: user?.uid || user?.composioUserId,
+        status: 'disabled' as const,
+        tools: {},
+      };
+  const composioTools = composioToolResolution.tools;
   const composioToolCount = Object.keys(composioTools).length;
-  const composioToolResolution = {
-    configured: composioToolCount > 0,
-    errorMessage: undefined as string | undefined,
-    hasIdentity: true,
-    resolvedUserId: user?.uid || user?.composioUserId,
-    status: composioToolCount > 0 ? ('available' as const) : ('disabled' as const),
-    tools: composioTools,
-    cleanup: mcpClient ? () => mcpClient.close() : undefined,
-  };
-  const cleanupComposioTools = async (_reason: string) => {
-    if (mcpClient) {
-      try { await mcpClient.close(); } catch {}
+  let composioCleanedUp = false;
+  const cleanupComposioTools = async (reason: string) => {
+    if (composioCleanedUp || typeof composioToolResolution.cleanup !== 'function') {
+      return;
+    }
+
+    composioCleanedUp = true;
+
+    try {
+      await composioToolResolution.cleanup();
+      logger.info(
+        'Composio cleanup complete',
+        JSON.stringify({
+          assistantMode,
+          reason,
+          resolvedUserId: composioToolResolution.resolvedUserId,
+          toolCount: composioToolCount,
+        }),
+      );
+    } catch (error) {
+      logger.warn(
+        'Composio cleanup failed',
+        JSON.stringify({
+          assistantMode,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          reason,
+          resolvedUserId: composioToolResolution.resolvedUserId,
+          toolCount: composioToolCount,
+        }),
+      );
     }
   };
+  logger.info(
+    'Composio resolution',
+    JSON.stringify({
+      assistantMode,
+      errorMessage: composioToolResolution.errorMessage,
+      hasIdentity: composioToolResolution.hasIdentity,
+      provider: provider.name,
+      resolvedUserId: composioToolResolution.resolvedUserId,
+      status: composioToolResolution.status,
+      toolCount: composioToolCount,
+    }),
+  );
 
   if ((assistantMode === 'external-tool' || assistantMode === 'build-with-tools') && shouldInjectComposioTools) {
     if (!composioToolResolution.configured || composioToolCount === 0) {

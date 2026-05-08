@@ -1,7 +1,6 @@
 import { createScopedLogger } from '~/utils/logger';
+import { GOOGLE_PROVIDER_NAME, GOOGLE_SERVER_API_KEY } from './provider-defaults';
 
-const GOOGLE_PROVIDER_NAME = 'Google';
-const GOOGLE_SERVER_API_KEY = 'GOOGLE_GENERATIVE_AI_API_KEY';
 const logger = createScopedLogger('google-server-key');
 
 type GoogleServerKeySource = 'server_env' | 'process_env' | 'missing';

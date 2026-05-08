@@ -4,6 +4,8 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 import { extractCurrentContext, extractPropertiesFromMessage, simplifyBoltActions } from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { LLMManager } from '~/lib/modules/llm/manager';
+import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
+import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
 
 const logger = createScopedLogger('create-summary');
 
@@ -23,11 +25,12 @@ export async function createSummary(props: {
 }) {
   const { messages, env: serverEnv, onFinish } = props;
   let currentModel = DEFAULT_MODEL;
+  let currentProvider = DEFAULT_PROVIDER.name;
   const processedMessages = messages.map((message) => {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
-      void provider;
-      currentModel = model || DEFAULT_MODEL;
+      currentProvider = provider || DEFAULT_PROVIDER.name;
+      currentModel = currentProvider === GOOGLE_PROVIDER_NAME ? normalizeGoogleChatModel(model) : model;
 
       return { ...message, content };
     } else if (message.role == 'assistant') {
@@ -44,10 +47,10 @@ export async function createSummary(props: {
   });
 
   const llmManager = LLMManager.getInstance(serverEnv as any);
-  const provider = llmManager.getProvider(DEFAULT_PROVIDER.name);
+  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
 
   if (!provider) {
-    throw new Error(`Provider ${DEFAULT_PROVIDER.name} not found`);
+    throw new Error(`Provider ${currentProvider} not found`);
   }
 
   let slicedMessages = processedMessages;
@@ -165,7 +168,10 @@ Please provide a summary of the chat till now including the hitorical summary of
 
   let resp: Awaited<ReturnType<typeof generateText>> | undefined;
   let lastError: unknown;
-  const modelsToTry = [currentModel];
+  const modelsToTry =
+    provider.name === GOOGLE_PROVIDER_NAME
+      ? [currentModel, ...getGoogleTextModelFallbackOrder().filter((model) => model !== currentModel)]
+      : [currentModel];
 
   for (const modelName of modelsToTry) {
     try {
@@ -178,19 +184,19 @@ Please provide a summary of the chat till now including the hitorical summary of
       });
 
       if (!result.text?.trim()) {
-        throw new Error(`Google model ${modelName} returned an empty response`);
+        throw new Error(`${provider.name} model ${modelName} returned an empty response`);
       }
 
       resp = result;
       break;
     } catch (error) {
       lastError = error;
-      logger.warn(`Summary model ${modelName} failed, trying next Gemini fallback if available. Error: ${error}`);
+      logger.warn(`Summary model ${modelName} failed, trying next fallback if available. Error: ${error}`);
     }
   }
 
   if (!resp) {
-    throw lastError instanceof Error ? lastError : new Error('Failed to create summary with Gemini fallback models');
+    throw lastError instanceof Error ? lastError : new Error(`Failed to create summary with ${provider.name}`);
   }
 
   const response = resp.text;

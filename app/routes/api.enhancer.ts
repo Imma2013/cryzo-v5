@@ -4,7 +4,7 @@ import { stripIndents } from '~/utils/stripIndent';
 import type { ProviderInfo } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
+import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
 
 export async function action(args: ActionFunctionArgs) {
   return enhancerAction(args);
@@ -21,7 +21,7 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
     apiKeys?: Record<string, string>;
   }>();
 
-  const { name: providerName } = provider;
+  const providerName = provider?.name;
 
   // validate 'model' and 'provider' fields
   if (!model || typeof model !== 'string') {
@@ -38,6 +38,15 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
     });
   }
 
+  const setupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+
+  if (setupPayload) {
+    return new Response(JSON.stringify(setupPayload), {
+      status: setupPayload.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Service Unavailable',
+    });
+  }
 
   try {
     const result = await streamText({
@@ -45,7 +54,7 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
         {
           role: 'user',
           content:
-            `[Model: ${DEFAULT_MODEL}]\n\n[Provider: ${DEFAULT_PROVIDER.name}]\n\n` +
+            `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` +
             stripIndents`
             You are a professional prompt engineer specializing in crafting precise, effective prompts.
             Your task is to enhance prompts by making them more specific, actionable, and effective.
@@ -120,19 +129,25 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
     console.log(error);
 
     if (error instanceof Error && error.message?.includes('API key')) {
+      const payload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+
       return new Response(
-        JSON.stringify({
-          error: true,
-          errorType: 'setup',
-          isRetryable: false,
-          message: 'API key is missing or invalid. Check your provider environment variables on Vercel and redeploy.',
-          provider: DEFAULT_PROVIDER.name,
-          statusCode: 401,
-        }),
+        JSON.stringify(
+          payload ?? {
+            error: true,
+            errorType: 'setup',
+            isRetryable: false,
+            message: `${providerName} is selected, but its server API key is missing. Add it to the Vercel project environment variables and redeploy before retrying.`,
+            provider: providerName,
+            setupKey: 'provider_api_key',
+            setupSource: 'server_env',
+            statusCode: 503,
+          },
+        ),
         {
-          status: 401,
+          status: payload?.statusCode ?? 503,
           headers: { 'Content-Type': 'application/json' },
-          statusText: 'Unauthorized',
+          statusText: 'Service Unavailable',
         },
       );
     }
