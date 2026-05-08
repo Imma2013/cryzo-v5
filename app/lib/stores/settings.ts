@@ -26,8 +26,7 @@ export interface Shortcuts {
 
 export const URL_CONFIGURABLE_PROVIDERS = ['Ollama', 'LMStudio', 'OpenAILike'];
 export const LOCAL_PROVIDERS = ['OpenAILike', 'LMStudio', 'Ollama'];
-export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'Google'];
-const GOOGLE_PROVIDER_NAME = 'Google';
+export const SERVER_CONFIGURED_PROVIDERS = [...LOCAL_PROVIDERS, 'OpenAI'];
 const DEFAULT_ENABLED_PROVIDERS = new Set<string>();
 
 export type ProviderSetting = Record<string, IProviderConfig>;
@@ -156,20 +155,6 @@ const autoEnableConfiguredProviders = async (options?: { persistToLocalStorage?:
         }
       }
 
-      if (name === GOOGLE_PROVIDER_NAME && !isConfigured) {
-        const currentProvider = nextSettings[name];
-
-        if (currentProvider?.settings.enabled) {
-          nextSettings[name] = {
-            ...currentProvider,
-            settings: {
-              ...currentProvider.settings,
-              enabled: false,
-            },
-          };
-          hasChanges = true;
-        }
-      }
     });
 
     if (hasChanges) {
