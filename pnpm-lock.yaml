@@ -99,11 +99,11 @@ importers:
         specifier: ^6.35.0
         version: 6.38.1
       '@composio/core':
-        specifier: ^0.6.11
-        version: 0.6.11(ws@8.18.3)(zod@3.25.76)
+        specifier: ^0.9.0
+        version: 0.9.0(ws@8.18.3)(zod@3.25.76)
       '@composio/vercel':
-        specifier: ^0.6.11
-        version: 0.6.11(@composio/core@0.6.11(ws@8.18.3)(zod@3.25.76))(ai@4.3.19(react@18.3.1)(zod@3.25.76))
+        specifier: ^0.9.0
+        version: 0.9.0(@composio/core@0.9.0(ws@8.18.3)(zod@3.25.76))(ai@4.3.19(react@18.3.1)(zod@3.25.76))
       '@headlessui/react':
         specifier: ^2.2.0
         version: 2.2.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1134,11 +1134,11 @@ packages:
   '@codemirror/view@6.38.1':
     resolution: {integrity: sha512-RmTOkE7hRU3OVREqFVITWHz6ocgBjv08GoePscAakgVQfciA3SGCEk7mb9IzwW61cKKmlTpHXG6DUE5Ubx+MGQ==}
 
-  '@composio/client@0.1.0-alpha.66':
-    resolution: {integrity: sha512-SDHcTWzz2dgdYAew/gQsRpjHpEzHKm6sW7KM4wCoJWNJuuMuey9Ahje91ZucNjfaqpI8CFW+pXY4nWkZf5LD7Q==}
+  '@composio/client@0.1.0-alpha.70':
+    resolution: {integrity: sha512-bANvjHL9aYwvzcrDL9S2W/uTf6EV3slIpYRL3lAv3k74tTgB1TkYzAWgxxz1OpLK86iDB5xq3RFlritVu23Erg==}
 
-  '@composio/core@0.6.11':
-    resolution: {integrity: sha512-0uNA1DhHF0l3d51GVRw4CA8oYgqsps+aGMW6J4jA6Ut53HfBHwHJ4JAa9HU/2Psho8tCoprM6NR5DxWGD50H+A==}
+  '@composio/core@0.9.0':
+    resolution: {integrity: sha512-7gZx1nzHUxGiutPZZQov4va4N69MIbvJlkfZAQd0yG/n0znqntBKbUfF6/GucmBzxwgX58gsS9z512ThVVGOEw==}
     peerDependencies:
       zod: ^3.25 || ^4
 
@@ -1147,10 +1147,10 @@ packages:
     peerDependencies:
       zod: '>=3.25.76 <5'
 
-  '@composio/vercel@0.6.11':
-    resolution: {integrity: sha512-sNxU8Xurc63FKhuV8QcPr+MLiqo6iZ1RtwXm8dyRbS4fjWKFw/DfYw4+d2ChoNK7l+6XHNXmK7ayzmmovFnZiQ==}
+  '@composio/vercel@0.9.0':
+    resolution: {integrity: sha512-QsOqs/pN39awbu0SxIxV/UhDKBdjDNshOi7ORwDM+zwHXItnqTILLN95Xlyqg4tAn7g4ryTL/bLkHWIa27nE1g==}
     peerDependencies:
-      '@composio/core': 0.6.11
+      '@composio/core': 0.9.0
       ai: ^5.0.0 || ^6.0.0
 
   '@cspotcode/source-map-support@0.8.1':
@@ -9522,11 +9522,11 @@ snapshots:
       style-mod: 4.1.2
       w3c-keyname: 2.2.8
 
-  '@composio/client@0.1.0-alpha.66': {}
+  '@composio/client@0.1.0-alpha.70': {}
 
-  '@composio/core@0.6.11(ws@8.18.3)(zod@3.25.76)':
+  '@composio/core@0.9.0(ws@8.18.3)(zod@3.25.76)':
     dependencies:
-      '@composio/client': 0.1.0-alpha.66
+      '@composio/client': 0.1.0-alpha.70
       '@composio/json-schema-to-zod': 0.1.20(zod@3.25.76)
       '@types/json-schema': 7.0.15
       chalk: 4.1.2
@@ -9542,9 +9542,9 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@composio/vercel@0.6.11(@composio/core@0.6.11(ws@8.18.3)(zod@3.25.76))(ai@4.3.19(react@18.3.1)(zod@3.25.76))':
+  '@composio/vercel@0.9.0(@composio/core@0.9.0(ws@8.18.3)(zod@3.25.76))(ai@4.3.19(react@18.3.1)(zod@3.25.76))':
     dependencies:
-      '@composio/core': 0.6.11(ws@8.18.3)(zod@3.25.76)
+      '@composio/core': 0.9.0(ws@8.18.3)(zod@3.25.76)
       ai: 4.3.19(react@18.3.1)(zod@3.25.76)
 
   '@cspotcode/source-map-support@0.8.1':
