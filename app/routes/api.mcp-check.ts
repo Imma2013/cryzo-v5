@@ -1,16 +1,40 @@
-import { createScopedLogger } from '~/utils/logger';
-import { MCPService, toPublicMcpServerTools } from '~/lib/services/mcpService';
+import type { LoaderFunctionArgs } from '@remix-run/cloudflare';
 
-const logger = createScopedLogger('api.mcp-check');
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const serverUrl = url.searchParams.get('url');
+  const serverType = url.searchParams.get('type') as 'streamable-http' | 'sse' | null;
+
+  if (!serverUrl || !serverType) {
+    return json({ error: 'Missing url or type query param.' }, 400);
+  }
+
+  if (serverType !== 'streamable-http' && serverType !== 'sse') {
+    // stdio servers can't be health-checked from the browser
+    return json({ status: 'unavailable', reason: 'stdio servers cannot be checked remotely.' });
+  }
+
   try {
-    const mcpService = MCPService.getInstance();
-    const serverTools = await mcpService.checkServersAvailabilities();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
-    return Response.json(toPublicMcpServerTools(serverTools));
-  } catch (error) {
-    logger.error('Error checking MCP servers:', error);
-    return Response.json({ error: 'Failed to check MCP servers' }, { status: 500 });
+    const response = await fetch(serverUrl, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/json, text/event-stream' },
+    });
+
+    clearTimeout(timeout);
+
+    return json({ status: response.ok ? 'available' : 'unavailable', httpStatus: response.status });
+  } catch {
+    return json({ status: 'unavailable' });
   }
 }

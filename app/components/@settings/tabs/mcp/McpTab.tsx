@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { classNames } from '~/utils/classNames';
-import type { MCPConfig } from '~/lib/services/mcpService';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { useMCPStore } from '~/lib/stores/mcp';
-import McpServerList from '~/components/@settings/tabs/mcp/McpServerList';
+import { useStore } from '@nanostores/react';
+import { classNames } from '~/utils/classNames';
+import { Button } from '~/components/ui/Button';
+import { mcpConfigStore, mcpMaxStepsStore, updateMcpConfig, updateMcpMaxSteps, type McpConfig } from '~/lib/stores/mcp';
+import { McpServerList } from './McpServerList';
 
-const EXAMPLE_MCP_CONFIG: MCPConfig = {
+const EXAMPLE_CONFIG: McpConfig = {
   mcpServers: {
-    everything: {
-      type: 'stdio',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-everything'],
-    },
     deepwiki: {
       type: 'streamable-http',
       url: 'https://mcp.deepwiki.com/mcp',
@@ -27,212 +24,136 @@ const EXAMPLE_MCP_CONFIG: MCPConfig = {
 };
 
 export default function McpTab() {
-  const settings = useMCPStore((state) => state.settings);
-  const isInitialized = useMCPStore((state) => state.isInitialized);
-  const serverTools = useMCPStore((state) => state.serverTools);
-  const initialize = useMCPStore((state) => state.initialize);
-  const updateSettings = useMCPStore((state) => state.updateSettings);
-  const checkServersAvailabilities = useMCPStore((state) => state.checkServersAvailabilities);
+  const config = useStore(mcpConfigStore);
+  const maxSteps = useStore(mcpMaxStepsStore);
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [mcpConfigText, setMCPConfigText] = useState('');
-  const [maxLLMSteps, setMaxLLMSteps] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [isCheckingServers, setIsCheckingServers] = useState(false);
-  const [expandedServer, setExpandedServer] = useState<string | null>(null);
+  const [editorValue, setEditorValue] = useState(() => JSON.stringify(config, null, 2));
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [serverTools] = useState<Record<string, string[]>>({});
 
-  useEffect(() => {
-    if (!isInitialized) {
-      initialize().catch((err) => {
-        setError(`Failed to initialize MCP settings: ${err instanceof Error ? err.message : String(err)}`);
-        toast.error('Failed to load MCP configuration');
-      });
-    }
-  }, [isInitialized]);
+  const handleEditorChange = (value: string) => {
+    setEditorValue(value);
 
-  useEffect(() => {
-    setMCPConfigText(JSON.stringify(settings.mcpConfig, null, 2));
-    setMaxLLMSteps(settings.maxLLMSteps);
-    setError(null);
-  }, [settings]);
-
-  const parsedConfig = useMemo(() => {
     try {
-      setError(null);
-      return JSON.parse(mcpConfigText) as MCPConfig;
+      JSON.parse(value);
+      setParseError(null);
     } catch (e) {
-      setError(`Invalid JSON format: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
+      setParseError(e instanceof Error ? e.message : 'Invalid JSON');
     }
-  }, [mcpConfigText]);
-
-  const handleMaxLLMCallChange = (value: string) => {
-    setMaxLLMSteps(parseInt(value, 10));
   };
 
-  const handleSave = async () => {
-    if (!parsedConfig) {
-      return;
-    }
-
-    setIsSaving(true);
-
+  const handleSave = () => {
     try {
-      await updateSettings({
-        mcpConfig: parsedConfig,
-        maxLLMSteps,
-      });
-      toast.success('MCP configuration saved');
+      const parsed = JSON.parse(editorValue) as McpConfig;
 
-      setError(null);
+      if (!parsed.mcpServers || typeof parsed.mcpServers !== 'object') {
+        toast.error('Config must have a "mcpServers" object.');
+        return;
+      }
+
+      updateMcpConfig(parsed);
+      toast.success('MCP configuration saved.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save configuration');
-      toast.error('Failed to save MCP configuration');
-    } finally {
-      setIsSaving(false);
+      toast.error(e instanceof Error ? e.message : 'Invalid JSON');
     }
   };
 
   const handleLoadExample = () => {
-    setMCPConfigText(JSON.stringify(EXAMPLE_MCP_CONFIG, null, 2));
-    setError(null);
+    const value = JSON.stringify(EXAMPLE_CONFIG, null, 2);
+    setEditorValue(value);
+    setParseError(null);
   };
-
-  const checkServerAvailability = async () => {
-    if (serverEntries.length === 0) {
-      return;
-    }
-
-    setIsCheckingServers(true);
-    setError(null);
-
-    try {
-      await checkServersAvailabilities();
-    } catch (e) {
-      setError(`Failed to check server availability: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setIsCheckingServers(false);
-    }
-  };
-
-  const toggleServerExpanded = (serverName: string) => {
-    setExpandedServer(expandedServer === serverName ? null : serverName);
-  };
-
-  const serverEntries = useMemo(() => Object.entries(serverTools), [serverTools]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <section aria-labelledby="server-status-heading">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="text-base font-medium text-bolt-elements-textPrimary">MCP Servers Configured</h2>{' '}
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header */}
+      <motion.div
+        className="flex items-center gap-3"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400">
+          <div className="i-ph:plug w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">MCP Servers</h2>
+          <p className="text-sm text-bolt-elements-textSecondary">
+            Connect external Model Context Protocol servers to extend available tools.
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Config editor */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-bolt-elements-textPrimary">Server Configuration (JSON)</label>
           <button
-            onClick={checkServerAvailability}
-            disabled={isCheckingServers || !parsedConfig || serverEntries.length === 0}
-            className={classNames(
-              'px-3 py-1.5 rounded-lg text-sm',
-              'bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4',
-              'text-bolt-elements-textPrimary',
-              'transition-all duration-200',
-              'flex items-center gap-2',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
+            onClick={handleLoadExample}
+            className="text-xs text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
           >
-            {isCheckingServers ? (
-              <div className="i-svg-spinners:90-ring-with-bg w-3 h-3 text-bolt-elements-loader-progress animate-spin" />
-            ) : (
-              <div className="i-ph:arrow-counter-clockwise w-3 h-3" />
-            )}
-            Check availability
+            Load example
           </button>
         </div>
-        <McpServerList
-          checkingServers={isCheckingServers}
-          expandedServer={expandedServer}
-          serverEntries={serverEntries}
-          toggleServerExpanded={toggleServerExpanded}
+
+        <textarea
+          value={editorValue}
+          onChange={(e) => handleEditorChange(e.target.value)}
+          rows={14}
+          spellCheck={false}
+          className={classNames(
+            'w-full rounded-lg border p-3 font-mono text-sm resize-y',
+            'bg-bolt-elements-background-depth-2',
+            'text-bolt-elements-textPrimary placeholder-bolt-elements-textSecondary',
+            'focus:outline-none focus:ring-2 focus:ring-purple-500/30',
+            parseError
+              ? 'border-red-400 dark:border-red-600'
+              : 'border-bolt-elements-borderColor',
+          )}
+          placeholder='{"mcpServers": {}}'
         />
-      </section>
 
-      <section aria-labelledby="config-section-heading">
-        <h2 className="text-base font-medium text-bolt-elements-textPrimary mb-3">Configuration</h2>
+        {parseError && (
+          <p className="text-xs text-red-500 dark:text-red-400">{parseError}</p>
+        )}
 
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="mcp-config" className="block text-sm text-bolt-elements-textSecondary mb-2">
-              Configuration JSON
-            </label>
-            <textarea
-              id="mcp-config"
-              value={mcpConfigText}
-              onChange={(e) => setMCPConfigText(e.target.value)}
-              className={classNames(
-                'w-full px-3 py-2 rounded-lg text-sm font-mono h-72',
-                'bg-[#F8F8F8] dark:bg-[#1A1A1A]',
-                'border',
-                error ? 'border-bolt-elements-icon-error' : 'border-[#E5E5E5] dark:border-[#333333]',
-                'text-bolt-elements-textPrimary',
-                'focus:outline-none focus:ring-1 focus:ring-bolt-elements-focus',
-              )}
-            />
-          </div>
-          <div>{error && <p className="mt-2 mb-2 text-sm text-bolt-elements-icon-error">{error}</p>}</div>
-          <div>
-            <label htmlFor="max-llm-steps" className="block text-sm text-bolt-elements-textSecondary mb-2">
-              Maximum number of sequential LLM calls (steps)
-            </label>
-            <input
-              id="max-llm-steps"
-              type="number"
-              placeholder="Maximum number of sequential LLM calls"
-              min="1"
-              max="20"
-              value={maxLLMSteps}
-              onChange={(e) => handleMaxLLMCallChange(e.target.value)}
-              className="w-full px-3 py-2 text-bolt-elements-textPrimary text-sm rounded-lg bg-white dark:bg-bolt-elements-background-depth-4 border border-bolt-elements-borderColor dark:border-bolt-elements-borderColor-dark focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="mt-2 text-sm text-bolt-elements-textSecondary">
-            The MCP configuration format is identical to the one used in Claude Desktop.
-            <a
-              href="https://modelcontextprotocol.io/examples"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-bolt-elements-link hover:underline inline-flex items-center gap-1"
-            >
-              View example servers
-              <div className="i-ph:arrow-square-out w-4 h-4" />
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <div className="flex flex-wrap justify-between gap-3 mt-6">
-        <button
-          onClick={handleLoadExample}
-          className="px-4 py-2 rounded-lg text-sm border border-bolt-elements-borderColor
-                    bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary
-                    hover:bg-bolt-elements-background-depth-3"
-        >
-          Load Example
-        </button>
-
-        <div className="flex gap-2">
-          <button
+        <div className="flex justify-end">
+          <Button
             onClick={handleSave}
-            disabled={isSaving || !parsedConfig}
-            aria-disabled={isSaving || !parsedConfig}
-            className={classNames(
-              'px-4 py-2 rounded-lg text-sm flex items-center gap-2',
-              'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent',
-              'hover:bg-bolt-elements-item-backgroundActive',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
+            disabled={!!parseError}
+            variant="default"
+            className="px-5"
           >
-            <div className="i-ph:floppy-disk w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save Configuration'}
-          </button>
+            Save
+          </Button>
         </div>
+      </div>
+
+      {/* Max LLM steps */}
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-bolt-elements-textPrimary">
+          Max sequential LLM steps: <span className="text-purple-500">{maxSteps}</span>
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={20}
+          value={maxSteps}
+          onChange={(e) => updateMcpMaxSteps(Number(e.target.value))}
+          className="w-full accent-purple-500"
+        />
+        <p className="text-xs text-bolt-elements-textSecondary">
+          Controls how many tool-call rounds the LLM can make in one response (1–20).
+        </p>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-bolt-elements-borderColor" />
+
+      {/* Server list */}
+      <div className="flex flex-col gap-3">
+        <h3 className="text-sm font-medium text-bolt-elements-textPrimary">Configured Servers</h3>
+        <McpServerList serverTools={serverTools} />
       </div>
     </div>
   );

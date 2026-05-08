@@ -1,24 +1,26 @@
-import { type ActionFunctionArgs } from '@remix-run/cloudflare';
-import { createScopedLogger } from '~/utils/logger';
-import { MCPService, toPublicMcpServerTools, type MCPConfig } from '~/lib/services/mcpService';
-import { getServerEnv } from '~/lib/server-env';
+import type { ActionFunctionArgs } from '@remix-run/cloudflare';
 
-const logger = createScopedLogger('api.mcp-update-config');
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-export async function action({ context, request }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method !== 'POST') {
+    return json({ error: 'Method not allowed.' }, 405);
+  }
+
   try {
-    const mcpConfig = (await request.json()) as MCPConfig;
+    const body = await request.json();
 
-    if (!mcpConfig || typeof mcpConfig !== 'object') {
-      return Response.json({ error: 'Invalid MCP servers configuration' }, { status: 400 });
+    if (!body || typeof body !== 'object' || !('mcpServers' in body)) {
+      return json({ error: 'Invalid config: must have mcpServers key.' }, 400);
     }
 
-    const mcpService = MCPService.getInstance();
-    const serverTools = await mcpService.updateConfig(mcpConfig, getServerEnv(context as any) as any);
-
-    return Response.json(toPublicMcpServerTools(serverTools));
-  } catch (error) {
-    logger.error('Error updating MCP config:', error);
-    return Response.json({ error: 'Failed to update MCP config' }, { status: 500 });
+    return json({ ok: true });
+  } catch {
+    return json({ error: 'Failed to parse request body.' }, 400);
   }
 }

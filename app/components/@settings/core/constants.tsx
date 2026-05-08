@@ -1,5 +1,12 @@
 import type { TabType } from './types';
-import { User, Settings, Bell, Star, Database, Cloud, Laptop, Github, List, Wrench } from 'lucide-react';
+import { User, Settings, Bell, Star, Database, Cloud, Laptop, Github, List } from 'lucide-react';
+
+const McpIcon = () => (
+  <svg fill="currentColor" fillRule="evenodd" viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15.688 2.343a2.588 2.588 0 00-3.61 0l-9.626 9.44a.863.863 0 01-1.203 0 .823.823 0 010-1.18l9.626-9.44a4.313 4.313 0 016.016 0 4.116 4.116 0 011.204 3.54 4.3 4.3 0 013.609 1.18l.05.05a4.115 4.115 0 010 5.9l-8.706 8.537a.274.274 0 000 .393l1.788 1.754a.823.823 0 010 1.18.863.863 0 01-1.203 0l-1.788-1.753a1.92 1.92 0 010-2.754l8.706-8.538a2.47 2.47 0 000-3.54l-.05-.049a2.588 2.588 0 00-3.607-.003l-7.172 7.034-.002.002-.098.097a.863.863 0 01-1.204 0 .823.823 0 010-1.18l7.273-7.133a2.47 2.47 0 00-.003-3.537z" />
+    <path d="M14.485 4.703a.823.823 0 000-1.18.863.863 0 00-1.204 0l-7.119 6.982a4.115 4.115 0 000 5.9 4.314 4.314 0 006.016 0l7.12-6.982a.823.823 0 000-1.18.863.863 0 00-1.204 0l-7.119 6.982a2.588 2.588 0 01-3.61 0 2.47 2.47 0 010-3.54l7.12-6.982z" />
+  </svg>
+);
 
 // GitLab icon component
 const GitLabIcon = () => (
@@ -51,7 +58,7 @@ export const TAB_ICONS: Record<TabType, React.ComponentType<{ className?: string
   netlify: () => <NetlifyIcon />,
   vercel: () => <VercelIcon />,
   supabase: () => <SupabaseIcon />,
-  mcp: Wrench,
+  mcp: () => <McpIcon />,
   'event-logs': List,
 };
 
@@ -85,7 +92,7 @@ export const TAB_DESCRIPTIONS: Record<TabType, string> = {
   netlify: 'Configure Netlify deployment settings',
   vercel: 'Manage Vercel projects and deployments',
   supabase: 'Setup Supabase database connection',
-  mcp: 'Configure Model Context Protocol servers',
+  mcp: 'Connect external MCP tool servers',
   'event-logs': 'View system events and logs',
 };
 
@@ -95,12 +102,12 @@ export const DEFAULT_TAB_CONFIG = [
   { id: 'data', visible: true, window: 'user' as const, order: 1 },
   { id: 'cloud-providers', visible: true, window: 'user' as const, order: 2 },
   { id: 'local-providers', visible: true, window: 'user' as const, order: 3 },
-  { id: 'github', visible: true, window: 'user' as const, order: 4 },
-  { id: 'gitlab', visible: true, window: 'user' as const, order: 5 },
-  { id: 'netlify', visible: true, window: 'user' as const, order: 6 },
-  { id: 'vercel', visible: true, window: 'user' as const, order: 7 },
-  { id: 'supabase', visible: true, window: 'user' as const, order: 8 },
-  { id: 'mcp', visible: true, window: 'user' as const, order: 9 },
+  { id: 'mcp', visible: true, window: 'user' as const, order: 4 },
+  { id: 'github', visible: true, window: 'user' as const, order: 5 },
+  { id: 'gitlab', visible: true, window: 'user' as const, order: 6 },
+  { id: 'netlify', visible: true, window: 'user' as const, order: 7 },
+  { id: 'vercel', visible: true, window: 'user' as const, order: 8 },
+  { id: 'supabase', visible: true, window: 'user' as const, order: 9 },
   { id: 'notifications', visible: true, window: 'user' as const, order: 10 },
   { id: 'event-logs', visible: true, window: 'user' as const, order: 11 },
 
