@@ -955,7 +955,7 @@ export async function streamText(props: {
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
       void provider;
-      currentModel = normalizeGoogleChatModel(model);
+      currentModel = model || DEFAULT_MODEL;
       currentProvider = DEFAULT_PROVIDER.name;
       newMessage.content = sanitizeText(content);
     } else if (message.role == 'assistant') {
@@ -982,7 +982,7 @@ export async function streamText(props: {
     throw new Error(`Provider ${currentProvider} not found`);
   }
 
-  const effectiveModelName = normalizeGoogleChatModel(currentModel);
+  const effectiveModelName = currentProvider === 'Google' ? normalizeGoogleChatModel(currentModel) : currentModel;
   const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === effectiveModelName);
 

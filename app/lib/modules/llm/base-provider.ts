@@ -7,7 +7,7 @@ import { getProcessEnv } from '~/lib/server-env';
 
 /** Default timeout for model listing API calls (5 seconds) */
 const MODEL_FETCH_TIMEOUT = 5_000;
-const SERVER_MANAGED_PROVIDER_NAMES = new Set(['Google']);
+const SERVER_MANAGED_PROVIDER_NAMES = new Set(['Google', 'OpenAI']);
 
 export abstract class BaseProvider implements ProviderInfo {
   abstract name: string;

@@ -10,6 +10,7 @@ type ProviderMetadata = Pick<ProviderInfo, 'name' | 'getApiKeyLink' | 'labelForG
 
 export const PROVIDER_METADATA: ProviderMetadata[] = [
   { name: 'Google', staticModels: getGoogleChatModels(), getApiKeyLink: 'https://aistudio.google.com/app/apikey', apiTokenKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+  { name: 'OpenAI', staticModels: [], getApiKeyLink: 'https://platform.openai.com/api-keys', apiTokenKey: 'OPENAI_API_KEY' },
 ];
 
 export const PROVIDER_BASE_URL_ENV_KEYS = Object.fromEntries(

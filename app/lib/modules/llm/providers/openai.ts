@@ -17,6 +17,7 @@ export default class OpenAIProvider extends BaseProvider {
      * Essential fallback models - only the most stable/reliable ones
      * Synced to dyad's current OpenAI catalog.
      */
+    { name: 'gpt-5.4', label: 'GPT 5.4', provider: 'OpenAI', maxTokenAllowed: 400000, maxCompletionTokens: 128000 },
     { name: 'gpt-5.2', label: 'GPT 5.2', provider: 'OpenAI', maxTokenAllowed: 400000, maxCompletionTokens: 128000 },
 
     // GPT 5.1: flagship conversational model
