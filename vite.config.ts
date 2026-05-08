@@ -67,6 +67,9 @@ export default defineConfig((config) => {
       'TOGETHER_API_BASE_URL',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'OPENAI_API_KEY',
+      'COMPOSIO_API_KEY',
+      'COMPOSIO_MCP_SERVER_URL',
+      'COMPOSIO_MCP_API_KEY',
     ],
     css: {
       preprocessorOptions: {

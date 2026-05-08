@@ -96,7 +96,10 @@ describe('getServerEnv', () => {
     expect(getServerEnvDiagnostics(env)).toEqual({
       keys: {
         COMPOSIO_API_KEY: true,
+        COMPOSIO_MCP_API_KEY: false,
+        COMPOSIO_MCP_SERVER_URL: false,
         FEATURE_COMPOSIO_TOOLS: true,
+        OPENAI_API_KEY: false,
         SUPABASE_ANON_KEY: false,
         SUPABASE_URL: true,
         VITE_COMPOSIO_API_KEY: false,
@@ -106,7 +109,10 @@ describe('getServerEnv', () => {
       sourceKeys: {
         cloudflare: {
           COMPOSIO_API_KEY: false,
+          COMPOSIO_MCP_API_KEY: false,
+          COMPOSIO_MCP_SERVER_URL: false,
           FEATURE_COMPOSIO_TOOLS: false,
+          OPENAI_API_KEY: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_COMPOSIO_API_KEY: false,
@@ -115,7 +121,10 @@ describe('getServerEnv', () => {
         },
         context: {
           COMPOSIO_API_KEY: true,
+          COMPOSIO_MCP_API_KEY: false,
+          COMPOSIO_MCP_SERVER_URL: false,
           FEATURE_COMPOSIO_TOOLS: false,
+          OPENAI_API_KEY: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: true,
           VITE_COMPOSIO_API_KEY: false,
@@ -124,7 +133,10 @@ describe('getServerEnv', () => {
         },
         meta: {
           COMPOSIO_API_KEY: false,
+          COMPOSIO_MCP_API_KEY: false,
+          COMPOSIO_MCP_SERVER_URL: false,
           FEATURE_COMPOSIO_TOOLS: true,
+          OPENAI_API_KEY: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_COMPOSIO_API_KEY: false,
@@ -133,7 +145,10 @@ describe('getServerEnv', () => {
         },
         process: {
           COMPOSIO_API_KEY: false,
+          COMPOSIO_MCP_API_KEY: false,
+          COMPOSIO_MCP_SERVER_URL: false,
           FEATURE_COMPOSIO_TOOLS: false,
+          OPENAI_API_KEY: false,
           SUPABASE_ANON_KEY: false,
           SUPABASE_URL: false,
           VITE_COMPOSIO_API_KEY: false,
@@ -161,5 +176,24 @@ describe('getServerEnv', () => {
     expect(env.VITE_COMPOSIO_API_KEY).toBe('composio-vite-key');
     expect(getServerEnvDiagnostics(env)?.keys.VITE_COMPOSIO_API_KEY).toBe(true);
     expect(getServerEnvDiagnostics(env)?.sourceKeys.meta.VITE_COMPOSIO_API_KEY).toBe(true);
+  });
+
+  it('reads Composio MCP keys from the server-side Vite env source', () => {
+    const env = getServerEnv(undefined, {
+      metaEnv: {
+        COMPOSIO_API_KEY: 'composio-api-key',
+        COMPOSIO_MCP_API_KEY: 'mcp-api-key\r\n',
+        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp\r\n',
+      },
+      processEnv: {},
+    });
+
+    expect(env.COMPOSIO_API_KEY).toBe('composio-api-key');
+    expect(env.COMPOSIO_MCP_API_KEY).toBe('mcp-api-key');
+    expect(env.COMPOSIO_MCP_SERVER_URL).toBe('https://backend.composio.dev/tool_router/trs_test/mcp');
+    expect(getServerEnvDiagnostics(env)?.keys.COMPOSIO_MCP_API_KEY).toBe(true);
+    expect(getServerEnvDiagnostics(env)?.keys.COMPOSIO_MCP_SERVER_URL).toBe(true);
+    expect(getServerEnvDiagnostics(env)?.sourceKeys.meta.COMPOSIO_MCP_API_KEY).toBe(true);
+    expect(getServerEnvDiagnostics(env)?.sourceKeys.meta.COMPOSIO_MCP_SERVER_URL).toBe(true);
   });
 });
