@@ -39,7 +39,7 @@ export function getExternalToolSystemPrompt(context: ExternalToolPromptContext) 
   const availabilityInstruction = context.toolsAvailable
     ? 'Composio tools are available for this request. You must start by using a Composio tool, then either render the real auth/connect result or summarize the real tool result. Do not answer with generic fallback prose before the tool path runs.'
     : context.toolResolutionError
-      ? `Composio tool discovery failed for this request. Tell the user app access is temporarily unavailable and report the runtime problem instead of pretending they only need to sign in. Error: ${context.toolResolutionError}`
+      ? 'Composio tool discovery failed for this request. Tell the user app access is temporarily unavailable for this turn instead of pretending they only need to sign in. Do not include raw runtime or transport error details.'
       : !context.hasComposioIdentity
       ? 'No connected-app identity is available right now. Tell the user to open the Apps tab to connect the required app, or sign in if they want a persistent account across devices.'
       : !context.composioConfigured
@@ -74,7 +74,7 @@ export function getBuildWithToolsSystemPrompt(context: ExternalToolPromptContext
   const availabilityInstruction = context.toolsAvailable
     ? 'Connected-app tools are available. Use them only for the explicit real app action or personal data request inside the broader builder task, and actually call the tool before falling back to generic connect guidance.'
     : context.toolResolutionError
-      ? `Connected-app tool discovery failed at runtime. Do not pretend to use external apps on this turn. Briefly explain the app-access failure and continue the builder task. Error: ${context.toolResolutionError}`
+      ? 'Connected-app tool discovery failed at runtime. Do not pretend to use external apps on this turn. Briefly explain the app-access failure and continue the builder task. Do not include raw runtime or transport error details.'
       : !context.hasComposioIdentity
         ? 'No connected-app identity is available in this browser session, so ask the user to open the Apps tab to connect the required app or sign in for a persistent account.'
       : !context.composioConfigured

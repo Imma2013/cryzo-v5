@@ -16,6 +16,7 @@ export type TabType =
   | 'netlify'
   | 'vercel'
   | 'supabase'
+  | 'mcp'
   | 'event-logs';
 
 export type WindowType = 'user' | 'developer';
@@ -78,6 +79,7 @@ export const TAB_LABELS: Record<TabType, string> = {
   netlify: 'Netlify',
   vercel: 'Vercel',
   supabase: 'Supabase',
+  mcp: 'MCP Servers',
   'event-logs': 'Event Logs',
 };
 

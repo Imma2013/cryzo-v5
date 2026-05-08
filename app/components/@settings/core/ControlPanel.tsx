@@ -28,6 +28,7 @@ import VercelTab from '~/components/@settings/tabs/vercel/VercelTab';
 import NetlifyTab from '~/components/@settings/tabs/netlify/NetlifyTab';
 import CloudProvidersTab from '~/components/@settings/tabs/providers/cloud/CloudProvidersTab';
 import LocalProvidersTab from '~/components/@settings/tabs/providers/local/LocalProvidersTab';
+import McpTab from '~/components/@settings/tabs/mcp/McpTab';
 
 interface ControlPanelProps {
   open: boolean;
@@ -35,7 +36,7 @@ interface ControlPanelProps {
 }
 
 // Beta status for experimental features
-const BETA_TABS = new Set<TabType>(['local-providers']);
+const BETA_TABS = new Set<TabType>(['local-providers', 'mcp']);
 
 const BetaLabel = () => (
   <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-purple-500/10 dark:bg-purple-500/20">
@@ -146,6 +147,8 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
         return <VercelTab />;
       case 'netlify':
         return <NetlifyTab />;
+      case 'mcp':
+        return <McpTab />;
       case 'event-logs':
         return <EventLogsTab />;
 

@@ -16,6 +16,8 @@ import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.se
 import { getServerEnv } from '~/lib/server-env';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
+import { resolveAssistantMode } from '~/lib/.server/llm/external-tool-mode';
+import { MCPService, type MCPConfig } from '~/lib/services/mcpService';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -81,7 +83,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     },
   });
 
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, user: requestUser } =
+  const {
+    messages,
+    files,
+    promptId,
+    contextOptimization,
+    supabase,
+    chatMode,
+    designScheme,
+    user: requestUser,
+    maxLLMSteps,
+    mcpConfig,
+  } =
     await request.json<{
       messages: Messages;
       files: any;
@@ -89,6 +102,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       contextOptimization: boolean;
       chatMode: 'discuss' | 'build';
       designScheme?: DesignScheme;
+      maxLLMSteps?: number;
+      mcpConfig?: MCPConfig;
       user?: {
         email?: string;
         composioUserId?: string;
@@ -157,12 +172,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let summary: string | undefined = undefined;
         let messageSliceId = 0;
 
-        const processedMessages = messages;
-        const fullUserPrompt = processedMessages
+        const mcpService = MCPService.getInstance();
+        const fullUserPrompt = messages
           .filter((message) => message.role === 'user' && !isHiddenMessage(message))
           .map((message) => message.content)
           .join('\n')
           .trim();
+        const assistantMode = resolveAssistantMode(chatMode, fullUserPrompt);
+        const shouldUseMcpTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
+        const mcpServerTools = shouldUseMcpTools
+          ? await mcpService.updateConfig(mcpConfig || { mcpServers: {} }, serverEnv as any)
+          : {};
+        const processedMessages = shouldUseMcpTools
+          ? await mcpService.processToolInvocations(messages, dataStream)
+          : messages;
+        const mcpToolsAvailable = Object.values(mcpServerTools).some((server) => server.status === 'available');
 
         if (chatMode === 'build' && fullUserPrompt) {
           const designRouting = routeDesignReferences(fullUserPrompt, 1);
@@ -300,6 +324,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         const options: StreamingOptions = {
           supabaseConnection: supabase,
+          ...(shouldUseMcpTools && mcpToolsAvailable
+            ? {
+                maxSteps: maxLLMSteps ?? 5,
+                toolChoice: 'auto' as const,
+                tools: mcpService.toolsWithoutExecute,
+                onStepFinish: ({ toolCalls }) => {
+                  toolCalls.forEach((toolCall) => {
+                    mcpService.processToolCall(toolCall, dataStream);
+                  });
+                },
+              }
+            : {}),
           onFinish: async ({ text: content, finishReason, usage }) => {
             logger.debug('usage', JSON.stringify(usage));
 

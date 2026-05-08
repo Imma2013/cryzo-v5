@@ -35,3 +35,11 @@ export type GoogleToolCallMetadataAnnotation = {
   toolCallId: string;
   providerMetadata: Record<string, any>;
 };
+
+export type ToolCallAnnotation = {
+  type: 'toolCall';
+  toolCallId: string;
+  serverName: string;
+  toolName: string;
+  toolDescription: string;
+};

@@ -190,7 +190,8 @@ describe('buildAssistantSystemPrompt', () => {
     });
 
     expect(prompt).toContain('temporarily unavailable');
-    expect(prompt).toContain('session.tools() failed');
+    expect(prompt).toContain('Do not include raw runtime or transport error details');
+    expect(prompt).not.toContain('session.tools() failed');
   });
 
   it('forces real tool usage before fallback for external-tool requests with tools available', () => {

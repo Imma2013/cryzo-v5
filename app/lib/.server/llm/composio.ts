@@ -1,4 +1,5 @@
-import { createMCPClient } from '@ai-sdk/mcp';
+import { experimental_createMCPClient as createMCPClient } from 'ai';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SignJWT, jwtVerify } from 'jose';
 
 type ComposioUserContext = {
@@ -455,13 +456,13 @@ async function createComposioMcpToolResolution(
   context: Omit<ComposioToolConfirmationContext, 'toolName'>,
 ) {
   const client = await createMCPClient({
-    transport: {
-      type: 'http',
-      url: mcpConfig.serverUrl,
-      headers: {
-        'x-api-key': mcpConfig.apiKey,
+    transport: new StreamableHTTPClientTransport(new URL(mcpConfig.serverUrl), {
+      requestInit: {
+        headers: {
+          'x-api-key': mcpConfig.apiKey,
+        },
       },
-    },
+    }),
   });
 
   try {
@@ -475,6 +476,17 @@ async function createComposioMcpToolResolution(
     await client.close().catch(() => undefined);
     throw error;
   }
+}
+
+function isReadableStreamTransportError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const causeMessage =
+    error && typeof error === 'object' && 'cause' in error && (error as any).cause instanceof Error
+      ? (error as any).cause.message
+      : undefined;
+  const errorText = [message, causeMessage].filter(Boolean).join(' ');
+
+  return errorText.includes('readable') && errorText.includes('ReadableStream');
 }
 
 export async function getComposioTools(options: ComposioToolRuntimeOptions): Promise<ComposioToolResolution> {
@@ -523,11 +535,32 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
       userPrompt: options.userPrompt,
     });
 
-    const { cleanup, tools } = await createComposioMcpToolResolution(mcpConfig, {
-      confirmationSecret,
-      userId: composioUserId,
-      userPrompt: options.userPrompt,
-    });
+    let resolvedTools: Awaited<ReturnType<typeof createComposioMcpToolResolution>>;
+
+    try {
+      resolvedTools = await createComposioMcpToolResolution(mcpConfig, {
+        confirmationSecret,
+        userId: composioUserId,
+        userPrompt: options.userPrompt,
+      });
+    } catch (error) {
+      if (!isReadableStreamTransportError(error)) {
+        throw error;
+      }
+
+      console.warn('[llm.composio] mcp transport returned ReadableStream format error; retrying once', {
+        providerName: options.providerName,
+        resolvedUserId: composioUserId,
+      });
+
+      resolvedTools = await createComposioMcpToolResolution(mcpConfig, {
+        confirmationSecret,
+        userId: composioUserId,
+        userPrompt: options.userPrompt,
+      });
+    }
+
+    const { cleanup, tools } = resolvedTools;
     const toolNames = Object.keys(tools || {});
 
     console.info('[llm.composio] mcp tools resolved', {
@@ -546,9 +579,12 @@ export async function getComposioTools(options: ComposioToolRuntimeOptions): Pro
       tools,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
+    const rawErrorMessage = error instanceof Error ? error.message : 'Failed to resolve Composio tools.';
+    const errorMessage = isReadableStreamTransportError(error)
+      ? 'The connected-app tool transport returned an incompatible stream response. Retry in a moment.'
+      : rawErrorMessage;
     console.warn('[llm.composio] mcp tool resolution failed', {
-      errorMessage,
+      errorMessage: rawErrorMessage,
       hasApiKey,
       providerName: options.providerName,
       requestOrigin: options.requestOrigin,

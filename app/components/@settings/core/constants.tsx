@@ -1,5 +1,5 @@
 import type { TabType } from './types';
-import { User, Settings, Bell, Star, Database, Cloud, Laptop, Github, List } from 'lucide-react';
+import { User, Settings, Bell, Star, Database, Cloud, Laptop, Github, List, Wrench } from 'lucide-react';
 
 // GitLab icon component
 const GitLabIcon = () => (
@@ -51,6 +51,7 @@ export const TAB_ICONS: Record<TabType, React.ComponentType<{ className?: string
   netlify: () => <NetlifyIcon />,
   vercel: () => <VercelIcon />,
   supabase: () => <SupabaseIcon />,
+  mcp: Wrench,
   'event-logs': List,
 };
 
@@ -67,6 +68,7 @@ export const TAB_LABELS: Record<TabType, string> = {
   netlify: 'Netlify',
   vercel: 'Vercel',
   supabase: 'Supabase',
+  mcp: 'MCP Servers',
   'event-logs': 'Event Logs',
 };
 
@@ -83,6 +85,7 @@ export const TAB_DESCRIPTIONS: Record<TabType, string> = {
   netlify: 'Configure Netlify deployment settings',
   vercel: 'Manage Vercel projects and deployments',
   supabase: 'Setup Supabase database connection',
+  mcp: 'Configure Model Context Protocol servers',
   'event-logs': 'View system events and logs',
 };
 
@@ -97,8 +100,9 @@ export const DEFAULT_TAB_CONFIG = [
   { id: 'netlify', visible: true, window: 'user' as const, order: 6 },
   { id: 'vercel', visible: true, window: 'user' as const, order: 7 },
   { id: 'supabase', visible: true, window: 'user' as const, order: 8 },
-  { id: 'notifications', visible: true, window: 'user' as const, order: 9 },
-  { id: 'event-logs', visible: true, window: 'user' as const, order: 10 },
+  { id: 'mcp', visible: true, window: 'user' as const, order: 9 },
+  { id: 'notifications', visible: true, window: 'user' as const, order: 10 },
+  { id: 'event-logs', visible: true, window: 'user' as const, order: 11 },
 
   // User Window Tabs (In dropdown, initially hidden)
 ];

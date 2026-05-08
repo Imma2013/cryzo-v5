@@ -823,10 +823,6 @@ export function getExternalToolRuntimeErrorMessage({
       return 'External app tools are not configured: COMPOSIO_MCP_SERVER_URL or COMPOSIO_MCP_API_KEY is missing on the server. Add both to the Vercel project environment variables and redeploy before retrying.';
     case 'unsupported_provider':
       return `Selected provider "${providerName}" does not support external app tool calling. Switch to a tool-capable provider and retry.`;
-    case 'resolution_failed':
-      return composioToolResolution.errorMessage
-        ? `External app tools are temporarily unavailable: ${composioToolResolution.errorMessage}`
-        : 'External app tools are temporarily unavailable right now. Retry in a moment.';
     default:
       return undefined;
   }
@@ -1403,14 +1399,16 @@ export async function streamText(props: {
     throw new Error(externalToolRuntimeError);
   }
 
-  const tools = {
-    ...(filteredOptions.tools || {}),
-    ...composioTools,
-  };
+  const tools = shouldInjectComposioTools
+    ? {
+        ...(filteredOptions.tools || {}),
+        ...composioTools,
+      }
+    : {};
   const hasTools = Object.keys(tools).length > 0;
   const assistantToolRuntimeSettings = getAssistantToolRuntimeSettings({
     assistantMode,
-    toolsAvailable: composioToolCount > 0,
+    toolsAvailable: hasTools,
   });
   const providerOptions = filteredOptions.providerOptions;
 
@@ -1505,7 +1503,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
             composioConfigured: composioToolResolution.configured,
             hasComposioIdentity: composioToolResolution.hasIdentity,
             toolResolutionError: composioToolResolution.errorMessage,
-            toolsAvailable: Object.keys(composioTools).length > 0,
+            toolsAvailable: hasTools,
           }),
     ...tokenParams,
     messages: convertToCoreMessages(historyMessages as any, { tools }),
