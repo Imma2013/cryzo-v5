@@ -89,18 +89,38 @@ function withFirstOutputTiming<T extends Record<string, any>>(result: T, details
   const startedAt = Date.now();
   let firstOutputLogged = false;
 
-  (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
-    return originalMergeIntoDataStream({
-      ...(writer as any),
-      write(chunk: string) {
-        if (!firstOutputLogged && chunk.length > 0) {
-          firstOutputLogged = true;
-          logTiming('First chat stream output', startedAt, details);
-        }
+  (result as any).mergeIntoDataStream = (writer: any) => {
+    const originalWrite = writer.write;
 
-        writer.write(chunk);
-      },
-    });
+    if (typeof originalWrite !== 'function') {
+      return originalMergeIntoDataStream(writer);
+    }
+
+    writer.write = (chunk: string) => {
+      if (!firstOutputLogged && chunk.length > 0) {
+        firstOutputLogged = true;
+        logTiming('First chat stream output', startedAt, details);
+      }
+
+      originalWrite.call(writer, chunk);
+    };
+
+    try {
+      const mergeResult = originalMergeIntoDataStream(writer);
+
+      if (mergeResult && typeof mergeResult.then === 'function') {
+        return Promise.resolve(mergeResult).finally(() => {
+          writer.write = originalWrite;
+        });
+      }
+
+      writer.write = originalWrite;
+
+      return mergeResult;
+    } catch (error) {
+      writer.write = originalWrite;
+      throw error;
+    }
   };
 
   return result;
@@ -171,9 +191,9 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
     }
   };
 
-  const sanitizePartialNativeFailure = (error: unknown, writer: { write: (chunk: string) => void }) => {
+  const sanitizePartialNativeFailure = (error: unknown) => {
     logger.warn(
-      'Native streaming merge response format failed after partial output; attempting compatibility retry',
+      'Native streaming merge response format failed after output; compatibility retry skipped',
       JSON.stringify({
         assistantMode,
         errorMessage: error instanceof Error ? error.message : String(error),
@@ -182,37 +202,53 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
       }),
     );
 
-    return retryWithCompatibility(writer);
+    throw new Error('The AI provider returned a response this app could not stream. Please retry in a moment.', {
+      cause: error,
+    });
   };
 
   (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
+    const originalWrite = writer.write;
+
+    if (typeof originalWrite !== 'function') {
+      return originalMergeIntoDataStream(writer);
+    }
+
     let wroteNativeChunk = false;
-    const nativeWriter = {
-      ...(writer as any),
-      write(chunk: string) {
-        wroteNativeChunk = true;
-        writer.write(chunk);
-      },
+
+    writer.write = function write(chunk: string) {
+      wroteNativeChunk = true;
+      return originalWrite.call(writer, chunk);
     };
 
     const handleMergeError = (error: unknown) => {
+      writer.write = originalWrite;
+
       if (!isSuccessfulResponseStreamFormatError(error)) {
         throw error;
       }
 
       if (wroteNativeChunk) {
-        return sanitizePartialNativeFailure(error, writer);
+        return sanitizePartialNativeFailure(error);
       }
 
       return retryWithCompatibility(writer);
     };
 
     try {
-      const mergeResult = originalMergeIntoDataStream(nativeWriter);
+      const mergeResult = originalMergeIntoDataStream(writer);
 
       if (mergeResult && typeof mergeResult.then === 'function') {
-        return mergeResult.catch(handleMergeError);
+        return mergeResult.then(
+          (value: unknown) => {
+            writer.write = originalWrite;
+            return value;
+          },
+          handleMergeError,
+        );
       }
+
+      writer.write = originalWrite;
 
       return mergeResult;
     } catch (error) {
@@ -1702,11 +1738,21 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
           provider: provider.name,
         });
 
-        return withFirstOutputTiming(result, {
+        return withFirstOutputTiming(
+          withMergeTimeStreamFormatFallback(result, {
+            assistantMode,
+            modelName,
+            onFinish,
+            providerName: provider.name,
+            startedAt: attemptStartedAt,
+            streamParams: nonStreamingStreamParams,
+          }),
+          {
             assistantMode,
             model: modelName,
             path: 'native',
-          });
+          },
+        );
       } catch (streamError) {
         if (!isSuccessfulResponseStreamFormatError(streamError)) {
           throw streamError;
