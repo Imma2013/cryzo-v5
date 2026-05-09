@@ -1702,21 +1702,11 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
           provider: provider.name,
         });
 
-        return withFirstOutputTiming(
-          withMergeTimeStreamFormatFallback(result, {
-            assistantMode,
-            modelName,
-            onFinish,
-            providerName: provider.name,
-            startedAt: attemptStartedAt,
-            streamParams: nonStreamingStreamParams,
-          }),
-          {
+        return withFirstOutputTiming(result, {
             assistantMode,
             model: modelName,
             path: 'native',
-          },
-        );
+          });
       } catch (streamError) {
         if (!isSuccessfulResponseStreamFormatError(streamError)) {
           throw streamError;
