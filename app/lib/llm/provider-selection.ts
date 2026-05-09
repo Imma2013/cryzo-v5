@@ -19,42 +19,32 @@ interface ResolveProviderModelSelectionOptions {
 
 export function resolveActiveProviderSelection({
   activeProviders,
-  currentProviderName,
-  preferredProviderName,
-  savedProviderName,
+  currentProviderName: _currentProviderName,
+  preferredProviderName: _preferredProviderName,
+  savedProviderName: _savedProviderName,
 }: ResolveActiveProviderSelectionOptions): ProviderInfo | undefined {
   if (activeProviders.length === 0) {
     return undefined;
   }
 
   return (
-    activeProviders.find((provider) => provider.name === preferredProviderName) ||
-    activeProviders.find((provider) => provider.name === savedProviderName) ||
     activeProviders.find((provider) => provider.name === DEFAULT_LLM_PROVIDER_NAME) ||
-    activeProviders.find((provider) => provider.name === currentProviderName) ||
     activeProviders[0]
   );
 }
 
 export function resolveProviderModelSelection({
   modelList,
-  providerName,
-  currentModel,
-  preferredModel,
-  savedModel,
+  providerName: _providerName,
+  currentModel: _currentModel,
+  preferredModel: _preferredModel,
+  savedModel: _savedModel,
 }: ResolveProviderModelSelectionOptions): string | undefined {
-  const effectiveProviderName = providerName || DEFAULT_LLM_PROVIDER_NAME;
-  const providerModels = modelList.filter((model) => model.provider === effectiveProviderName);
+  const providerModels = modelList.filter((model) => model.provider === DEFAULT_LLM_PROVIDER_NAME);
 
   if (providerModels.length === 0) {
     return undefined;
   }
 
-  return (
-    providerModels.find((model) => model.name === preferredModel)?.name ||
-    providerModels.find((model) => model.name === savedModel)?.name ||
-    providerModels.find((model) => model.name === currentModel)?.name ||
-    providerModels.find((model) => model.name === DEFAULT_OPENAI_MODEL)?.name ||
-    providerModels[0].name
-  );
+  return providerModels.find((model) => model.name === DEFAULT_OPENAI_MODEL)?.name || providerModels[0].name;
 }

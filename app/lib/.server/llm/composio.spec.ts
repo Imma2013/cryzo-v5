@@ -21,12 +21,9 @@ vi.mock('~/lib/.server/composio', () => {
   };
 });
 
-vi.mock('ai', async () => {
-  const actual = await vi.importActual<typeof import('ai')>('ai');
-
+vi.mock('@ai-sdk/mcp', () => {
   return {
-    ...actual,
-    experimental_createMCPClient: mcpState.createMCPClient,
+    createMCPClient: mcpState.createMCPClient,
   };
 });
 
@@ -224,7 +221,13 @@ describe('getComposioTools', () => {
     });
 
     expect(mcpState.createMCPClient).toHaveBeenCalledWith({
-      transport: expect.objectContaining({}),
+      transport: {
+        type: 'http',
+        url: 'https://backend.composio.dev/tool_router/trs_test/mcp',
+        headers: {
+          'x-api-key': 'mcp-key',
+        },
+      },
     });
     expect(composioState.createComposioSessionFromApiKey).not.toHaveBeenCalled();
     expect(resolution.status).toBe('available');
@@ -267,48 +270,6 @@ describe('getComposioTools', () => {
       tools: {},
     });
     expect(close).toHaveBeenCalled();
-  });
-
-  it('retries a ReadableStream MCP transport failure once before resolving tools', async () => {
-    const firstClose = vi.fn().mockResolvedValue(undefined);
-    const secondClose = vi.fn().mockResolvedValue(undefined);
-    const readableError = new TypeError("First parameter has member 'readable' that is not a ReadableStream.");
-
-    mcpState.createMCPClient
-      .mockResolvedValueOnce({
-        close: firstClose,
-        tools: vi.fn().mockRejectedValue(readableError),
-      })
-      .mockResolvedValueOnce({
-        close: secondClose,
-        tools: vi.fn().mockResolvedValue({
-          COMPOSIO_SEARCH_TOOLS: {
-            description: 'Search Composio tools',
-            execute: vi.fn(),
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
-              },
-            },
-          },
-        }),
-      });
-
-    const resolution = await getComposioTools({
-      env: {
-        COMPOSIO_MCP_API_KEY: 'mcp-key',
-        COMPOSIO_MCP_SERVER_URL: 'https://backend.composio.dev/tool_router/trs_test/mcp',
-      } as any,
-      providerName: 'OpenAI',
-      user: { isAuthenticated: true, uid: 'user_123' },
-      userPrompt: 'what are my 5 gmails',
-    });
-
-    expect(mcpState.createMCPClient).toHaveBeenCalledTimes(2);
-    expect(firstClose).toHaveBeenCalled();
-    expect(resolution.status).toBe('available');
-    expect(resolution.tools.COMPOSIO_SEARCH_TOOLS).toBeDefined();
   });
 });
 

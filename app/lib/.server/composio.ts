@@ -1,6 +1,6 @@
 import { Composio } from '@composio/core';
 import { VercelProvider } from '@composio/vercel';
-import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/cloudflare';
+import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
 import { getServerEnv, normalizeServerEnvValue } from '~/lib/server-env';
 
 type RouteContext = ActionFunctionArgs['context'] | LoaderFunctionArgs['context'];

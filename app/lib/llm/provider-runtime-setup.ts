@@ -1,10 +1,5 @@
 import { normalizeServerEnvValue } from '~/lib/server-env';
-import { getGoogleProviderSetupPayloadForRuntime, resolveGoogleServerApiKeyForRuntime } from './google-server-runtime';
-import {
-  GOOGLE_PROVIDER_NAME,
-  OPENAI_PROVIDER_NAME,
-  OPENAI_SERVER_API_KEY,
-} from './provider-defaults';
+import { OPENAI_PROVIDER_NAME, OPENAI_SERVER_API_KEY } from './provider-defaults';
 import type { ProviderSetupErrorPayload } from './provider-setup';
 
 export function resolveOpenAiServerApiKeyForRuntime(serverEnv?: Record<string, string | undefined>) {
@@ -39,10 +34,6 @@ export function getProviderSetupPayloadForRuntime(
   providerName: string | undefined,
   serverEnv?: Record<string, string | undefined>,
 ): ProviderSetupErrorPayload | null {
-  if (providerName === GOOGLE_PROVIDER_NAME) {
-    return getGoogleProviderSetupPayloadForRuntime(providerName, serverEnv);
-  }
-
   if (providerName !== OPENAI_PROVIDER_NAME) {
     return null;
   }

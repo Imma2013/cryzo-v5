@@ -2,7 +2,6 @@ import {
   convertToCoreMessages,
   formatDataStreamPart,
   generateText,
-  parseDataStreamPart,
   streamText as _streamText,
   type CoreMessage,
   type Message,
@@ -188,66 +187,12 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
     });
   };
 
-  const classifyNativeChunk = (chunk: string) => {
-    try {
-      const part = parseDataStreamPart(chunk);
-
-      switch (part.type) {
-        case 'finish_message':
-        case 'finish_step':
-        case 'message_annotations':
-        case 'reasoning':
-        case 'reasoning_signature':
-        case 'redacted_reasoning':
-        case 'start_step':
-          return 'structural';
-        case 'file':
-        case 'source':
-        case 'text':
-        case 'tool_call':
-        case 'tool_call_delta':
-        case 'tool_call_streaming_start':
-        case 'tool_result':
-          return 'visible';
-        default:
-          return 'visible';
-      }
-    } catch {
-      return 'visible';
-    }
-  };
-
   (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
-    let forwardedNativeOutput = false;
-    let bufferedNativeChunks: string[] = [];
-
-    const flushBufferedNativeChunks = () => {
-      if (bufferedNativeChunks.length === 0) {
-        return;
-      }
-
-      for (const chunk of bufferedNativeChunks) {
-        writer.write(chunk);
-      }
-
-      bufferedNativeChunks = [];
-    };
-
+    let wroteNativeChunk = false;
     const nativeWriter = {
       ...(writer as any),
       write(chunk: string) {
-        if (forwardedNativeOutput) {
-          writer.write(chunk);
-          return;
-        }
-
-        if (classifyNativeChunk(chunk) === 'structural') {
-          bufferedNativeChunks.push(chunk);
-          return;
-        }
-
-        forwardedNativeOutput = true;
-        flushBufferedNativeChunks();
+        wroteNativeChunk = true;
         writer.write(chunk);
       },
     };
@@ -257,11 +202,10 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
         throw error;
       }
 
-      if (forwardedNativeOutput) {
+      if (wroteNativeChunk) {
         return sanitizePartialNativeFailure(error);
       }
 
-      bufferedNativeChunks = [];
       return retryWithCompatibility(writer);
     };
 
@@ -269,16 +213,9 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
       const mergeResult = originalMergeIntoDataStream(nativeWriter);
 
       if (mergeResult && typeof mergeResult.then === 'function') {
-        return mergeResult.then(
-          (value: unknown) => {
-            flushBufferedNativeChunks();
-            return value;
-          },
-          handleMergeError,
-        );
+        return mergeResult.catch(handleMergeError);
       }
 
-      flushBufferedNativeChunks();
       return mergeResult;
     } catch (error) {
       return handleMergeError(error);
@@ -297,6 +234,17 @@ function getAuthorPrompt(messages: Omit<Message, 'id'>[]) {
     .map((message) => message.content)
     .join('\n')
     .trim();
+}
+
+function getLatestUserPrompt(messages: Omit<Message, 'id'>[]) {
+  const latest = [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message.role === 'user' && !(Array.isArray(message.annotations) && message.annotations.includes('hidden')),
+    );
+
+  return (latest?.content ?? '').trim();
 }
 
 function collectGoogleToolSchemaDiagnostics(tools: StreamingOptions['tools']) {
@@ -886,6 +834,10 @@ export function getExternalToolRuntimeErrorMessage({
       return 'External app tools are not configured: COMPOSIO_MCP_SERVER_URL or COMPOSIO_MCP_API_KEY is missing on the server. Add both to the Vercel project environment variables and redeploy before retrying.';
     case 'unsupported_provider':
       return `Selected provider "${providerName}" does not support external app tool calling. Switch to a tool-capable provider and retry.`;
+    case 'resolution_failed':
+      return composioToolResolution.errorMessage
+        ? `External app tools are temporarily unavailable: ${composioToolResolution.errorMessage}`
+        : 'External app tools are temporarily unavailable right now. Retry in a moment.';
     default:
       return undefined;
   }
@@ -1168,7 +1120,7 @@ export async function streamText(props: {
 
     return newMessage;
   });
-  const latestUserPrompt = getAuthorPrompt(processedMessages);
+  const latestUserPrompt = getLatestUserPrompt(processedMessages);
   const assistantMode = resolveAssistantMode(chatMode, latestUserPrompt);
   const shouldInjectComposioTools = assistantMode === 'external-tool' || assistantMode === 'build-with-tools';
 
@@ -1462,16 +1414,14 @@ export async function streamText(props: {
     throw new Error(externalToolRuntimeError);
   }
 
-  const tools = shouldInjectComposioTools
-    ? {
-        ...(filteredOptions.tools || {}),
-        ...composioTools,
-      }
-    : {};
+  const tools = {
+    ...(filteredOptions.tools || {}),
+    ...composioTools,
+  };
   const hasTools = Object.keys(tools).length > 0;
   const assistantToolRuntimeSettings = getAssistantToolRuntimeSettings({
     assistantMode,
-    toolsAvailable: hasTools,
+    toolsAvailable: composioToolCount > 0,
   });
   const providerOptions = filteredOptions.providerOptions;
 
@@ -1566,7 +1516,7 @@ ${BUILD_IMAGE_SOURCE_GUIDANCE}`;
             composioConfigured: composioToolResolution.configured,
             hasComposioIdentity: composioToolResolution.hasIdentity,
             toolResolutionError: composioToolResolution.errorMessage,
-            toolsAvailable: hasTools,
+            toolsAvailable: Object.keys(composioTools).length > 0,
           }),
     ...tokenParams,
     messages: convertToCoreMessages(historyMessages as any, { tools }),

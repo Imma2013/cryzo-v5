@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Switch } from '~/components/ui/Switch';
 import { useSettings } from '~/lib/hooks/useSettings';
 import { URL_CONFIGURABLE_PROVIDERS } from '~/lib/stores/settings';
 import type { IProviderConfig } from '~/types/model';
@@ -8,67 +7,34 @@ import { motion } from 'framer-motion';
 import { classNames } from '~/utils/classNames';
 import { toast } from 'react-toastify';
 import { providerBaseUrlEnvKeys } from '~/utils/constants';
-import { SiGoogle, SiGithub, SiHuggingface, SiPerplexity, SiOpenai } from 'react-icons/si';
-import { BsRobot, BsCloud } from 'react-icons/bs';
-import { TbBrain, TbCloudComputing } from 'react-icons/tb';
-import { BiCodeBlock, BiChip } from 'react-icons/bi';
-import { FaCloud, FaBrain } from 'react-icons/fa';
+import { SiOpenai } from 'react-icons/si';
+import { BsRobot } from 'react-icons/bs';
+import { TbCloudComputing } from 'react-icons/tb';
 import type { IconType } from 'react-icons';
+import { OPENAI_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
 
 // Add type for provider names to ensure type safety
-type ProviderName =
-  | 'AmazonBedrock'
-  | 'Anthropic'
-  | 'Cohere'
-  | 'Deepseek'
-  | 'Github'
-  | 'Google'
-  | 'Groq'
-  | 'HuggingFace'
-  | 'Hyperbolic'
-  | 'Mistral'
-  | 'OpenAI'
-  | 'OpenRouter'
-  | 'Perplexity'
-  | 'Together'
-  | 'XAI';
+type ProviderName = 'OpenAI';
 
 // Update the PROVIDER_ICONS type to use the ProviderName type
 const PROVIDER_ICONS: Record<ProviderName, IconType> = {
-  AmazonBedrock: BsCloud,
-  Anthropic: FaBrain,
-  Cohere: BiChip,
-  Deepseek: BiCodeBlock,
-  Github: SiGithub,
-  Google: SiGoogle,
-  Groq: BsCloud,
-  HuggingFace: SiHuggingface,
-  Hyperbolic: TbCloudComputing,
-  Mistral: TbBrain,
   OpenAI: SiOpenai,
-  OpenRouter: FaCloud,
-  Perplexity: SiPerplexity,
-  Together: BsCloud,
-  XAI: BsRobot,
 };
 
 // Update PROVIDER_DESCRIPTIONS to use the same type
 const PROVIDER_DESCRIPTIONS: Partial<Record<ProviderName, string>> = {
-  Anthropic: 'Access Claude and other Anthropic models',
-  Github: 'Use OpenAI models hosted through GitHub infrastructure',
-  OpenAI: 'Use GPT-4, GPT-3.5, and other OpenAI models',
+  OpenAI: 'Use OpenAI models from the server-side API key',
 };
 
 const CloudProvidersTab = () => {
   const settings = useSettings();
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
   const [filteredProviders, setFilteredProviders] = useState<IProviderConfig[]>([]);
-  const [categoryEnabled, setCategoryEnabled] = useState<boolean>(false);
 
   // Load and filter providers
   useEffect(() => {
     const newFilteredProviders = Object.entries(settings.providers || {})
-      .filter(([key]) => !['Ollama', 'LMStudio', 'OpenAILike'].includes(key))
+      .filter(([key]) => key === OPENAI_PROVIDER_NAME)
       .map(([key, value]) => ({
         name: key,
         settings: value.settings,
@@ -81,40 +47,7 @@ const CloudProvidersTab = () => {
 
     const sorted = newFilteredProviders.sort((a, b) => a.name.localeCompare(b.name));
     setFilteredProviders(sorted);
-
-    // Update category enabled state
-    const allEnabled = newFilteredProviders.every((p) => p.settings.enabled);
-    setCategoryEnabled(allEnabled);
   }, [settings.providers]);
-
-  const handleToggleCategory = useCallback(
-    (enabled: boolean) => {
-      // Update all providers
-      filteredProviders.forEach((provider) => {
-        settings.updateProviderSettings(provider.name, { ...provider.settings, enabled });
-      });
-
-      setCategoryEnabled(enabled);
-      toast.success(enabled ? 'All cloud providers enabled' : 'All cloud providers disabled');
-    },
-    [filteredProviders, settings],
-  );
-
-  const handleToggleProvider = useCallback(
-    (provider: IProviderConfig, enabled: boolean) => {
-      // Update the provider settings in the store
-      settings.updateProviderSettings(provider.name, { ...provider.settings, enabled });
-
-      if (enabled) {
-        logStore.logProvider(`Provider ${provider.name} enabled`, { provider: provider.name });
-        toast.success(`${provider.name} enabled`);
-      } else {
-        logStore.logProvider(`Provider ${provider.name} disabled`, { provider: provider.name });
-        toast.success(`${provider.name} disabled`);
-      }
-    },
-    [settings],
-  );
 
   const handleUpdateBaseUrl = useCallback(
     (provider: IProviderConfig, baseUrl: string) => {
@@ -156,11 +89,6 @@ const CloudProvidersTab = () => {
               <h4 className="text-md font-medium text-bolt-elements-textPrimary">Cloud Providers</h4>
               <p className="text-sm text-bolt-elements-textSecondary">Connect to cloud-based AI models and services</p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-bolt-elements-textSecondary">Enable All Cloud</span>
-            <Switch checked={categoryEnabled} onCheckedChange={handleToggleCategory} />
           </div>
         </div>
 
@@ -225,10 +153,7 @@ const CloudProvidersTab = () => {
                             : 'Standard AI provider integration')}
                       </p>
                     </div>
-                    <Switch
-                      checked={provider.settings.enabled}
-                      onCheckedChange={(checked) => handleToggleProvider(provider, checked)}
-                    />
+                    <span className="text-xs font-medium text-green-500">Server enabled</span>
                   </div>
 
                   {provider.settings.enabled && URL_CONFIGURABLE_PROVIDERS.includes(provider.name) && (

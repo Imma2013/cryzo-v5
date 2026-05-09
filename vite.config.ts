@@ -1,4 +1,4 @@
-import { cloudflareDevProxyVitePlugin as remixCloudflareDevProxy, vitePlugin as remixVitePlugin } from '@remix-run/dev';
+import { vitePlugin as remixVitePlugin } from '@remix-run/dev';
 import UnoCSS from 'unocss/vite';
 import { defineConfig, type ViteDevServer } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
@@ -12,8 +12,6 @@ dotenv.config({ path: '.env' });
 dotenv.config();
 
 export default defineConfig((config) => {
-  const useCloudflareDevProxy = shouldEnableCloudflareDevProxy(config.command, config.mode);
-
   return {
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
@@ -44,7 +42,6 @@ export default defineConfig((config) => {
           return null;
         },
       },
-      useCloudflareDevProxy && remixCloudflareDevProxy(),
       remixVitePlugin({
         future: {
           v3_fetcherPersist: true,
@@ -90,10 +87,6 @@ export default defineConfig((config) => {
     },
   };
 });
-
-function shouldEnableCloudflareDevProxy(command: 'serve' | 'build', mode: string) {
-  return false;
-}
 
 function chrome129IssuePlugin() {
   return {

@@ -1,4 +1,4 @@
-import { type ActionFunctionArgs } from '@remix-run/cloudflare';
+import { type ActionFunctionArgs } from '@remix-run/node';
 import { streamText } from '~/lib/.server/llm/stream-text';
 import type { IProviderSetting, ProviderInfo } from '~/types/model';
 import { generateText } from 'ai';
@@ -7,9 +7,8 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { createScopedLogger } from '~/utils/logger';
 import { getServerEnv } from '~/lib/server-env';
-import { GOOGLE_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
+import { DEFAULT_LLM_PROVIDER_NAME } from '~/lib/llm/provider-defaults';
 import { getProviderSetupPayloadForRuntime } from '~/lib/llm/provider-runtime-setup';
-import { getGoogleTextModelFallbackOrder, normalizeGoogleChatModel } from '~/lib/llm/google-catalog';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -76,8 +75,8 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     streamOutput?: boolean;
   }>();
 
-  const providerName = provider?.name;
-  const selectedModel = providerName === GOOGLE_PROVIDER_NAME ? normalizeGoogleChatModel(model) : model;
+  const providerName = DEFAULT_LLM_PROVIDER_NAME;
+  const selectedModel = model;
 
   // validate 'model' and 'provider' fields
   if (!model || typeof model !== 'string') {
@@ -129,11 +128,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       console.log(error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+        const setupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
 
-        if (googleSetupPayload) {
-          return new Response(JSON.stringify(googleSetupPayload), {
-            status: googleSetupPayload.statusCode,
+        if (setupPayload) {
+          return new Response(JSON.stringify(setupPayload), {
+            status: setupPayload.statusCode,
             headers: { 'Content-Type': 'application/json' },
             statusText: 'Service Unavailable',
           });
@@ -176,10 +175,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         throw new Error('Provider not found');
       }
 
-      const modelsToTry =
-        providerName === GOOGLE_PROVIDER_NAME
-          ? [selectedModel, ...getGoogleTextModelFallbackOrder().filter((modelName) => modelName !== selectedModel)]
-          : [selectedModel];
+      const modelsToTry = [selectedModel];
       let lastError: unknown;
 
       for (const modelName of modelsToTry) {
@@ -285,14 +281,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       };
 
       if (error instanceof Error && error.message?.includes('API key')) {
-        const googleSetupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
+        const setupPayload = getProviderSetupPayloadForRuntime(providerName, serverEnv);
 
-        if (googleSetupPayload) {
-          const payload =
-            googleSetupPayload;
-
-          return new Response(JSON.stringify(payload), {
-            status: payload.statusCode,
+        if (setupPayload) {
+          return new Response(JSON.stringify(setupPayload), {
+            status: setupPayload.statusCode,
             headers: { 'Content-Type': 'application/json' },
             statusText: 'Service Unavailable',
           });

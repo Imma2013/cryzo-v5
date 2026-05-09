@@ -1,4 +1,4 @@
-import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
 import {
   APPROVED_APP_CONNECTOR_NAMES,
   APPS_VIEW_QUERY_KEY,

@@ -1,4 +1,4 @@
-import { json, type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { json, type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/node';
 import { resolveComposioApiKeyFromEnv } from '~/lib/.server/composio';
 import { getServerEnv, getServerEnvDiagnostics } from '~/lib/server-env';
 

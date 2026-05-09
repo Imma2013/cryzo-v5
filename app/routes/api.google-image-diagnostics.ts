@@ -1,4 +1,4 @@
-import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { json, type LoaderFunctionArgs } from '@remix-run/node';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import {
   getGoogleApiKeyFingerprint,

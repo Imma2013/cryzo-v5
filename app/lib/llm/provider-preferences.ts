@@ -45,7 +45,7 @@ export function applyProviderSettingsSnapshot(
           settings: {
             ...provider.settings,
             ...syncedSettings,
-            enabled: syncedSettings.enabled ?? providerName === DEFAULT_LLM_PROVIDER_NAME,
+            enabled: providerName === DEFAULT_LLM_PROVIDER_NAME,
           },
         },
       ];

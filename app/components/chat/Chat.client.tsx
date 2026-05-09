@@ -34,7 +34,6 @@ import { createLlmErrorAlert } from '~/lib/llm/error-alerts';
 import { useSupabaseUserPreferences } from '~/lib/supabase/user-preferences.client';
 import { resolveActiveProviderSelection } from '~/lib/llm/provider-selection';
 import { getApiKeysFromCookies } from './APIKeyManager';
-import { useMCPStore } from '~/lib/stores/mcp';
 
 const logger = createScopedLogger('Chat');
 
@@ -119,7 +118,6 @@ export const ChatImpl = memo(
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const { user } = useSupabaseAuth();
     const { currentUserRecord, isSyncAvailable, saveLlmPreferences } = useSupabaseUserPreferences();
-    const mcpSettings = useMCPStore((state) => state.settings);
     const composioUserId = user?.uid || null;
     const syncedPreferences = currentUserRecord?.llmPreferences;
     const shouldSyncSelection = Boolean(user) && isSyncAvailable;
@@ -193,8 +191,6 @@ export const ChatImpl = memo(
         contextOptimization: contextOptimizationEnabled,
         chatMode,
         designScheme,
-        maxLLMSteps: mcpSettings.maxLLMSteps,
-        mcpConfig: mcpSettings.mcpConfig,
         supabase: {
           isConnected: supabaseConn.isConnected,
           hasSelectedProject: !!selectedProject,
@@ -451,8 +447,8 @@ export const ChatImpl = memo(
               provider: activeProvider,
             });
           } catch (selectionError) {
-            handleError(selectionError, 'llmcall');
-            return;
+            console.warn('[template-select] failed, falling back to blank template', selectionError);
+            templateSelection = { template: 'blank', title: '' };
           }
 
           const { template, title } = templateSelection;

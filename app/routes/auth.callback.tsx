@@ -1,4 +1,4 @@
-import { redirect, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { redirect, type LoaderFunctionArgs } from '@remix-run/node';
 import { parseAuthCallbackParams } from '~/lib/auth/auth-callback';
 import { createServerSupabaseClient, mergeResponseHeaders } from '~/lib/auth/supabase-server';
 import { getServerEnv } from '~/lib/server-env';

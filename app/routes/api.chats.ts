@@ -1,4 +1,4 @@
-import { type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
 import { requireAuth, withSupabaseAuthHeaders } from '~/lib/auth/require-auth.server';
 import {
   deleteCurrentUserChat,

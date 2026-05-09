@@ -1,4 +1,4 @@
-import { json, type LoaderFunction } from '@remix-run/cloudflare';
+import { json, type LoaderFunction } from '@remix-run/node';
 import { getServerEnv } from '~/lib/server-env';
 import { logGoogleServerKeyResolution } from '~/lib/llm/provider-setup';
 import { resolveGoogleServerApiKeyForRuntime } from '~/lib/llm/google-server-runtime';

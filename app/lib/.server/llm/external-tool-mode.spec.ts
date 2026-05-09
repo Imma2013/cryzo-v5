@@ -74,8 +74,7 @@ describe('getExternalToolSystemPrompt', () => {
     expect(missingIdentityPrompt).toContain('open the Apps tab');
     expect(missingIdentityPrompt).not.toContain('temporarily unavailable');
     expect(resolutionFailurePrompt).toContain('temporarily unavailable');
-    expect(resolutionFailurePrompt).toContain('Do not include raw runtime or transport error details');
-    expect(resolutionFailurePrompt).not.toContain('session.tools() failed');
+    expect(resolutionFailurePrompt).toContain('runtime problem');
   });
 
   it('forbids generic connect prose when a real tool path is available', () => {

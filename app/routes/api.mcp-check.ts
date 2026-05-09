@@ -1,4 +1,4 @@
-import type { LoaderFunctionArgs } from '@remix-run/cloudflare';
+import type { LoaderFunctionArgs } from '@remix-run/node';
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
