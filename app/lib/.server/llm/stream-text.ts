@@ -171,9 +171,9 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
     }
   };
 
-  const sanitizePartialNativeFailure = (error: unknown) => {
+  const sanitizePartialNativeFailure = (error: unknown, writer: { write: (chunk: string) => void }) => {
     logger.warn(
-      'Native streaming merge response format failed after output; compatibility retry skipped',
+      'Native streaming merge response format failed after partial output; attempting compatibility retry',
       JSON.stringify({
         assistantMode,
         errorMessage: error instanceof Error ? error.message : String(error),
@@ -182,9 +182,7 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
       }),
     );
 
-    throw new Error('The AI provider returned a response this app could not stream. Please retry in a moment.', {
-      cause: error,
-    });
+    return retryWithCompatibility(writer);
   };
 
   (result as any).mergeIntoDataStream = (writer: { write: (chunk: string) => void }) => {
@@ -203,7 +201,7 @@ function withMergeTimeStreamFormatFallback<T extends Record<string, any>>(
       }
 
       if (wroteNativeChunk) {
-        return sanitizePartialNativeFailure(error);
+        return sanitizePartialNativeFailure(error, writer);
       }
 
       return retryWithCompatibility(writer);
